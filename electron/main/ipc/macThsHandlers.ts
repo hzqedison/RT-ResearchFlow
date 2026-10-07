@@ -1,5 +1,6 @@
-import { app, dialog, ipcMain, systemPreferences, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { app, ipcMain, systemPreferences, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { MAC_THS_CODES, validateMacThsOrder, type MacThsAction, type MacThsCode, type MacThsMode,
@@ -11,6 +12,7 @@ const ACTIONS: MacThsAction[] = ['probe', 'preview', 'submitSimulation', 'queryO
 interface Journal { unknownPending: boolean; usedRequests: string[] }
 export function registerMacThsHandlers(getWindow: () => BrowserWindow | null): void {
   let busy = false
+  let confirmation: { token: string; senderId: number; key: string; expiresAt: number } | null = null
   const journalPath = () => join(app.getPath('userData'), 'mac-ths-experiment-journal.json')
   function loadJournal(): Journal {
     if (!existsSync(journalPath())) return { unknownPending: false, usedRequests: [] }
@@ -63,25 +65,6 @@ export function registerMacThsHandlers(getWindow: () => BrowserWindow | null): v
     try {
       try { journal = loadJournal() } catch { return result(action, mode, 'JOURNAL_UNAVAILABLE', true) }
       const request = unknown as unknown as MacThsRequest
-      const window = getWindow()!
-      if (action === 'authorize') {
-        const approval = await dialog.showMessageBox(window, { type: 'question', buttons: ['取消', '申请辅助功能权限'],
-          defaultId: 0, cancelId: 0, message: '允许本机实验桥接控制同花顺界面？',
-          detail: '只用于你手动发起的表单预览和同花顺模拟交易。不会收集账户凭证或申请完全磁盘访问权限。系统还可能询问控制 System Events 的自动化权限。' })
-        if (approval.response !== 1) return result(action, mode, 'USER_CANCELLED', journal.unknownPending)
-        systemPreferences.isTrustedAccessibilityClient(true)
-        return result(action, mode, 'PERMISSION_PROMPTED', journal.unknownPending)
-      }
-      if (action === 'resolveUnknown') {
-        const approval = await dialog.showMessageBox(window, { type: 'warning', buttons: ['取消', '已在同花顺核对模拟委托'],
-          defaultId: 0, cancelId: 0, message: '先核对模拟委托，再解除结果不明保护',
-          detail: '这不会认定成交成功，也不会重发原委托。请先在同花顺模拟页面确认上次操作结果。' })
-        if (approval.response !== 1) return result(action, mode, 'USER_CANCELLED', true)
-        journal.unknownPending = false
-        saveJournal(journal)
-        return result(action, mode, 'STATE_RESOLVED')
-      }
-      if (!systemPreferences.isTrustedAccessibilityClient(false)) return result(action, mode, 'ACCESSIBILITY_REQUIRED', journal.unknownPending)
       const order = action === 'preview' || action === 'submitSimulation' ? validateMacThsOrder(request.order) : undefined
       if ((action === 'preview' || action === 'submitSimulation') && (!order || order.mode !== mode)) return result(action, mode, 'INVALID_ORDER', journal.unknownPending)
       if ((action === 'submitSimulation' || action === 'cancelSimulation') && mode !== 'simulation') return result(action, mode, 'INVALID_ORDER', journal.unknownPending)
@@ -92,18 +75,65 @@ export function registerMacThsHandlers(getWindow: () => BrowserWindow | null): v
         if (typeof requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(requestId)) return result(action, mode, 'INVALID_ORDER')
         if (journal.usedRequests.includes(requestId)) return result(action, mode, 'DUPLICATE_REQUEST')
         if (action === 'cancelSimulation' && (typeof request.contractNo !== 'string' || !/^[a-zA-Z0-9-]{1,32}$/.test(request.contractNo))) return result(action, mode, 'INVALID_ORDER')
-        const approval = await dialog.showMessageBox(window, { type: 'warning', buttons: ['取消', '确认本次模拟操作'],
-          defaultId: 0, cancelId: 0, message: action === 'submitSimulation' ? '向同花顺模拟账户提交一笔委托？' : '撤销指定的同花顺模拟委托？',
-          detail: order ? `${order.side === 'buy' ? '模拟买入' : '模拟卖出'} ${order.symbol}\n限价 ${order.price}，数量 ${order.quantity}\n单笔额度上限 ${order.maxNotional}\n只适配普通 A 股主板；不会切换为实盘或自动重试。` : '只撤销你指定的模拟委托，不使用全撤按钮。' })
-        if (approval.response !== 1) return result(action, mode, 'USER_CANCELLED')
-        journal.unknownPending = true
-        journal.usedRequests.push(requestId)
+      }
+      const needsConfirmation = mutates || action === 'authorize' || action === 'resolveUnknown'
+        || (action === 'preview' && mode === 'livePreview')
+      if (needsConfirmation) {
+        // A main-process ticket binds one explicit in-app review to exact validated parameters.
+        // It expires in two minutes, is consumed once, and is never saved or included in diagnostics.
+        const key = JSON.stringify({ action, mode, order: order ?? null,
+          requestId: mutates ? requestId : null, contractNo: action === 'cancelSimulation' ? request.contractNo : null })
+        if (!request.confirmationToken) {
+          const token = randomUUID()
+          confirmation = { token, senderId: event.sender.id, key, expiresAt: Date.now() + 120000 }
+          let title: string
+          let message: string
+          let confirmLabel: string
+          if (action === 'authorize') {
+            title = '允许本机实验桥接控制同花顺界面？'
+            message = '只用于你手动发起的表单预览和同花顺模拟交易。不会收集账户凭证或申请完全磁盘访问权限。系统还可能询问控制 System Events 的自动化权限。'
+            confirmLabel = '申请辅助功能权限'
+          } else if (action === 'resolveUnknown') {
+            title = '先核对模拟委托，再解除结果不明保护'
+            message = '这不会认定成交成功，也不会重发原委托。请先在同花顺模拟页面确认上次操作结果。'
+            confirmLabel = '已在同花顺核对模拟委托'
+          } else if (action === 'submitSimulation' && order) {
+            title = '向同花顺模拟账户提交一笔委托？'
+            message = `${order.side === 'buy' ? '模拟买入' : '模拟卖出'} ${order.symbol}\n限价 ${order.price}，数量 ${order.quantity}\n单笔额度上限 ${order.maxNotional}\n只适配普通 A 股主板；不会切换为实盘或自动重试。`
+            confirmLabel = '确认本次模拟操作'
+          } else if (action === 'cancelSimulation') {
+            title = '撤销指定的同花顺模拟委托？'
+            message = `仅撤销模拟委托 ${request.contractNo}，不使用全撤按钮。撤单回报仍需在同花顺中人工核对。`
+            confirmLabel = '确认本次模拟撤单'
+          } else {
+            title = '实验性中信实盘表单预览'
+            message = `会切换同花顺至 A 股页面并填写 ${order?.symbol}，限价 ${order?.price}，数量 ${order?.quantity}。不会点击确定买入/卖出，不会提交实盘委托。核对完请清空不需要的草稿。`
+            confirmLabel = '只填写并核对，不发送'
+          }
+          return { ...result(action, mode, 'CONFIRMATION_REQUIRED', journal.unknownPending),
+            confirmation: { token, title, message, confirmLabel } }
+        }
+        const offered = confirmation
+        confirmation = null
+        if (!offered || typeof request.confirmationToken !== 'string' || offered.token !== request.confirmationToken
+          || offered.senderId !== event.sender.id || offered.key !== key || offered.expiresAt < Date.now()) {
+          return result(action, mode, 'CONFIRMATION_EXPIRED', journal.unknownPending)
+        }
+      }
+      if (action === 'authorize') {
+        systemPreferences.isTrustedAccessibilityClient(true)
+        return result(action, mode, 'PERMISSION_PROMPTED', journal.unknownPending)
+      }
+      if (action === 'resolveUnknown') {
+        journal.unknownPending = false
         saveJournal(journal)
-      } else if (action === 'preview' && mode === 'livePreview') {
-        const approval = await dialog.showMessageBox(window, { type: 'warning', buttons: ['取消', '只填写并核对，不发送'],
-          defaultId: 0, cancelId: 0, message: '实验性中信实盘表单预览',
-          detail: '会切换同花顺至 A 股页面并填写你输入的代码、价格、数量；不会点击确定买入/卖出，不会提交实盘委托。核对完请清空不需要的草稿。' })
-        if (approval.response !== 1) return result(action, mode, 'USER_CANCELLED', journal.unknownPending)
+        return result(action, mode, 'STATE_RESOLVED')
+      }
+      if (!systemPreferences.isTrustedAccessibilityClient(false)) return result(action, mode, 'ACCESSIBILITY_REQUIRED', journal.unknownPending)
+      if (mutates) {
+        journal.unknownPending = true
+        journal.usedRequests.push(requestId!)
+        saveJournal(journal)
       }
       const output = await execute(macThsScript(action, mode, order ?? undefined, request.contractNo ?? ''))
       const [rawCode, rawContract] = output.split('|')

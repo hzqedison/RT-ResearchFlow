@@ -7,7 +7,7 @@ export const MAC_THS_CODES = [
   'BUSY', 'JOURNAL_UNAVAILABLE', 'UNKNOWN_PENDING', 'DUPLICATE_REQUEST', 'USER_CANCELLED',
   'READBACK_MISMATCH', 'SIMULATION_ACCEPTED', 'SIMULATION_CANCELLED', 'FORM_READY', 'VIEW_OPENED',
   'TABLE_UNSUPPORTED', 'RECEIPT_UNKNOWN', 'CANCEL_CONTROL_UNSUPPORTED', 'CONFIRMATION_UNRECOGNIZED',
-  'SCRIPT_ERROR', 'PERMISSION_PROMPTED', 'STATE_RESOLVED',
+  'SCRIPT_ERROR', 'PERMISSION_PROMPTED', 'STATE_RESOLVED', 'CONFIRMATION_REQUIRED', 'CONFIRMATION_EXPIRED',
 ] as const
 export type MacThsCode = typeof MAC_THS_CODES[number]
 export interface MacThsOrder {
@@ -19,12 +19,19 @@ export interface MacThsOrder {
   quantity: number
   maxNotional: string
 }
+export interface MacThsConfirmation {
+  token: string
+  title: string
+  message: string
+  confirmLabel: string
+}
 export interface MacThsRequest {
   action: MacThsAction
   mode?: MacThsMode
   order?: MacThsOrder
   requestId?: string
   contractNo?: string
+  confirmationToken?: string
 }
 export interface MacThsResult {
   schemaVersion: 1
@@ -40,6 +47,7 @@ export interface MacThsResult {
   canSubmitLiveOrders: false
   canRunUnattended: false
   contractNo?: string
+  confirmation?: MacThsConfirmation
 }
 export function validateMacThsOrder(value: unknown): MacThsOrder | null {
   if (!value || typeof value !== 'object') return null

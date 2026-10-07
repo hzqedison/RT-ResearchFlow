@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { safeMacThsDiagnostic, type MacThsMode, type MacThsRequest, type MacThsResult } from '../../electron/shared/macThsTypes'
+import { safeMacThsDiagnostic, type MacThsConfirmation, type MacThsMode, type MacThsRequest, type MacThsResult } from '../../electron/shared/macThsTypes'
+import { AppConfirmDialog } from './shared/AppConfirmDialog'
 import './MacTradingPanel.css'
 
 const MESSAGES: Record<string, string> = {
@@ -30,6 +31,8 @@ const MESSAGES: Record<string, string> = {
   SCRIPT_ERROR: '本机脚本未完成；导出状态即可，不需要原始日志。',
   PERMISSION_PROMPTED: '已向系统申请权限。允许后重新检查连接；不需要完全磁盘访问权限。',
   STATE_RESOLVED: '已解除结果不明保护；原请求不会自动重发，也不代表已成交。',
+  CONFIRMATION_REQUIRED: '请核对本次操作，只有点击确认才会继续。',
+  CONFIRMATION_EXPIRED: '本次确认已过期或参数已改变，没有执行。请重新发起并核对。',
 }
 export default function MacTradingPanel() {
   const [mode, setMode] = useState<MacThsMode>('simulation')
@@ -42,17 +45,31 @@ export default function MacTradingPanel() {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<MacThsResult | null>(null)
   const [notice, setNotice] = useState('')
-  async function run(action: MacThsRequest['action']) {
+  const [confirmation, setConfirmation] = useState<{ request: MacThsRequest; review: MacThsConfirmation } | null>(null)
+  async function executeRequest(request: MacThsRequest) {
     setBusy(true)
     setNotice('')
     try {
-      const order = { requestId: crypto.randomUUID(), mode, side, symbol, price, quantity: Number(quantity), maxNotional }
-      const response = await window.api.macThs.execute({ action, mode, order,
-        requestId: crypto.randomUUID(), contractNo: contractNo.trim() })
+      const response = await window.api.macThs.execute(request)
       setResult(response)
-      if (response.contractNo) setContractNo(response.contractNo)
-    } catch { setNotice('本机桥接调用失败；没有自动重试，请先检查客户端状态。') }
-    finally { setBusy(false) }
+      if (response.code === 'CONFIRMATION_REQUIRED' && response.confirmation) {
+        setConfirmation({ request, review: response.confirmation })
+      } else {
+        setConfirmation(null)
+        if (response.contractNo) setContractNo(response.contractNo)
+      }
+    } catch {
+      setConfirmation(null)
+      setNotice('本机桥接调用失败；没有自动重试，请先检查客户端状态。')
+    } finally { setBusy(false) }
+  }
+  async function run(action: MacThsRequest['action']) {
+    const order = { requestId: crypto.randomUUID(), mode, side, symbol, price, quantity: Number(quantity), maxNotional }
+    await executeRequest({ action, mode, order, requestId: crypto.randomUUID(), contractNo: contractNo.trim() })
+  }
+  function cancelReview() {
+    setConfirmation(null)
+    setResult(previous => previous ? { ...previous, code: 'USER_CANCELLED', outcome: 'blocked', confirmation: undefined } : previous)
   }
   function exportResult() {
     const data = safeMacThsDiagnostic(result)
@@ -72,7 +89,7 @@ export default function MacTradingPanel() {
     <div className="mt-warning">先测同花顺模拟账户闭环。实盘仅支持表单预览，不发送、不自动确认、不无人值守。所有原数据源继续保留。</div>
     <div className="mt-actions">
       <button type="button" disabled={busy} data-testid="mac-ths-probe" onClick={() => void run('probe')}>检查同花顺连接</button>
-      <button type="button" disabled={busy} onClick={() => void run('authorize')}>申请系统控制权限</button>
+      <button type="button" data-testid="mac-ths-authorize" disabled={busy} onClick={() => void run('authorize')}>申请系统控制权限</button>
     </div>
     <div className="mt-form">
       <label>测试模式<select value={mode} disabled={busy} onChange={event => setMode(event.target.value as MacThsMode)}>
@@ -102,5 +119,19 @@ export default function MacTradingPanel() {
     <button type="button" data-testid="mac-ths-export" disabled={!result || busy} onClick={exportResult}>导出去敏测试结果</button>
     <p className="mt-small">未识别模式、控件或回报时停止，不绕过权限、不申请完全磁盘访问、不自动重试。券商开通/报告要求仍需本人核实。此版不支持科创板、创业板、ETF、转债或资金转账。</p>
     <a href="https://github.com/zetatez/evolving" target="_blank" rel="noopener noreferrer">查看参考开源项目</a>
+    <AppConfirmDialog
+      open={!!confirmation}
+      title={confirmation?.review.title ?? ''}
+      message={<span style={{ whiteSpace: 'pre-line' }}>{confirmation?.review.message}</span>}
+      tone="warning"
+      statusLabel="本次操作需确认"
+      confirmLabel={confirmation?.review.confirmLabel}
+      busy={busy}
+      testId="mac-ths-confirmation"
+      onCancel={cancelReview}
+      onConfirm={() => {
+        if (confirmation) void executeRequest({ ...confirmation.request, confirmationToken: confirmation.review.token })
+      }}
+    />
   </div>
 }

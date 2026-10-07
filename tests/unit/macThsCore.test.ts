@@ -24,7 +24,8 @@ describe('Mac THS experimental bridge boundary', () => {
       runtime: 'macos', architecture: 'arm64', action: 'submitSimulation', mode: 'simulation',
       outcome: 'passed', code: 'SIMULATION_ACCEPTED', unknownPending: false, canSubmitLiveOrders: false,
       canRunUnattended: false, contractNo: 'SENSITIVE_ID', account: 'SENSITIVE_ACCOUNT',
-      password: 'SENSITIVE_PASSWORD', symbol: 'SENSITIVE_SYMBOL', rawLog: 'SENSITIVE_LOG' } as MacThsResult
+      password: 'SENSITIVE_PASSWORD', symbol: 'SENSITIVE_SYMBOL', rawLog: 'SENSITIVE_LOG',
+      confirmation: { token: 'SENSITIVE_TOKEN', title: 'SENSITIVE_TITLE', message: 'SENSITIVE_ORDER', confirmLabel: 'SENSITIVE_LABEL' } } as MacThsResult
     expect(JSON.stringify(safeMacThsDiagnostic(raw))).not.toContain('SENSITIVE')
     expect(safeMacThsDiagnostic(raw)).toMatchObject({ canSubmitLiveOrders: false, canRunUnattended: false })
   })
