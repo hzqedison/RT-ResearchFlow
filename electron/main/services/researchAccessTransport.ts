@@ -1,8 +1,8 @@
 import type Database from 'better-sqlite3'
 import { createHash } from 'crypto'
-import { chmodSync, existsSync, unlinkSync } from 'fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, unlinkSync } from 'fs'
 import { createServer, type Server, type Socket } from 'net'
-import { join } from 'path'
+import { dirname, join, posix } from 'path'
 import {
   executeResearchAccessTool,
   listAuthorizedResearchAccessTools,
@@ -35,9 +35,12 @@ let transportStatus: ResearchAccessTransportStatus = {
   errorCode: null,
 }
 
-export function researchAccessPipePath(userDataPath: string): string {
+export function researchAccessPipePath(userDataPath: string, platform: NodeJS.Platform = process.platform): string {
   const suffix = createHash('sha256').update(userDataPath, 'utf8').digest('hex').slice(0, 20)
-  return process.platform === 'win32'
+  if (platform === 'darwin') {
+    return posix.join('/tmp', `rt-research-${process.getuid?.() ?? 0}`, `${suffix}.sock`)
+  }
+  return platform === 'win32'
     ? `\\\\.\\pipe\\trade-watch-research-${suffix}`
     : join(userDataPath, `research-access-${suffix}.sock`)
 }
@@ -60,11 +63,20 @@ export async function startResearchAccessTransport(
     errorCode: null,
   }
 
-  if (process.platform !== 'win32' && existsSync(pipePath)) unlinkSync(pipePath)
   const server = createServer((socket) => handleConnection(db, socket))
   server.maxConnections = 16
 
   try {
+    if (process.platform === 'darwin') {
+      const directory = dirname(pipePath)
+      mkdirSync(directory, { recursive: true, mode: 0o700 })
+      const directoryStat = lstatSync(directory)
+      if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink() || directoryStat.uid !== process.getuid?.()) {
+        throw Object.assign(new Error('Unsafe research access socket directory'), { code: 'UNSAFE_SOCKET_DIRECTORY' })
+      }
+      chmodSync(directory, 0o700)
+    }
+    if (process.platform !== 'win32' && existsSync(pipePath)) unlinkSync(pipePath)
     await new Promise<void>((resolve, reject) => {
       const onError = (error: NodeJS.ErrnoException) => reject(error)
       server.once('error', onError)

@@ -1,6 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { join } from 'node:path'
 
 const mocks = vi.hoisted(() => ({
+  appPath: process.platform === 'win32' ? 'C:\\test-project\\rt-research-flow' : '/test-project/rt-research-flow',
   createProject: vi.fn(),
   confirmEvidence: vi.fn(),
   discoverSkills: vi.fn(),
@@ -19,7 +21,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('electron', () => ({
-  app: { isPackaged: false, getAppPath: () => 'C:\\test-project\\rt-research-flow' },
+  app: { isPackaged: false, getAppPath: () => mocks.appPath },
   ipcMain: { handle: mocks.handle },
 }))
 vi.mock('../../electron/main/database/db', () => ({ getDb: mocks.getDb }))
@@ -375,13 +377,13 @@ describe('产业研究 IPC', () => {
     })
 
     expect(result).toEqual({ ok: false, code: 'SKILL_NOT_FOUND', message: '未找到产业研究 Skill' })
-    expect(mocks.discoverSkills).toHaveBeenCalledWith('C:\\test-project\\rt-research-flow\\skills', [])
+    expect(mocks.discoverSkills).toHaveBeenCalledWith(join(mocks.appPath, 'skills'), [])
   })
 
   it('未配置自定义路径时使用项目内置产业研究 Skill 创建项目', async () => {
     const builtinSkill = {
       skillId: 'builtin:industry-chain-research', name: 'industry-chain-research', description: '产业研究规则',
-      version: '', source: 'builtin', dirPath: 'C:\\test-project\\rt-research-flow\\skills\\industry-chain-research',
+      version: '', source: 'builtin', dirPath: join(mocks.appPath, 'skills', 'industry-chain-research'),
       contentLength: 20_000, contentHash: 'a'.repeat(64), ruleVersion: 'sha256:aaaaaaaaaaaa', integrity: 'complete',
     }
     mocks.discoverSkills.mockReturnValue([builtinSkill])
@@ -401,7 +403,7 @@ describe('产业研究 IPC', () => {
         skill: expect.objectContaining({ meta: builtinSkill, contentHash: builtinSkill.contentHash }),
       },
     })
-    expect(mocks.discoverSkills).toHaveBeenCalledWith('C:\\test-project\\rt-research-flow\\skills', [])
+    expect(mocks.discoverSkills).toHaveBeenCalledWith(join(mocks.appPath, 'skills'), [])
   })
 
   it('事实来源门禁错误保持稳定语义', async () => {

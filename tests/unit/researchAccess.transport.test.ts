@@ -1,9 +1,9 @@
 import Database from 'better-sqlite3'
 import { randomUUID } from 'crypto'
-import { mkdtempSync, rmSync } from 'fs'
+import { lstatSync, mkdtempSync, rmSync } from 'fs'
 import { connect, type Socket } from 'net'
 import { tmpdir } from 'os'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runMigrations } from '../../electron/main/database/db'
 import {
@@ -13,6 +13,7 @@ import {
 } from '../../electron/main/database/researchAccessRepository'
 import {
   RESEARCH_ACCESS_PIPE_MAX_REQUEST_BYTES,
+  researchAccessPipePath,
   startResearchAccessTransport,
   stopResearchAccessTransport,
 } from '../../electron/main/services/researchAccessTransport'
@@ -98,6 +99,25 @@ describe('FR-255 research access local transport', () => {
     const response = await readFrame(socket)
     expect(response).toMatchObject({ ok: false, error: { code: 'INPUT_TOO_LARGE' } })
     socket.destroy()
+  })
+
+  it('uses a short, isolated macOS socket even for long application data paths', () => {
+    const longDataPath = join(userDataPath, 'nested-application-data'.repeat(40))
+    const socketPath = researchAccessPipePath(longDataPath, 'darwin')
+    expect(Buffer.byteLength(socketPath, 'utf8')).toBeLessThanOrEqual(103)
+    expect(socketPath).toMatch(/^\/tmp\/rt-research-\d+\/[a-f0-9]{20}\.sock$/)
+    expect(researchAccessPipePath(`${longDataPath}-another`, 'darwin')).not.toBe(socketPath)
+    expect(researchAccessPipePath(longDataPath, 'win32')).toMatch(/^\\\\\.\\pipe\\trade-watch-research-/)
+  })
+
+  it.skipIf(process.platform !== 'darwin')('keeps the macOS socket and its directory private to the current user', async () => {
+    const status = await startResearchAccessTransport(db, userDataPath)
+    expect(status.state).toBe('ready')
+    const directoryStat = lstatSync(dirname(status.pipePath!))
+    expect(directoryStat.isSymbolicLink()).toBe(false)
+    expect(directoryStat.uid).toBe(process.getuid?.())
+    expect(directoryStat.mode & 0o777).toBe(0o700)
+    expect(lstatSync(status.pipePath!).mode & 0o777).toBe(0o600)
   })
 
   it('keeps the external adapter free of direct database imports', async () => {
