@@ -237,4 +237,3 @@ export function AppConfirmDialog({
 
   return typeof document === 'undefined' ? dialog : createPortal(dialog, portalContainer ?? document.body)
 }
-
