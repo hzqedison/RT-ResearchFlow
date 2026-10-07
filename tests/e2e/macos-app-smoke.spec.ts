@@ -1,5 +1,5 @@
 import { expect, test, _electron as electron } from '@playwright/test'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -27,7 +27,7 @@ test('installed Mac app loads SQLite, edits settings, reopens from the Dock, and
     expect(preferences).toMatchObject({ sandbox: true, contextIsolation: true, nodeIntegration: false })
     expect(await application.evaluate(({ Menu }) => Menu.getApplicationMenu() !== null)).toBe(true)
 
-    await window.getByTestId('nav-tab-settings').click()
+    await window.getByTestId('open-config-drawer-btn').click()
     await expect(window.getByText('系统通知', { exact: true })).toBeVisible()
     const original = await window.evaluate(() => window.api.settings.get())
     const priority = original.decision_notify_min_priority === 5 ? 4 : 5
@@ -44,9 +44,20 @@ test('installed Mac app loads SQLite, edits settings, reopens from the Dock, and
     await reopened.evaluate((value) => window.api.settings.update({ decision_notify_min_priority: value }),
       original.decision_notify_min_priority)
     await reopened.screenshot({ path: 'test-results/macos-reopened.png' })
+  } catch (error) {
+    const failedWindow = application.windows().find((page) => !page.isClosed())
+    if (failedWindow) {
+      await failedWindow.screenshot({ path: 'test-results/macos-failed.png' }).catch(() => {})
+    }
+    throw error
   } finally {
-    await application.close()
-    rmSync(userDataDir, { recursive: true, force: true })
+    try {
+      await application.close()
+    } finally {
+      mkdirSync('test-results', { recursive: true })
+      writeFileSync('test-results/macos-stderr.log', errors.join('\n'), 'utf8')
+      rmSync(userDataDir, { recursive: true, force: true })
+    }
   }
   expect(errors.join('\n')).not.toMatch(/Object has been destroyed|Could not locate the bindings file/)
 })
