@@ -250,8 +250,8 @@ export function Settings() {
             onChange={(checked) => { void updateSettings({ decision_notify_in_app_enabled: checked ? 1 : 0 }) }}
           />
           <NotificationToggle
-            label="Windows 系统通知"
-            description="应用最小化或被其他窗口遮挡时，由 Windows 通知中心提示。"
+            label="系统通知"
+            description="应用最小化或被其他窗口遮挡时，由操作系统通知中心提示。"
             checked={(settings.decision_notify_windows_enabled ?? 0) === 1}
             onChange={(checked) => { void updateSettings({ decision_notify_windows_enabled: checked ? 1 : 0 }) }}
           />

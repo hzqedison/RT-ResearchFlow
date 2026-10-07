@@ -1,0 +1,89 @@
+name: macOS build and smoke test
+
+on:
+  push:
+    branches: [main, codex/macos-support]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+      npm_config_electron_mirror: https://github.com/electron/electron/releases/download/
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+      - name: Confirm native architecture
+        run: test "$(node -p process.arch)" = '${{ matrix.arch }}'
+      - name: Install and rebuild native dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify source and safe upstream merging
+        run: |
+          pnpm run verify
+          node --test macos/sync-upstream.test.mjs
+      - name: Build DMG and ZIP
+        run: node macos/build.mjs
+      - name: Install from DMG and test the installed application
+        shell: bash
+        run: |
+          set -euo pipefail
+          mount="$RUNNER_TEMP/rt-dmg"
+          install="$RUNNER_TEMP/rt-installed"
+          mkdir -p "$mount" "$install"
+          dmg="$(find release -maxdepth 1 -name '*-${{ matrix.arch }}.dmg' -print -quit)"
+          test -n "$dmg"
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount"
+          trap 'hdiutil detach "$mount" || true' EXIT
+          ditto "$mount/RT-ResearchFlow.app" "$install/RT-ResearchFlow.app"
+          hdiutil detach "$mount"
+          trap - EXIT
+          codesign --verify --deep --strict "$install/RT-ResearchFlow.app"
+          export TRADE_WATCH_PACKAGED_EXECUTABLE="$install/RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow"
+          pnpm exec playwright test tests/e2e/macos-app-smoke.spec.ts --workers=1 --reporter=line
+          shasum -a 256 release/*.dmg release/*.zip > release/SHA256SUMS.txt
+      - name: Upload tested packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: RT-ResearchFlow-macOS-${{ matrix.arch }}-${{ github.sha }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload smoke-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOS-smoke-evidence-${{ matrix.arch }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14

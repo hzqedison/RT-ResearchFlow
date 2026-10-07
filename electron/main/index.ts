@@ -72,6 +72,7 @@ import {
 
 let mainWindow: BrowserWindow | null = null
 let databaseReady = false
+let applicationStarted = false
 
 /**
  * FR-050/053: Check if AI analysis should be triggered after a scan.
@@ -171,8 +172,12 @@ function createWindow(): void {
     event.preventDefault()
   })
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow!.show()
+  const createdWindow = mainWindow
+  createdWindow.once('ready-to-show', () => {
+    if (!createdWindow.isDestroyed()) createdWindow.show()
+  })
+  createdWindow.on('closed', () => {
+    if (mainWindow === createdWindow) mainWindow = null
   })
 
   const windowSession = mainWindow.webContents.session
@@ -207,8 +212,14 @@ function createWindow(): void {
 }
 
 async function bootstrap(): Promise<void> {
-  // 0. Hide the native menu bar. Global notices live in the in-app message center.
-  Menu.setApplicationMenu(null)
+  // macOS needs native edit shortcuts, window management, and Command+Q.
+  Menu.setApplicationMenu(process.platform === 'darwin'
+    ? Menu.buildFromTemplate([
+      { role: 'appMenu' },
+      { role: 'editMenu' },
+      { role: 'windowMenu' },
+    ])
+    : null)
 
   ipcMain.handle('window:minimize', () => {
     mainWindow?.minimize()
@@ -374,6 +385,7 @@ async function bootstrap(): Promise<void> {
       mainWindow && sendScanEvent(mainWindow, 'network:statusChanged', { online })
     }
   }, 30_000)
+  applicationStarted = true
 }
 
 let applicationDataReady = true
@@ -412,6 +424,8 @@ if (applicationDataReady) {
 }
 
 app.on('window-all-closed', () => {
+  // macOS keeps the application and background services alive after window close.
+  if (process.platform === 'darwin') return
   if (applicationDataReady && databaseReady) recordCloseTime()
   stopHeartbeat()
   stopScheduler()
@@ -421,12 +435,14 @@ app.on('window-all-closed', () => {
 })
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+  if (applicationStarted && (!mainWindow || mainWindow.isDestroyed())) {
     createWindow()
   }
 })
 
 app.on('before-quit', () => {
+  stopHeartbeat()
+  stopScheduler()
   if (applicationDataReady && databaseReady) recordCloseTime()
   void stopResearchAccessTransport()
 })
