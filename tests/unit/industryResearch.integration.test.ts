@@ -322,6 +322,8 @@ async function waitForTerminalRun(db: Database.Database, projectId: string, runI
   throw new Error(`生成运行 ${runId} 未在预期时间内结束`)
 }
 
+// Each test exercises complete local research stages and persistent writes, not a single fast unit operation.
+// Keep all assertions; use the same finite workflow budget as the existing extended cases on Windows CI.
 describe('产业研究第180阶段联合回归', () => {
   let db: Database.Database
   let tempDir: string
@@ -617,8 +619,7 @@ describe('产业研究第180阶段联合回归', () => {
       .toMatchObject({ metric_value: 400 })
     expect(getLatestResearchProfitBridge(db, 'project-main', projectCompany.company_id, 'annual:optical-fiber'))
       .toMatchObject({ version: 1, status: 'estimate' })
-  })
-
+  }, 30_000)
   it('相同模型节点 ID 在不同项目中会映射为不同的稳定项目级 ID', async () => {
     const first = await startIndustryResearchGeneration(db, {
       projectId: 'project-main',
@@ -647,8 +648,7 @@ describe('产业研究第180阶段联合回归', () => {
     const secondCompany = listResearchProjectCompanies(db, 'project-other')[0]
     expect(firstCompany.company_id).toBe(secondCompany.company_id)
     expect(getResearchSecurityByTsCode(db, '600522.SH')?.company_id).toBe(firstCompany.company_id)
-  })
-
+  }, 30_000)
   it('投资型产业图谱存在A股候选池时会补齐横向公司而不是只保留单一标的', async () => {
     deterministicState.includeCompanyCoveragePool = true
     deterministicState.companyRepairEnabled = true
@@ -673,8 +673,7 @@ describe('产业研究第180阶段联合回归', () => {
       targets: [{ status: 'covered' }],
     })
     expect(completed.companyCandidates.filter((item) => item.rationale.includes('无证据支撑'))).toHaveLength(2)
-  })
-
+  }, 30_000)
   it('检索轨迹明确点名且本地证券唯一匹配的公司不会在最终映射阶段丢失', async () => {
     deterministicState.retrievalCompanyNames = ['烽火通信', '亨通光电']
     const started = await startIndustryResearchGeneration(db, {
@@ -877,8 +876,7 @@ describe('产业研究第180阶段联合回归', () => {
     expect(ensureGeneratedProjectCompanies(db, 'project-main')).toBe(0)
     expect(listCompanyCandidates(db, { projectId: 'project-main', runId: started.run.id })[0])
       .toMatchObject({ resolution_status: 'excluded' })
-  })
-
+  }, 30_000)
   it('报告已生成但项目写回失败时复用原运行恢复且不再次调用模型', async () => {
     updateResearchProject(db, 'project-main', { title: '写回前保留标题' })
     db.exec(`
@@ -960,8 +958,7 @@ describe('产业研究第180阶段联合回归', () => {
       reusedGeneratedArtifacts: true,
       status: 'succeeded',
     })
-  })
-
+  }, 30_000)
   it('财务采集进程中断后从公司阶段继续且不重复前置模型阶段', async () => {
     const started = await startIndustryResearchGeneration(db, {
       projectId: 'project-main',
@@ -1030,8 +1027,7 @@ describe('产业研究第180阶段联合回归', () => {
     expect((JSON.parse(resumed.run?.stage_artifacts_json || '{}') as {
       researchFacts?: unknown
     }).researchFacts).toEqual(originalResearchFacts)
-  })
-
+  }, 30_000)
   it('生成中途失败时保留最后成功阶段且不提前覆盖项目图谱', async () => {
     deterministicState.failStage = 'hypothesis'
     updateResearchProject(db, 'project-main', { dataAsOf: '2025-12-31' })
@@ -1062,5 +1058,4 @@ describe('产业研究第180阶段联合回归', () => {
     }))
     expect(failedArtifacts).not.toHaveProperty('hypothesis')
     expect(getResearchGraph(db, 'project-main')).toMatchObject({ nodes: [], edges: [] })
-  })
-})
+  }, 30_000)})

@@ -20,7 +20,8 @@ test('installed Mac exposes a real narrow bridge and private diagnostic without 
     await expect(page.getByTestId('mac-trading-panel')).toBeVisible()
     await expect(page.getByTestId('mac-ths-export')).toBeDisabled()
     await page.getByTestId('mac-ths-probe').click()
-    await expect(page.getByTestId('mac-ths-diagnostic')).toContainText('"tested": true')
+    // The bridge has a 20-second subprocess bound; await the actual result on slow Intel CI.
+    await expect(page.getByTestId('mac-ths-diagnostic')).toContainText('"tested": true', { timeout: 30000 })
     const result = JSON.parse(await page.getByTestId('mac-ths-diagnostic').innerText())
     expect(['ACCESSIBILITY_REQUIRED', 'CLIENT_NOT_RUNNING', 'AUTOMATION_DENIED']).toContain(result.code)
     expect(result.canSubmitLiveOrders).toBe(false)
