@@ -44,7 +44,7 @@ jobs:
       - name: Confirm native architecture
         run: test "$(node -p process.arch)" = '${{ matrix.arch }}'
       - name: Install and rebuild native dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --config.side-effects-cache=false
       - name: Verify source and safe upstream merging
         run: |
           pnpm run verify
