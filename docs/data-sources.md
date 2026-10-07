@@ -1,6 +1,6 @@
-# 多源接入：0.1.0-beta.9
+# 数据源配置与能力范围
 
-本轮源码版本为 0.1.0-beta.9。各平台安装包及编译、安装、隔离检查记录见 [beta.9 发布页](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v0.1.0-beta.9)，以实际附件为准。公开接口仍需本人实际联网样本验证，不能用隔离检查代替上游兼容性检测。
+当前产品版本为 1.0，内部构建编号 1.0.0。安装包及构建记录见 [GitHub 发布页](https://github.com/hzqedison/RT-ResearchFlow/releases)，以实际附件为准。公开接口仍需本人实际联网样本验证，不能用隔离检查代替上游兼容性检测。
 
 ## 已实现的连接路径
 

@@ -1,19 +1,26 @@
-# Mac 适配与上游同步
+# macOS 安装与源码编译
 
-> 本轮版本：**0.1.0-beta.9**。新增多选日线、东财/AKShare研报索引、i问财实验查询与可选本地 Python 扩展。Windows、Mac Apple 芯片和 Intel 使用同一版本，安装包及检查记录见 [beta.9 发布页](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v0.1.0-beta.9)；发布页尚无附件时不视为已经发布。
->
-> 本版多选不是所有专业数据的完全替代；研报提供索引和原文入口，不冒充PDF全文。详细接入、依赖和授权边界见 [多源接入说明](https://github.com/hzqedison/RT-ResearchFlow/blob/codex/macos-support/docs/data-sources.md)。
+产品介绍见[首页](../README.md)。当前产品源码版本为 **1.0**，内部构建编号为 **1.0.0**；安装包以[GitHub 发布页](https://github.com/hzqedison/RT-ResearchFlow/releases)实际附件为准。
 
+## 安装
 
-原仓库：<https://github.com/caoritian002-wq/RT-ResearchFlow>。
-Mac 改动保存在独立分支 `codex/macos-support`，保留原仓库的提交历史，不复制成无法同步的新项目。
+最低 macOS 12。Apple 芯片下载 `arm64.dmg`，Intel 下载 `x64.dmg`。直接打开 DMG，将应用放入 Applications；升级时替换原应用，不选择保留多个副本，也不要删除用户数据目录。
 
-## 安装和编译
+安装包无需单独安装 Node.js、pnpm 或 SQLite。通达信、AKShare、i问财等可选扩展有独立依赖，见[数据源说明](../docs/data-sources.md)。
 
-当前依赖 Electron 41，最低 macOS 12。Apple 芯片使用 `arm64` 包，Intel 使用 `x64` 包。
-安装包不需要单独安装 Node.js、pnpm 或数据库。源码开发需要 Node.js 20、pnpm 10.14.0 和 Xcode Command Line Tools。
+当前测试构建未配置 Apple Developer ID 签名或公证。遇到系统拦截时，确认下载来源后使用“系统设置 > 隐私与安全性”对单个应用授权，不全局关闭 Gatekeeper。
 
-在 Mac 的项目目录执行：
+## 数据与退出
+
+数据保存在本机用户数据目录，不写进应用包。更新前备份，替换应用时保留数据与配置；具体路径以诊断显示为准。
+
+关闭最后一个窗口后可以从 Dock 重新打开；彻底退出使用 `Command+Q`。交易授权在重启后关闭，结果未知的重复请求保护不会因此自动解除。交易范围和去敏反馈流程见[交易说明](../docs/trading.md)。
+
+## 从源码运行
+
+完整产品源码使用 `codex/macos-support` 分支；分支名是开发沿用名称，不代表另一款 Mac 专属产品。Windows 与 Mac 的产品版本一致。
+
+需要 Node.js 20、pnpm 10.14.0 和 Xcode Command Line Tools：
 
 ```sh
 xcode-select --install
@@ -23,31 +30,29 @@ pnpm install --frozen-lockfile
 pnpm run dev
 ```
 
-打包本机架构：
+在目标架构 Mac 上打包：
 
 ```sh
 node macos/build.mjs
 ```
 
-生成的 DMG 和 ZIP 位于 `release/`。必须在对应架构的 Mac 上编译，不能复用 Windows 的 `node_modules` 或 SQLite 原生文件。
-GitHub Actions 的 `macOS build and smoke test` 分别使用 Apple Silicon 和 Intel Mac，生成两种架构的安装包；只有 DMG 安装、数据库、设置、窗口重开和退出检查通过后才上传安装包。
-在成功的运行页面下载对应架构的 Artifacts，解压后打开 DMG，将应用拖入 Applications。
+生成的 DMG 和 ZIP 位于 `release/`，不能复用 Windows 的 `node_modules` 或 SQLite 原生文件。发布页向普通用户提供直接可安装的 DMG，不要求下载构建产物 ZIP。
 
-这是个人使用的临时签名版本，不是 Apple Developer ID 签名或公证版本。
-从网络下载后可能遇到 Gatekeeper 提示：确认来源是自己的构建后，使用 macOS“系统设置 > 隐私与安全性”里的单个应用打开授权。
-不要全局关闭 Gatekeeper，也不要把“临时签名通过”当作 Apple 公证通过。
+## 构建检查
 
-## 数据与退出
+```sh
+node --test macos/sync-upstream.test.mjs
+pnpm run verify
+```
 
-Mac 数据使用 Electron 的用户目录（通常在 `~/Library/Application Support/`），不写入应用包。
-换新版本时替换 `.app`，不要删除用户数据目录；设置和研究数据应保留。
-关闭最后一个窗口后应用继续运行，可从 Dock 重新打开；彻底退出使用 `Command+Q`。
-系统通知需要允许应用的通知权限。大模型和 Tushare Token 的含义与 Windows 版相同，Mac 适配不提供共享 Token。
+原生构建流程分别检查两种架构、DMG 安装、SQLite、设置、窗口恢复及退出。使用隔离数据，不读取个人 Key，不连接券商账户、不提交订单。这不能代替实际同花顺客户端兼容验证。
 
-## 本地同步原仓库
+版本按 **1.0、1.1、1.2** 递进，内部对应 **1.0.0、1.1.0、1.2.0**，具体见[发布约定](../docs/versioning.md)。
 
-`origin` 应指向自己的 Fork，`upstream` 指向作者原仓库。
-提交自己的改动后在适配分支执行：
+<details>
+<summary>维护者：基础代码同步</summary>
+
+保留现有提交历史及许可证。origin 指向自己的仓库，upstream 用于基础代码更新，不强行覆盖本项目迭代。
 
 ```sh
 git switch codex/macos-support
@@ -58,60 +63,8 @@ pnpm run verify
 node macos/build.mjs
 ```
 
-`--check` 只获取更新，不合并代码；`--apply` 使用普通合并，保留自己的提交。
-有未提交改动、分支不对或 `upstream` 地址不符时会拒绝操作。
-出现冲突时脚本停止，保留冲突供处理；解决并提交，或者用 `git merge --abort` 取消本次合并。不会强行覆盖自己的修改。
-上游修改 Node.js、pnpm、Electron 或构建命令时，应同步检查 Mac 工作流和此目录，不要只合并源码后忽略依赖要求。
+检查仅获取状态；应用更新使用普通合并，有未提交修改、分支错误、地址不符或冲突时会停止。定时同步只有在相关工作流合入默认分支并启用后才生效，不把尚未运行的工作流当作已完成同步。
 
-## GitHub 持续更新
+来源与许可证统一见 [NOTICE](../NOTICE.md)。
 
-Mac 适配开发位于 `codex/macos-support`，原仓库保持独立。相关更新工作流需合入自己的默认分支后，定时检查才会生效；不要把尚未合入的工作流视为已经运行。
-在 Fork 的 Actions 页面启用工作流，并在 Settings > Actions > General 允许工作流创建 Pull Request。
-`Check upstream for Mac fork` 每天检查一次，也可手动运行；有更新时创建合并 PR，并明确触发 Mac 和 Windows 检查。
-PR 需要检查后合并，合并到自己的 `main` 后会再次生成 Mac 包。它不会自动解决冲突或覆盖魔改。
-GitHub 定时任务可能延迟，长期没有活动时也可能暂停；急需同步时使用本地脚本或手动触发工作流。
-
-## 验证范围
-
-```sh
-node --test macos/sync-upstream.test.mjs
-pnpm run verify
-```
-
-本地 Windows 上的检查不能证明 Mac 安装包可用；应以两种架构的 Mac 构建和安装后冒烟测试结果为准。
-Mac 冒烟测试使用 CI 临时账号与数据，不要求用户提供大模型密钥，不会访问个人数据库。
-
-## 当前一体化版本
-
-当前版本 v0.1.0-beta.9 将投研、AI、策略验证、量化开通与真实交易放在同一款应用里，不分成两个功能版本。Apple 芯片与 Intel 下载项只是同一应用的不同架构。
-
-发布页：https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v0.1.0-beta.9
-完整产品说明见根目录 README.md。
-
-从“量化开通 > 真实交易”进入，本人手动登录并选择中信账户，先检查连接和表单回读，再明确启用本次会话。每笔真实买卖和单笔撤单均须应用核对及主进程系统确认，系统默认取消；同花顺自己的弹窗仍由本人核对后确认或取消，不自动点击。
-
-买卖受理不等于成交；单笔撤单不能撤销已成交部分。待本人确认、超时或回报不明时，重复请求被锁住；先到同花顺核对，再显式解除保护，不能自动重发。重启后交易授权关闭，但结果不明锁继续保留。
-
-本版不是券商官方 API，也不是无人值守交易服务。尚未在她的当前同花顺版本与中信账户上验证真实受理或撤单成功；构建和隔离检查不提供此保证。数据源、AI Key 与券商权限仍由本人分别配置和核实。
-
-只反馈去敏运行结果，不发送账号、密码、Key、资金、持仓、订单编号、确认凭据或原始日志。参考代码、原作者署名和开源许可保留，移除赞赏入口不改变原许可证。
-
-## 版本递增
-
-应用版本来自 package.json，不会随代码提交自动增加。新的测试发布递增 beta.N，同步应用版本、发布标签和文件名，不改名冒充新构建、不覆盖旧包。当前从 0.1.0-beta.4 递进到 0.1.0-beta.9。
-
-## beta.7 AI 配置修复（beta.8 已同步）
-
-- 修复无密钥厂商设置触发数据库非空限制；保留既有配置和加密密钥，不删除数据，不保存明文。
-- 系统安全加密不可用时停止保存并给出明确提示；已保存密钥的状态按所有可用厂商判断。
-- DeepSeek 官方模型列表更新为 `deepseek-flash`、`deepseek-v4-pro`，旧配置保留并提醒本人重新选择，不静默切换自定义服务。
-- 当前官方模型沿用有输出上限的非思考调用；并不保证用户的 Key、余额或网络可用，这些仍需本人测试。
-- 每行保存按钮固定在右侧，并区分厂商保存与全局设置保存。
-
-## beta.8 Windows / Mac 同步
-
-- 同一源码与版本号提供 Windows x64 安装器、Mac Apple 芯片和 Intel 构建；投研、AI 与量化模块不拆成独立产品。
-- Windows 同步 beta.7 的 AI 配置保存修复、DeepSeek 官方模型与逐行保存入口；保留旧数据和加密密钥，不附带任何用户凭据。
-- Windows 可以查看量化开通引导和去敏兼容状态；当前同花顺执行桥接只支持 Mac，Windows 不启用买卖、撤单或系统控制权限，不能把同步界面当作 Windows 实盘支持。
-- Windows 安装器可选择非系统盘，升级默认保留安装目录下的 data；建议先备份并沿用旧安装目录。构建与安装检查在隔离 CI 执行，不操作用户账户。
-- 新包递增到 0.1.0-beta.8，不覆盖 beta.7。真实交易仍须本人逐笔确认，实际客户端与券商账户兼容性需要本人测试。
+</details>
