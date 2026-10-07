@@ -33,8 +33,12 @@ test('installed Mac app loads SQLite, edits settings, reopens from the Dock, and
     const priority = original.decision_notify_min_priority === 5 ? 4 : 5
     await window.evaluate((value) => window.api.settings.update({ decision_notify_min_priority: value }), priority)
 
-    await application.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows().find((win) => win.isVisible())!.close())
+    // Native close is asynchronous; a Dock activation must follow the actual closed event.
+    await application.evaluate(({ BrowserWindow }) => new Promise<void>((resolveClosed) => {
+      const closingWindow = BrowserWindow.getAllWindows().find((win) => win.isVisible())!
+      closingWindow.once('closed', () => resolveClosed())
+      closingWindow.close()
+    }))
     expect(await application.evaluate(({ app }) => app.isReady())).toBe(true)
     const reopenedWindow = application.waitForEvent('window')
     await application.evaluate(({ app }) => { app.emit('activate') })
