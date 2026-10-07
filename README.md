@@ -1,5 +1,10 @@
 <h1 align="center">RT-ResearchFlow</h1>
 
+> 开发版本：**0.1.0-beta.9**。新增多选日线、东财/AKShare研报索引、i问财实验查询与可选本地 Python 扩展。源码已迭代；beta.9 尚未完成验证和安装包发布，下方 beta.8 链接仍为上一已发布版本。
+>
+> 本版多选不是所有专业数据的完全替代；研报提供索引和原文入口，不冒充PDF全文。详细接入、依赖和授权边界见 [多源接入说明](https://github.com/hzqedison/RT-ResearchFlow/blob/codex/macos-support/docs/data-sources.md)。
+
+
 <p align="center"><b>本地优先的 A 股投研工作台：资讯、AI 研究、策略验证与内置量化交易模块</b></p>
 
 <p align="center">

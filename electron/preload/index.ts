@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { DailyDataProvider, DataProbeProvider, DataSourcePreference, SaveDataSourcePreference, DataSourceProbeResult, ResearchReportResult, WencaiResult } from '../shared/dataSourceTypes'
 import type { MacThsRequest, MacThsResult } from '../shared/macThsTypes'
 import type { IpcRendererEvent } from 'electron'
 import type {
@@ -1895,10 +1896,26 @@ const api = {
 
   // ── Data Sources ───────────────────────────────────────
   datasource: {
-    getConfig: () => ipcRenderer.invoke('datasource:getConfig'),
-    saveConfig: (data: { tushareToken?: string; tushareEnabled?: boolean }) =>
+    getConfig: () => ipcRenderer.invoke('datasource:getConfig') as Promise<DataSourcePreference>,
+    saveConfig: (data: SaveDataSourcePreference) =>
       ipcRenderer.invoke('datasource:saveConfig', data),
     validateTushare: (token: string) => ipcRenderer.invoke('datasource:validateTushare', { token }),
+    probe: (provider: DataProbeProvider, stockCode = '000001') =>
+      ipcRenderer.invoke('datasource:probe', { provider, stockCode }) as Promise<DataSourceProbeResult>,
+    choosePython: () => ipcRenderer.invoke('datasource:choosePython') as Promise<string | null>,
+    bridgeStatus: () => ipcRenderer.invoke('datasource:bridgeStatus') as Promise<
+      { ok: true; data: unknown } | { ok: false; message: string }
+    >,
+    installExtensions: () => ipcRenderer.invoke('datasource:installExtensions') as Promise<
+      { ok: true; pythonPath: string; message: string } | { ok: false; message: string }
+    >,
+    reports: (stockCode: string) => ipcRenderer.invoke('datasource:reports', { stockCode }) as Promise<
+      ({ ok: true } & ResearchReportResult) | { ok: false; message: string }
+    >,
+    wencai: (query: string) => ipcRenderer.invoke('datasource:wencai', { query }) as Promise<
+      ({ ok: true } & WencaiResult) | { ok: false; message: string }
+    >,
+    openSourceLink: (url: string) => ipcRenderer.invoke('datasource:openSourceLink', url) as Promise<{ ok: boolean }>,
     listStocks: () => ipcRenderer.invoke('datasource:listStocks') as Promise<{ stockCode: string; stockName: string }[]>,
     getStockPrices: (stockCode: string) => ipcRenderer.invoke('datasource:getStockPrices', { stockCode }),
     getStockPricePage: (stockCode: string, beforeTradeDate?: string, limit = 149) =>
@@ -1930,7 +1947,7 @@ const api = {
       ipcRenderer.invoke('datasource:refreshStock', { stockCode, force }) as Promise<
         | {
             ok: true
-            provider: 'tushare' | 'eastmoney'
+            provider: DailyDataProvider
             latestTradeDate: string | null
             rowsWritten: number
             totalRows: number
@@ -1946,7 +1963,7 @@ const api = {
             stockCode: string
             stockName: string
             added: true
-            provider: 'tushare' | 'eastmoney' | 'local-cache'
+            provider: DailyDataProvider | 'local-cache'
             latestTradeDate: string | null
             rowsWritten: number
             totalRows: number

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import type { DailyDataProvider } from "../../../electron/shared/dataSourceTypes";
 import {
   DndContext,
   PointerSensor,
@@ -100,7 +101,7 @@ interface PriceHistoryPage {
 
 interface StockDataStatus {
   stockCode: string;
-  provider: "tushare" | "eastmoney" | "local-cache";
+  provider: DailyDataProvider | "local-cache";
   latestTradeDate: string | null;
   totalRows: number;
   dataState: "complete" | "degraded";
@@ -1406,7 +1407,7 @@ export function StockChart() {
       const result = await window.api.datasource.fetchStock(sixDigit) as {
         stockCode?: string;
         stockName?: string;
-        provider?: "tushare" | "eastmoney" | "local-cache";
+        provider?: DailyDataProvider | "local-cache";
         latestTradeDate?: string | null;
         totalRows?: number;
         dataState?: "complete" | "degraded";

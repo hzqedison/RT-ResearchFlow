@@ -14,7 +14,10 @@ import {
   deleteSessionsOlderThan,
   type ConversationMessage
 } from '../database/aiAnalysisSessionRepository'
-import { getDataSourceConfig, updateDataSourceConfig } from '../database/dataSourceRepository'
+import { getDataSourceConfig, updateDataSourceConfig, getMultiSourcePreference, updateMultiSourcePreference, getWencaiCookieEncrypted } from '../database/dataSourceRepository'
+import { registerMultiSourceHandlers } from './multiSourceHandlers'
+import { fetchSelectedStockDaily } from '../services/multiSourceMarketService'
+import type { DailyDataProvider, SaveDataSourcePreference } from '../../shared/dataSourceTypes'
 import { encryptRequiredApiKey, decryptApiKey } from '../utils/apiKeyEncryption'
 import { callAIProvider, PROVIDER_MODELS, PROVIDER_LABELS, PROVIDER_DEFAULT_BASE_URLS } from '../services/aiProvider'
 import type { AIProviderUsage } from '../services/aiProvider'
@@ -33,12 +36,10 @@ import {
   backfillTodayDailyFromIntradayIfMissing,
   ensureTrendBenchmarkFreshness,
   fetchEastmoneyMinuteOHLCV,
-  fetchEastmoneySingleStockDaily,
   fetchIndexPrices,
   fetchIntradayData,
   fetchIntradayDataBySecid,
   fetchStockMinuteDaily,
-  forceFetchSingleStock,
   getBoardSecid,
   validateTushareToken,
 } from '../services/tushareService'
@@ -832,7 +833,7 @@ function enrichStockPriceRows(
   })
 }
 
-type StockFetchProvider = 'tushare' | 'eastmoney' | 'local-cache'
+type StockFetchProvider = DailyDataProvider | 'local-cache'
 type StockFetchDataState = 'complete' | 'degraded'
 
 interface StockFetchSummary {
@@ -890,6 +891,7 @@ function getCachedStockFetchSummary(
 }
 
 export function registerAIHandlers(getWindow: () => BrowserWindow | null): void {
+  registerMultiSourceHandlers()
   // ── FR-072 / FR-081: per-stock per-provider forecast cache (in-process memory) ──
   interface StockForecastCache {
     today?: { time: string; price: number }[]
@@ -1596,20 +1598,30 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
     const db = getDb()
     const row = getDataSourceConfig(db)
     return {
+      ...getMultiSourcePreference(db),
       tushareEnabled: row.tushareEnabled === 1,
-      hasTushareToken: !!(row.tushareTokenEncrypted && row.tushareTokenEncrypted.length > 0)
+      hasTushareToken: !!(row.tushareTokenEncrypted && row.tushareTokenEncrypted.length > 0),
+      hasWencaiCookie: !!getWencaiCookieEncrypted(db)?.length
     }
   })
 
   // ── datasource:saveConfig ─────────────────────────────────────────────────────
-  ipcMain.handle('datasource:saveConfig', (_e, data: { tushareToken?: string; tushareEnabled?: boolean }) => {
+  ipcMain.handle('datasource:saveConfig', (_e, data: SaveDataSourcePreference) => {
     const db = getDb()
     const update: Parameters<typeof updateDataSourceConfig>[1] = {}
     if (data.tushareToken) update.tushareTokenEncrypted = encryptRequiredApiKey(data.tushareToken)
-    if (data.tushareEnabled !== undefined) update.tushareEnabled = data.tushareEnabled ? 1 : 0
-    updateDataSourceConfig(db, update)
+    let selected = data.dailyProviders
+    if (selected === undefined && data.tushareEnabled !== undefined) {
+      const existing = getMultiSourcePreference(db).dailyProviders.filter(provider => provider !== 'tushare')
+      selected = data.tushareEnabled ? ['tushare', ...existing] : existing
+    }
+    if (selected !== undefined) update.tushareEnabled = selected.includes('tushare') ? 1 : 0
+    db.transaction(() => {
+      updateMultiSourcePreference(db, { ...data, dailyProviders: selected })
+      updateDataSourceConfig(db, update)
+    })()
     // FR-123: 关闭 Tushare 时立即取消分钟 K 订阅, 防止失效订阅继续轮询
-    if (data.tushareEnabled === false) {
+    if (update.tushareEnabled === 0) {
       unsubscribeStockMinute()
     }
     const latest = getDataSourceConfig(db)
@@ -1742,29 +1754,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
       const stockCode = rawCode.replace(/\.(SH|SZ|BJ)$/i, '')
       if (!/^\d{6}$/.test(stockCode)) return { ok: false as const, reason: 'invalid_code' as const }
-      const dsConfig = getDataSourceConfig(db)
-      let result: StockFetchSummary | null = null
-      if (!dsConfig.tushareEnabled || !dsConfig.tushareTokenEncrypted) {
-        const fetched = await fetchEastmoneySingleStockDaily(db, stockCode)
-        if (!fetched.ok) {
-          return {
-            ok: false as const,
-            reason: fetched.code === 'STOCK_NOT_FOUND'
-              ? 'not_found' as const
-              : fetched.code === 'INVALID_STOCK_CODE'
-                ? 'invalid_code' as const
-                : 'fetch_error' as const,
-          }
-        }
-        result = fetched
-      } else {
-        const token = decryptApiKey(dsConfig.tushareTokenEncrypted)
-        if (!token) return { ok: false as const, reason: 'no_token' as const }
-        const rowsWritten = await forceFetchSingleStock(db, token, stockCode)
-        const benchmark = await ensureTrendBenchmarkFreshness(db)
-        result = getCachedStockFetchSummary(db, stockCode, 'tushare', rowsWritten, benchmark)
-        if (!result) return { ok: false as const, reason: 'not_found' as const }
-      }
+      const result = await fetchSelectedStockDaily(db, stockCode)
       // FR-072: clear forecast cache for the refreshed stock
       forecastCacheMap.delete(stockCode)
       getWindow()?.webContents.send('datasource:stocksUpdated', {})
@@ -1790,35 +1780,13 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
       if (refreshedLocal) return { ...refreshedLocal, added: true as const }
     }
 
-    const dsConfig = getDataSourceConfig(db)
-    if (!dsConfig.tushareEnabled || !dsConfig.tushareTokenEncrypted) {
-      const fetched = await fetchEastmoneySingleStockDaily(db, stockCode)
-      if (!fetched.ok) {
-        if (local) return { ...local, added: true as const }
-        return { error: { code: fetched.code, message: fetched.message } }
-      }
+    try {
+      const fetched = await fetchSelectedStockDaily(db, stockCode)
       getWindow()?.webContents.send('datasource:stocksUpdated', {})
       return { ...fetched, added: true as const }
-    }
-    const token = decryptApiKey(dsConfig.tushareTokenEncrypted)
-    if (!token) {
-      return { error: { code: 'FETCH_FAILED', message: 'Tushare 配置不可用，请检查数据源设置' } }
-    }
-    try {
-      const rowsInserted = await forceFetchSingleStock(db, token, stockCode)
-      const benchmark = await ensureTrendBenchmarkFreshness(db)
-      // FR-069 补充：Tushare 返回空数据表示股票代码不存在
-      if (rowsInserted === 0 && getCachedPrices(db, stockCode).length === 0) {
-        return { error: { code: 'STOCK_NOT_FOUND', message: `未找到股票代码 ${stockCode}，请确认代码是否正确` } }
-      }
-      const summary = getCachedStockFetchSummary(db, stockCode, 'tushare', rowsInserted, benchmark)
-      if (!summary) {
-        return { error: { code: 'STOCK_NOT_FOUND', message: `未取得股票代码 ${stockCode} 的有效名称和行情` } }
-      }
-      getWindow()?.webContents.send('datasource:stocksUpdated', {})
-      return { ...summary, added: true as const }
-    } catch (err) {
-      return { error: { code: 'FETCH_FAILED', message: err instanceof Error ? err.message : '查询失败' } }
+    } catch (error) {
+      if (local) return { ...local, added: true as const }
+      return { error: { code: 'FETCH_FAILED', message: error instanceof Error ? error.message : '查询失败' } }
     }
   })
 
