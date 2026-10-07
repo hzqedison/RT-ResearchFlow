@@ -23,8 +23,8 @@ describe('Mac 同花顺量化开通引导', () => {
     const progress = parseQuantProgress(JSON.stringify({ applicationRequested: true, officialReplyReceived: true, dataPermissionAcknowledged: true }))
     const diagnostic = buildQuantDiagnostic(progress, 'macos')
     expect(diagnostic.progress).toEqual(progress)
-    expect(diagnostic.verification).toEqual({ brokerPermission: 'not_verified', macConnector: 'not_implemented', canSubmitOrders: false })
-    expect(diagnostic.blockers).toEqual(['MAC_THS_CONNECTOR_UNAVAILABLE', 'BROKER_PERMISSION_NOT_VERIFIED'])
+    expect(diagnostic.verification).toEqual({ brokerPermission: 'not_verified', macConnector: 'experimental_ui_bridge', canSubmitOrders: false })
+    expect(diagnostic.blockers).toEqual(['LIVE_SESSION_NOT_VERIFIED', 'BROKER_PERMISSION_NOT_VERIFIED'])
   })
 
   it('任何引导勾选组合或伪造本地授权都不能解锁下单', () => {
@@ -64,3 +64,4 @@ describe('Mac 同花顺量化开通引导', () => {
     }
   })
 })
+

@@ -15,12 +15,12 @@ describe('Mac THS experimental bridge boundary', () => {
   it.each([
     { symbol: '600000" & do shell script "bad' }, { symbol: '688001' }, { symbol: '300001' },
     { price: 'None' }, { price: '0' }, { price: '1.001' }, { quantity: 101 }, { quantity: -100 },
-    { quantity: Number.NaN }, { maxNotional: '999.99' }, { mode: 'live' }, { requestId: 'bad' },
+    { quantity: Number.NaN }, { maxNotional: '999.99' }, { mode: 'unverified' }, { requestId: 'bad' },
   ])('rejects unsupported or unsafe order input %j', changes => {
     expect(validateMacThsOrder({ ...valid, ...changes })).toBeNull()
   })
   it('does not export local order identifiers or injected private fields', () => {
-    const raw = { schemaVersion: 1, component: 'mac-ths-ui-experiment', adapterVersion: '1',
+    const raw = { schemaVersion: 1, component: 'mac-ths-ui-experiment', adapterVersion: '2',
       runtime: 'macos', architecture: 'arm64', action: 'submitSimulation', mode: 'simulation',
       outcome: 'passed', code: 'SIMULATION_ACCEPTED', unknownPending: false, canSubmitLiveOrders: false,
       canRunUnattended: false, contractNo: 'SENSITIVE_ID', account: 'SENSITIVE_ACCOUNT',
@@ -41,12 +41,36 @@ describe('Mac THS experimental bridge boundary', () => {
     expect(script).toContain('count of newContracts is not 1')
     expect(script).not.toContain('click button "全撤"')
   })
+  it('supports explicit real orders but never automatically confirms broker sheets', () => {
+    const order = validateMacThsOrder({ ...valid, mode: 'live' })!
+    expect(order.mode).toBe('live')
+    for (const side of ['buy', 'sell'] as const) {
+      const script = macThsScript('submitLive', 'live', { ...order, side })
+      expect(script).toContain('click button "' + (side === 'buy' ? '确定买入' : '确定卖出') + '"')
+      expect(script).toContain('brokerLabel(theWindow)')
+      expect(script).toContain('readbackMatches')
+      expect(script).toContain('matchingNewContracts')
+      expect(script).toContain('NATIVE_CONFIRMATION_REQUIRED')
+      expect(script).not.toContain('click button "确认"')
+      expect(script).not.toContain('do shell script')
+    }
+    expect(() => macThsScript('submitLive', 'livePreview', { ...order, mode: 'livePreview' })).toThrow()
+    expect(() => macThsScript('cancelLive', 'live', undefined, 'bad" injection')).toThrow()
+  })
+  it('real cancellation is exact, single-order, and never all-revoke', () => {
+    const script = macThsScript('cancelLive', 'live', undefined, 'TEST123')
+    expect(script).toContain('count of matchedRows is not 1')
+    expect(script).toContain('click button "撤单"')
+    expect(script).not.toContain('click button "全撤"')
+    expect(script).not.toContain('click button "确认"')
+  })
   it.skipIf(process.platform !== 'darwin')('compiles supported AppleScripts without executing them', () => {
     const directory = mkdtempSync(join(tmpdir(), 'rt-ths-script-'))
     try {
-      for (const action of ['probe', 'preview', 'submitSimulation', 'queryOrders', 'queryDeals', 'cancelSimulation'] as const) {
+      for (const action of ['probe', 'preview', 'submitSimulation', 'queryOrders', 'queryDeals', 'cancelSimulation', 'submitLive', 'cancelLive'] as const) {
+        const mode = action === 'submitLive' || action === 'cancelLive' ? 'live' : 'simulation'
         execFileSync('/usr/bin/osacompile', ['-o', join(directory, action + '.scpt'), '-e',
-          macThsScript(action, 'simulation', validateMacThsOrder(valid)!, 'TEST123')],
+          macThsScript(action, mode, validateMacThsOrder({ ...valid, mode })!, 'TEST123')],
         { timeout: 30000, stdio: 'pipe' })
       }
     } finally { rmSync(directory, { recursive: true, force: true }) }

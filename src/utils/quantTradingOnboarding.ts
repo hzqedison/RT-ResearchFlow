@@ -40,20 +40,20 @@ export function buildQuantDiagnostic(value: unknown, runtime: QuantRuntime) {
   if (!progress.applicationRequested) blockers.push('APPLICATION_NOT_REPORTED')
   if (!progress.officialReplyReceived) blockers.push('OFFICIAL_REPLY_NOT_REPORTED')
   if (!progress.dataPermissionAcknowledged) blockers.push('DATA_PERMISSION_NOT_ACKNOWLEDGED')
-  blockers.push('MAC_THS_CONNECTOR_UNAVAILABLE', 'BROKER_PERMISSION_NOT_VERIFIED')
+  blockers.push('LIVE_SESSION_NOT_VERIFIED', 'BROKER_PERMISSION_NOT_VERIFIED')
 
-  // User-reported progress never grants trading authority. No trading adapter exists yet.
+  // User-reported progress never grants trading authority. This progress report does not reflect the separately authorized live session.
   // Construct an allowlisted report instead of redacting arbitrary account data or logs.
   return {
     schemaVersion: 1,
     component: 'quant-trading-onboarding',
-    guideVersion: 1,
+    guideVersion: 2,
     route: 'macos-ths-citics-local',
     runtime: runtime === 'macos' ? 'macos' : 'other',
     progress,
     verification: {
       brokerPermission: 'not_verified',
-      macConnector: 'not_implemented',
+      macConnector: 'experimental_ui_bridge',
       canSubmitOrders: false as const,
     },
     blockers,
@@ -62,7 +62,8 @@ export function buildQuantDiagnostic(value: unknown, runtime: QuantRuntime) {
 
 export const QUANT_APPLICATION_REQUEST = [
   '我已有个人中信证券账户，使用同花顺 Mac 版。',
-  '计划在 Mac 本机使用自编投研软件，通过同花顺完成自动交易，不使用 Windows 执行端。',
+  '计划在 Mac 本机使用自编投研软件，通过同花顺完成本人逐笔确认的实盘交易，不使用 Windows 执行端或无人值守交易。',
   '请确认：现账户能否办理程序化交易、同花顺 Mac 是否有受支持的自动交易接口、需开通哪些权限，以及申请入口、协议报告、模拟环境、软件审核和费用要求。',
   '请提供适用于 Mac 的正式说明；Windows 版 QMT、SuperMind 或 iFinD 数据接口不能替代本需求的交易接口。',
 ].join('\n')
+

@@ -11,7 +11,7 @@ import {
 import './QuantTradingOnboarding.css'
 import MacTradingPanel from './MacTradingPanel'
 
-const STEPS = ['确认路线', '申请开通', '数据权限', '核验与反馈', '交易实验']
+const STEPS = ['确认路线', '申请开通', '数据权限', '核验与反馈', '真实交易']
 
 function readProgress() {
   try {
@@ -97,7 +97,7 @@ export default function QuantTradingOnboarding({ navigationExpanded }: { navigat
               <p>能在同花顺手动买卖，不代表外部程序可以自动下单。需要中信与同花顺明确确认 Mac 本机的接入方式和权限。</p>
               <div className="qt-callout"><strong>这一条路线不会变</strong><p>只使用 Mac 本机，通过同花顺完成交易。不使用 Windows 后台，也不改为其他软件替你下单。</p></div>
               {runtime !== 'macos' && <p className="qt-warning">当前不是 Mac 环境，可以查看引导，但不能在这里启用交易。</p>}
-              <p>正式受支持的券商接口尚未接入。新增“交易实验”可测试 Mac 同花顺本机桥接、表单预览与模拟委托，不会提交实盘订单。</p>
+              <p>量化交易已作为同一产品的内置模块，采用 Mac 同花顺桌面桥接。不是券商官方 API；真实交易需在“真实交易”页显式启用，并由本人逐笔系统确认。先核实权限和客户端兼容性，不进行无人值守。</p>
               <button type="button" className="qt-primary" onClick={() => setStep(1)}>查看开通步骤</button>
             </>}
             {step === 1 && <>
@@ -136,14 +136,14 @@ export default function QuantTradingOnboarding({ navigationExpanded }: { navigat
             </>}
             {step === 3 && <>
               <h3>本地运行，只反馈脱敏结果</h3>
-              <div className="qt-callout" data-testid="quant-connection-status"><strong>待接口核验，实盘自动交易尚未启用</strong><p>此页仅记录正式接口的开通进度，不是连接检测。“交易实验”页可运行实验性桌面桥接并导出本机测试结果。</p></div>
+              <div className="qt-callout" data-testid="quant-connection-status"><strong>待接口核验，开通登记不等于实盘授权</strong><p>本页只记录开通进度，不是连接检测，也不会解锁下单。请到“真实交易”页检查桌面桥接、明确启用本次会话，并导出去敏运行结果。</p></div>
               <p>对方只需发送导出的诊断文件。它不包含姓名、资金账号、密码、Token、余额、持仓、订单、文件路径或原始日志，也不会自动上传。</p>
               <details className="qt-diagnostic" open><summary>诊断文件预览</summary><pre data-testid="quant-diagnostic-preview">{JSON.stringify(diagnostic, null, 2)}</pre></details>
               <div className="qt-actions">
                 <button type="button" className="qt-primary" data-testid="quant-diagnostic-export" onClick={exportDiagnostic}>导出脱敏诊断</button>
-                <button type="button" className="qt-secondary" data-testid="quant-trading-disabled" disabled>交易尚未启用</button>
+                <button type="button" className="qt-secondary" data-testid="quant-trading-disabled" disabled>本页不授权交易</button>
               </div>
-              <p className="qt-small">此文件只反映开通登记；实际桥接测试结果请在“交易实验”页导出。开发迭代不需要账户密码或远程控制。</p>
+              <p className="qt-small">此文件只反映开通登记；实际桥接测试结果请在“真实交易”页导出。开发迭代不需要账户密码或远程控制。</p>
             </>}
             {step === 4 && <MacTradingPanel confirmationHost={dialogRef.current} />}
           </section>

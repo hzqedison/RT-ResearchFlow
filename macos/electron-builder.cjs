@@ -45,7 +45,7 @@ module.exports = {
     identity: null,
     hardenedRuntime: false,
     extendInfo: {
-      NSAppleEventsUsageDescription: '仅在用户发起交易实验时控制本机同花顺界面，用于表单预览与模拟委托；不收集账户凭证。',
+      NSAppleEventsUsageDescription: '仅在用户发起操作并本人确认后控制本机同花顺，用于表单预览、中信真实委托及单笔撤单；不处理登录密码或收集账户凭证。',
     },
     gatekeeperAssess: false,
   },

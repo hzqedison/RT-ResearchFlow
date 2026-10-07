@@ -73,7 +73,7 @@ test('installed Mac guide persists progress, stays blocked, and exports only saf
     expect(diagnostic.runtime).toBe('macos')
     expect(diagnostic.progress).toEqual({ applicationRequested: true, officialReplyReceived: true, dataPermissionAcknowledged: true })
     expect(diagnostic.verification.canSubmitOrders).toBe(false)
-    expect(diagnostic.blockers).toContain('MAC_THS_CONNECTOR_UNAVAILABLE')
+    expect(diagnostic.blockers).toContain('LIVE_SESSION_NOT_VERIFIED')
     mkdirSync('test-results', { recursive: true })
     await page.screenshot({ path: 'test-results/macos-quant-onboarding.png' })
     await page.getByRole('button', { name: '关闭量化开通引导' }).click()
@@ -82,3 +82,4 @@ test('installed Mac guide persists progress, stays blocked, and exports only saf
     try { await application?.close() } finally { rmSync(fixture, { recursive: true, force: true }) }
   }
 })
+

@@ -1,5 +1,8 @@
-export type MacThsMode = 'simulation' | 'livePreview'
-export type MacThsAction = 'probe' | 'preview' | 'submitSimulation' | 'queryOrders' | 'queryDeals' | 'cancelSimulation' | 'authorize' | 'resolveUnknown'
+export type MacThsMode = 'simulation' | 'livePreview' | 'live'
+export const MAC_THS_ACTIONS = ['probe', 'preview', 'submitSimulation', 'queryOrders', 'queryDeals',
+  'cancelSimulation', 'authorize', 'resolveUnknown', 'authorizeLive', 'disableLive', 'submitLive',
+  'cancelLive', 'dismissConfirmation'] as const
+export type MacThsAction = typeof MAC_THS_ACTIONS[number]
 export type MacThsOutcome = 'passed' | 'blocked' | 'unknown'
 export const MAC_THS_CODES = [
   'READY', 'MAC_REQUIRED', 'CLIENT_NOT_RUNNING', 'ACCESSIBILITY_REQUIRED', 'AUTOMATION_DENIED',
@@ -8,6 +11,8 @@ export const MAC_THS_CODES = [
   'READBACK_MISMATCH', 'SIMULATION_ACCEPTED', 'SIMULATION_CANCELLED', 'FORM_READY', 'VIEW_OPENED',
   'TABLE_UNSUPPORTED', 'RECEIPT_UNKNOWN', 'CANCEL_CONTROL_UNSUPPORTED', 'CONFIRMATION_UNRECOGNIZED',
   'SCRIPT_ERROR', 'PERMISSION_PROMPTED', 'STATE_RESOLVED', 'CONFIRMATION_REQUIRED', 'CONFIRMATION_EXPIRED',
+  'LIVE_ENABLED', 'LIVE_DISABLED', 'LIVE_NOT_ENABLED', 'LIVE_ACCEPTED', 'LIVE_CANCELLED',
+  'NATIVE_CONFIRMATION_REQUIRED', 'ORDER_CONTROL_DISABLED',
 ] as const
 export type MacThsCode = typeof MAC_THS_CODES[number]
 export interface MacThsOrder {
@@ -32,11 +37,12 @@ export interface MacThsRequest {
   requestId?: string
   contractNo?: string
   confirmationToken?: string
+  liveRiskAcknowledged?: boolean
 }
 export interface MacThsResult {
   schemaVersion: 1
   component: 'mac-ths-ui-experiment'
-  adapterVersion: '1'
+  adapterVersion: '2'
   runtime: 'macos' | 'other'
   architecture: 'arm64' | 'x64' | 'other'
   action: MacThsAction
@@ -44,7 +50,7 @@ export interface MacThsResult {
   outcome: MacThsOutcome
   code: MacThsCode
   unknownPending: boolean
-  canSubmitLiveOrders: false
+  canSubmitLiveOrders: boolean
   canRunUnattended: false
   contractNo?: string
   confirmation?: MacThsConfirmation
@@ -53,7 +59,7 @@ export function validateMacThsOrder(value: unknown): MacThsOrder | null {
   if (!value || typeof value !== 'object') return null
   const v = value as Record<string, unknown>
   if (typeof v.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(v.requestId)) return null
-  if (v.mode !== 'simulation' && v.mode !== 'livePreview') return null
+  if (v.mode !== 'simulation' && v.mode !== 'livePreview' && v.mode !== 'live') return null
   if (v.side !== 'buy' && v.side !== 'sell') return null
   if (typeof v.symbol !== 'string' || !/^(600|601|603|605|000|001|002|003)\d{3}$/.test(v.symbol)) return null
   if (typeof v.price !== 'string' || !/^\d{1,5}(\.\d{1,2})?$/.test(v.price) || Number(v.price) <= 0) return null
@@ -69,11 +75,14 @@ export function validateMacThsOrder(value: unknown): MacThsOrder | null {
 export function safeMacThsDiagnostic(value: MacThsResult | null) {
   if (!value) return { schemaVersion: 1, component: 'mac-ths-ui-experiment', tested: false }
   return {
-    schemaVersion: 1, component: 'mac-ths-ui-experiment', adapterVersion: '1', tested: true,
+    schemaVersion: 1, component: 'mac-ths-ui-experiment', adapterVersion: '2', tested: true,
     runtime: value.runtime === 'macos' ? 'macos' : 'other',
     architecture: value.architecture === 'arm64' || value.architecture === 'x64' ? value.architecture : 'other',
-    action: value.action, mode: value.mode === 'simulation' ? 'simulation' : 'livePreview',
-    outcome: value.outcome, code: MAC_THS_CODES.includes(value.code) ? value.code : 'SCRIPT_ERROR',
-    unknownPending: value.unknownPending === true, canSubmitLiveOrders: false, canRunUnattended: false,
+    action: MAC_THS_ACTIONS.includes(value.action) ? value.action : 'probe',
+    mode: value.mode === 'simulation' ? 'simulation' : value.mode === 'livePreview' ? 'livePreview' : 'live',
+    outcome: value.outcome === 'passed' || value.outcome === 'unknown' ? value.outcome : 'blocked',
+    code: MAC_THS_CODES.includes(value.code) ? value.code : 'SCRIPT_ERROR',
+    unknownPending: value.unknownPending === true,
+    canSubmitLiveOrders: value.canSubmitLiveOrders === true, canRunUnattended: false,
   }
 }
