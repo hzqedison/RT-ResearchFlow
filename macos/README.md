@@ -1,6 +1,6 @@
 # Mac 适配与上游同步
 
-> 开发版本：**0.1.0-beta.9**。新增多选日线、东财/AKShare研报索引、i问财实验查询与可选本地 Python 扩展。源码已迭代；beta.9 尚未完成验证和安装包发布，下方 beta.8 链接仍为上一已发布版本。
+> 本轮版本：**0.1.0-beta.9**。新增多选日线、东财/AKShare研报索引、i问财实验查询与可选本地 Python 扩展。Windows、Mac Apple 芯片和 Intel 使用同一版本，安装包及检查记录见 [beta.9 发布页](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v0.1.0-beta.9)；发布页尚无附件时不视为已经发布。
 >
 > 本版多选不是所有专业数据的完全替代；研报提供索引和原文入口，不冒充PDF全文。详细接入、依赖和授权边界见 [多源接入说明](https://github.com/hzqedison/RT-ResearchFlow/blob/codex/macos-support/docs/data-sources.md)。
 
@@ -83,9 +83,9 @@ Mac 冒烟测试使用 CI 临时账号与数据，不要求用户提供大模型
 
 ## 当前一体化版本
 
-当前版本 v0.1.0-beta.8 将投研、AI、策略验证、量化开通与真实交易放在同一款应用里，不分成两个功能版本。Apple 芯片与 Intel 下载项只是同一应用的不同架构。
+当前版本 v0.1.0-beta.9 将投研、AI、策略验证、量化开通与真实交易放在同一款应用里，不分成两个功能版本。Apple 芯片与 Intel 下载项只是同一应用的不同架构。
 
-发布页：https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v0.1.0-beta.8
+发布页：https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v0.1.0-beta.9
 完整产品说明见根目录 README.md。
 
 从“量化开通 > 真实交易”进入，本人手动登录并选择中信账户，先检查连接和表单回读，再明确启用本次会话。每笔真实买卖和单笔撤单均须应用核对及主进程系统确认，系统默认取消；同花顺自己的弹窗仍由本人核对后确认或取消，不自动点击。
@@ -98,7 +98,7 @@ Mac 冒烟测试使用 CI 临时账号与数据，不要求用户提供大模型
 
 ## 版本递增
 
-应用版本来自 package.json，不会随代码提交自动增加。新的测试发布递增 beta.N，同步应用版本、发布标签和文件名，不改名冒充新构建、不覆盖旧包。当前从 0.1.0-beta.4 递进到 0.1.0-beta.8。
+应用版本来自 package.json，不会随代码提交自动增加。新的测试发布递增 beta.N，同步应用版本、发布标签和文件名，不改名冒充新构建、不覆盖旧包。当前从 0.1.0-beta.4 递进到 0.1.0-beta.9。
 
 ## beta.7 AI 配置修复（beta.8 已同步）
 

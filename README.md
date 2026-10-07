@@ -1,6 +1,6 @@
 <h1 align="center">RT-ResearchFlow</h1>
 
-> 开发版本：**0.1.0-beta.9**。新增多选日线、东财/AKShare研报索引、i问财实验查询与可选本地 Python 扩展。源码已迭代；beta.9 尚未完成验证和安装包发布，下方 beta.8 链接仍为上一已发布版本。
+> 本轮版本：**0.1.0-beta.9**。新增多选日线、东财/AKShare研报索引、i问财实验查询与可选本地 Python 扩展。Windows、Mac Apple 芯片和 Intel 使用同一版本，安装包及检查记录见 [beta.9 发布页](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v0.1.0-beta.9)；发布页尚无附件时不视为已经发布。
 >
 > 本版多选不是所有专业数据的完全替代；研报提供索引和原文入口，不冒充PDF全文。详细接入、依赖和授权边界见 [多源接入说明](https://github.com/hzqedison/RT-ResearchFlow/blob/codex/macos-support/docs/data-sources.md)。
 
@@ -47,7 +47,7 @@ RT-ResearchFlow 面向希望长期建立自己研究体系的 A 股个人投资�
 
 本版本在 [原作者 RT-ResearchFlow](https://github.com/caoritian002-wq/RT-ResearchFlow) 的基础上二次迭代，保留投研功能、作者署名与开源许可，并内置 Mac 量化交易模块、开通引导和同花顺本机桥接。资讯、研究、策略与交易模块属于同一个产品、同一个安装包，不需要安装两个版本。新增模块不代表原作者提供的交易服务，也不是中信证券或同花顺官方接口。
 
-当前版本：**v0.1.0-beta.8**。在同一安装包内新增本人确认的中信实盘买卖与单笔撤单路径，统一应用版本、安装包文件名与发布编号。实盘代码已提供，但尚未在测试者当前同花顺版本及中信账户上验证实际委托受理、成交或撤单。
+当前版本：**v0.1.0-beta.9**。在同一安装包内保留本人确认的中信实盘买卖与单笔撤单路径，新增多选行情与研报数据源，统一应用版本、安装包文件名与发布编号。实盘代码已提供，但尚未在测试者当前同花顺版本及中信账户上验证实际委托受理、成交或撤单。
 
 [查看可下载的 Mac 安装包与各版实际功能](https://github.com/hzqedison/RT-ResearchFlow/releases)：Apple M 系列选择 `arm64.dmg`，Intel 选择 `x64.dmg`。旧版本保留，不覆盖旧安装包。
 
@@ -312,7 +312,7 @@ flowchart LR
 
 当前仅支持普通 A 股主板限价，不支持科创板、创业板、ETF、转债、自动登录、资金转账、自动调仓或无人值守。
 
-交易模块不提供完整历史行情、财务、资讯或模型服务。Tushare 与 AI 等配置继续按需使用；AKShare、BaoStock 等替代数据源尚未集成。
+交易模块不提供完整历史行情、财务、资讯或模型服务。beta.9 已接入腾讯财经、东方财富、新浪与可选通达信、AKShare 个股日线，以及研报索引和 i问财条件查询；不等于全部专业数据免费替代。Tushare 与 AI 等配置继续按需使用，BaoStock 尚未集成。
 
 ## 决策与复盘如何形成闭环
 
