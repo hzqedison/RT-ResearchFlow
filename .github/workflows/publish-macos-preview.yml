@@ -12,7 +12,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: macos-preview-release-f9efe4e
+  group: macos-ths-experiment-release-50d3665
   cancel-in-progress: false
 
 jobs:
