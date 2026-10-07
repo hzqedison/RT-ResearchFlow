@@ -44,6 +44,9 @@ module.exports = {
     minimumSystemVersion: '12.0',
     identity: null,
     hardenedRuntime: false,
+    extendInfo: {
+      NSAppleEventsUsageDescription: '仅在用户发起交易实验时控制本机同花顺界面，用于表单预览与模拟委托；不收集账户凭证。',
+    },
     gatekeeperAssess: false,
   },
   // Personal builds need an ad-hoc signature on Apple Silicon. This is NOT

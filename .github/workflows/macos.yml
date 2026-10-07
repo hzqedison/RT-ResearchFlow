@@ -67,7 +67,7 @@ jobs:
           trap - EXIT
           codesign --verify --deep --strict "$install/RT-ResearchFlow.app"
           export TRADE_WATCH_PACKAGED_EXECUTABLE="$install/RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow"
-          pnpm exec playwright test tests/e2e/macos-app-smoke.spec.ts tests/e2e/quant-trading-onboarding.spec.ts --workers=1 --reporter=line
+          pnpm exec playwright test tests/e2e/macos-app-smoke.spec.ts tests/e2e/quant-trading-onboarding.spec.ts tests/e2e/mac-ths-experiment.spec.ts --workers=1 --reporter=line
           shasum -a 256 release/*.dmg release/*.zip > release/SHA256SUMS.txt
       - name: Upload tested packages
         uses: actions/upload-artifact@v4

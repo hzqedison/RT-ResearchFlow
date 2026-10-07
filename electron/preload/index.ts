@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { MacThsRequest, MacThsResult } from '../shared/macThsTypes'
 import type { IpcRendererEvent } from 'electron'
 import type {
   BriefingListOptions,
@@ -1534,6 +1535,9 @@ interface StrategyEffectivenessResult {
 
 // Expose a typed API to the renderer via window.api
 const api = {
+  macThs: {
+    execute: (payload: MacThsRequest) => ipcRenderer.invoke('macThs:execute', payload) as Promise<MacThsResult>,
+  },
   researchAgent: {
     preflight: (sessionId: number) => (
       ipcRenderer.invoke('researchAgent:preflight', { sessionId }) as Promise<ResearchAgentPreflightResponse>
