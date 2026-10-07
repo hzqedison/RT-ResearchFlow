@@ -51,13 +51,13 @@ export function setProviderConfig(
 ): void {
   const existing = getProviderConfig(db, provider)
   if (!existing) {
-    // Insert with whatever fields are provided
+    // An empty encrypted blob represents an unconfigured provider, never a plaintext key.
     db.prepare(
       `INSERT INTO provider_configs (provider, apiKeyEncrypted, model, baseUrl, maxTokens, presetPrompt, trendForecastPrompt, trendForecastMorrowPrompt)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       provider,
-      data.apiKeyEncrypted ?? null,
+      data.apiKeyEncrypted ?? Buffer.alloc(0),
       data.model ?? null,
       data.baseUrl ?? null,
       data.maxTokens ?? null,
@@ -71,7 +71,7 @@ export function setProviderConfig(
     for (const [key, value] of Object.entries(data)) {
       if (value !== undefined) {
         updates.push(`${key} = @${key}`)
-        params[key] = value
+        params[key] = key === 'apiKeyEncrypted' && value === null ? Buffer.alloc(0) : value
       }
     }
     if (updates.length > 0) {

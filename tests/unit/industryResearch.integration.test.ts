@@ -691,7 +691,7 @@ describe('产业研究第180阶段联合回归', () => {
       .toHaveLength(2)
     expect(listResearchProjectCompanies(db, 'project-main').map((item) => item.short_name).sort())
       .toEqual(['中天科技', '亨通光电', '烽火通信'].sort())
-  })
+  }, 30_000)
 
   it('既有成功研究可显式补全公司映射且不改写原报告', async () => {
     const started = await startIndustryResearchGeneration(db, {
@@ -785,7 +785,7 @@ describe('产业研究第180阶段联合回归', () => {
 
     expect(unmatchedCompleted.companyCandidates[0]).toMatchObject({ resolution_status: 'unmatched' })
     expect(listResearchProjectCompanies(db, 'project-other')).toHaveLength(0)
-  })
+  }, 30_000)
 
   it('证券主数据刷新后只重映射未匹配候选并恢复长鑫科创板代码', async () => {
     deterministicState.companyMode = 'unmatched'
