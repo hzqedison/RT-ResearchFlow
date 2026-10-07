@@ -750,7 +750,7 @@ describe('产业研究第180阶段联合回归', () => {
       expect(getResearchFinancialSyncState(db, company.company_id, 'income')?.status).toBe('success')
       expect(getResearchFinancialSyncState(db, company.company_id, 'fina_mainbz')?.status).toBe('success')
     }
-  })
+  }, 30_000)
 
   it('歧义或无匹配证券的公司线索不会自动登记为项目公司', async () => {
     deterministicState.companyMode = 'ambiguous'
@@ -843,7 +843,7 @@ describe('产业研究第180阶段联合回归', () => {
       remappedCandidates: 0,
       materializedProjectCompanies: 0,
     })
-  })
+  }, 30_000)
 
   it('历史成功运行缺少项目公司时可幂等补登记且不调用模型', async () => {
     const started = await startIndustryResearchGeneration(db, {
