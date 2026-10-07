@@ -21,6 +21,7 @@ import { registerScreenerHandlers } from './ipc/screenerHandlers'
 import { registerSectorFlowHandlers } from './ipc/sectorFlowHandlers'
 import { registerTradeCalHandlers } from './ipc/tradeCalHandlers'
 import { registerMacThsHandlers } from './ipc/macThsHandlers'
+import { registerAppUpdateHandlers } from './ipc/appUpdateHandlers'
 import { registerTrendHandlers } from './ipc/trendHandlers'
 import { registerDecisionHandlers } from './ipc/decisionHandlers'
 import { registerPortfolioHandlers } from './ipc/portfolioHandlers'
@@ -281,6 +282,7 @@ async function bootstrap(): Promise<void> {
   registerSectorFlowHandlers()
   registerTradeCalHandlers()
   registerMacThsHandlers(() => mainWindow)
+  registerAppUpdateHandlers(() => mainWindow)
   registerTrendHandlers()
   registerDecisionHandlers()
   registerPortfolioHandlers(() => mainWindow)

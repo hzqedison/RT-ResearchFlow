@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { AppUpdateCheck, AppUpdateDownload, AppUpdateInfo, AppUpdateProgress, AppUpdateResult } from '../shared/appUpdateTypes'
 import type { DailyDataProvider, DataProbeProvider, DataSourcePreference, SaveDataSourcePreference, DataSourceProbeResult, ResearchReportResult, WencaiResult } from '../shared/dataSourceTypes'
 import type { MacThsRequest, MacThsResult } from '../shared/macThsTypes'
 import type { IpcRendererEvent } from 'electron'
@@ -1536,6 +1537,19 @@ interface StrategyEffectivenessResult {
 
 // Expose a typed API to the renderer via window.api
 const api = {
+  appUpdates: {
+    info: () => ipcRenderer.invoke('appUpdates:info') as Promise<AppUpdateResult<AppUpdateInfo>>,
+    check: (includePrereleases: boolean) => ipcRenderer.invoke('appUpdates:check', includePrereleases) as Promise<AppUpdateResult<AppUpdateCheck>>,
+    chooseDirectory: () => ipcRenderer.invoke('appUpdates:chooseDirectory') as Promise<AppUpdateResult<AppUpdateInfo>>,
+    download: (version: string) => ipcRenderer.invoke('appUpdates:download', version) as Promise<AppUpdateResult<AppUpdateDownload>>,
+    cancel: () => ipcRenderer.invoke('appUpdates:cancel') as Promise<AppUpdateResult<void>>,
+    showInstaller: () => ipcRenderer.invoke('appUpdates:showInstaller') as Promise<AppUpdateResult<void>>,
+    onProgress: (listener: (value: AppUpdateProgress) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, value: AppUpdateProgress) => listener(value)
+      ipcRenderer.on('appUpdates:progress', handler)
+      return () => { ipcRenderer.removeListener('appUpdates:progress', handler) }
+    },
+  },
   macThs: {
     execute: (payload: MacThsRequest) => ipcRenderer.invoke('macThs:execute', payload) as Promise<MacThsResult>,
   },
