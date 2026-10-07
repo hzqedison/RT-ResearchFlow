@@ -8,6 +8,7 @@ test('installed Windows beta keeps AI save fixed and blocks the Mac-only trading
     'Runs only against an isolated installed Windows CI application.')
   test.setTimeout(90_000)
   const fixture = mkdtempSync(join(tmpdir(), 'rt-windows-integrated-'))
+  if (dirname(resolve(fixture)) !== resolve(tmpdir())) throw new Error('Unsafe fixture cleanup path')
   const environment = { ...process.env }
   delete environment.ELECTRON_RUN_AS_NODE
   const application = await electron.launch({
@@ -45,7 +46,6 @@ test('installed Windows beta keeps AI save fixed and blocks the Mac-only trading
   } finally {
     await application.close()
     // Delete only the uniquely created CI fixture, never the installation or user data.
-    if (dirname(resolve(fixture)) !== resolve(tmpdir())) throw new Error('Unsafe fixture cleanup path')
     rmSync(fixture, { recursive: true, force: true })
   }
 })
