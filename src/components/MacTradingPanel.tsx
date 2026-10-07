@@ -43,6 +43,7 @@ const MESSAGES: Record<string, string> = {
   SIMULATION_CANCELLED: '旧模拟请求显示撤单状态。',
 }
 export default function MacTradingPanel({ confirmationHost }: { confirmationHost?: HTMLElement | null }) {
+  const isMac = typeof navigator !== 'undefined' && /^Mac/i.test(navigator.platform)
   const mode: MacThsMode = 'live'
   const [side, setSide] = useState<'buy' | 'sell'>('buy')
   const [symbol, setSymbol] = useState('')
@@ -56,7 +57,7 @@ export default function MacTradingPanel({ confirmationHost }: { confirmationHost
   const [notice, setNotice] = useState('')
   const [confirmation, setConfirmation] = useState<{ request: MacThsRequest; review: MacThsConfirmation } | null>(null)
   const liveEnabled = result?.canSubmitLiveOrders === true
-  const valid = !!validateMacThsOrder({ requestId: '00000000-0000-4000-8000-000000000000',
+  const valid = isMac && !!validateMacThsOrder({ requestId: '00000000-0000-4000-8000-000000000000',
     mode, side, symbol, price, quantity: Number(quantity), maxNotional })
   async function executeRequest(request: MacThsRequest) {
     setBusy(true)
@@ -97,20 +98,21 @@ export default function MacTradingPanel({ confirmationHost }: { confirmationHost
   }
   return <div className="mt-panel" data-testid="mac-trading-panel">
     <h3>中信证券真实交易</h3>
+    {!isMac && <div className="mt-warning" data-testid="mac-ths-platform-warning">Windows 版已同步投研、AI 配置和量化开通引导；当前同花顺执行桥接仅支持 Mac。此处不能启用真实交易，也不会控制 Windows 同花顺。可以检查兼容状态并导出去敏结果。</div>}
     <p>通过本人 Mac 上的同花顺完成普通 A 股限价买卖，与投研功能处于同一个产品、同一个安装包。不是券商官方 API，请本人核实权限并手动登录，不提供交易密码。</p>
     <div className="mt-warning">这是真实账户，不是模拟账户。可能产生真实资金损失；每笔操作需要本人确认，不支持策略自动触发或无人值守。尚未验证你的同花顺版本与账户兼容性，先检查连接及表单回读。</div>
     <div className="mt-actions">
       <button type="button" disabled={busy} data-testid="mac-ths-probe" onClick={() => void run('probe')}>检查同花顺连接</button>
-      <button type="button" disabled={busy} data-testid="mac-ths-authorize" onClick={() => void run('authorize')}>申请系统控制权限</button>
+      <button type="button" disabled={busy || !isMac} data-testid="mac-ths-authorize" onClick={() => void run('authorize')}>申请系统控制权限</button>
     </div>
     <div className="mt-warning">
-      <label><input type="checkbox" disabled={busy} data-testid="mac-ths-live-risk-ack"
+      <label><input type="checkbox" disabled={busy || !isMac} data-testid="mac-ths-live-risk-ack"
         checked={riskAcknowledged} onChange={event => {
           setRiskAcknowledged(event.target.checked)
           if (!event.target.checked && liveEnabled) void run('disableLive')
         }} /> 我已核实账户权限，在同花顺选择了正确的中信真实账户，并了解真实资金风险</label>
       <div className="mt-actions">
-        <button type="button" data-testid="mac-ths-enable-live" disabled={busy || !riskAcknowledged || liveEnabled || result?.unknownPending}
+        <button type="button" data-testid="mac-ths-enable-live" disabled={busy || !isMac || !riskAcknowledged || liveEnabled || result?.unknownPending}
           onClick={() => void run('authorizeLive')}>启用本次会话真实交易</button>
         <button type="button" data-testid="mac-ths-disable-live" disabled={busy || !liveEnabled}
           onClick={() => void run('disableLive')}>关闭本次会话真实交易</button>
@@ -118,29 +120,29 @@ export default function MacTradingPanel({ confirmationHost }: { confirmationHost
       <p className="mt-small">重启后需重新启用。勾选引导进度不会授权交易，实盘系统确认框默认取消。</p>
     </div>
     <div className="mt-form">
-      <label>方向<select value={side} disabled={busy} onChange={event => setSide(event.target.value as 'buy' | 'sell')}>
+      <label>方向<select value={side} disabled={busy || !isMac} onChange={event => setSide(event.target.value as 'buy' | 'sell')}>
         <option value="buy">买入</option><option value="sell">卖出</option>
       </select></label>
-      <label>普通主板代码<input value={symbol} inputMode="numeric" maxLength={6} disabled={busy} onChange={event => setSymbol(event.target.value)} placeholder="由本人选择，不提供推荐" /></label>
-      <label>限价<input value={price} inputMode="decimal" disabled={busy} onChange={event => setPrice(event.target.value)} placeholder="本人填写限价" /></label>
-      <label>数量<input value={quantity} inputMode="numeric" disabled={busy} onChange={event => setQuantity(event.target.value)} placeholder="本人填写数量" /></label>
-      <label>委托金额上限（不含手续费）<input value={maxNotional} inputMode="decimal" disabled={busy} onChange={event => setMaxNotional(event.target.value)} placeholder="由你明确设置" /></label>
+      <label>普通主板代码<input value={symbol} inputMode="numeric" maxLength={6} disabled={busy || !isMac} onChange={event => setSymbol(event.target.value)} placeholder="由本人选择，不提供推荐" /></label>
+      <label>限价<input value={price} inputMode="decimal" disabled={busy || !isMac} onChange={event => setPrice(event.target.value)} placeholder="本人填写限价" /></label>
+      <label>数量<input value={quantity} inputMode="numeric" disabled={busy || !isMac} onChange={event => setQuantity(event.target.value)} placeholder="本人填写数量" /></label>
+      <label>委托金额上限（不含手续费）<input value={maxNotional} inputMode="decimal" disabled={busy || !isMac} onChange={event => setMaxNotional(event.target.value)} placeholder="由你明确设置" /></label>
     </div>
     <div className="mt-actions">
       <button type="button" disabled={busy || !valid} onClick={() => void run('preview')}>填写表单并回读（不提交）</button>
-      <button type="button" data-testid="mac-ths-submit-live" disabled={busy || !riskAcknowledged || !liveEnabled || !valid || result?.unknownPending}
+      <button type="button" data-testid="mac-ths-submit-live" disabled={busy || !isMac || !riskAcknowledged || !liveEnabled || !valid || result?.unknownPending}
         onClick={() => void run('submitLive')}>提交真实买卖委托（本人确认）</button>
-      <button type="button" disabled={busy} onClick={() => void run('queryOrders')}>在同花顺查看委托</button>
-      <button type="button" disabled={busy} onClick={() => void run('queryDeals')}>在同花顺查看成交</button>
+      <button type="button" disabled={busy || !isMac} onClick={() => void run('queryOrders')}>在同花顺查看委托</button>
+      <button type="button" disabled={busy || !isMac} onClick={() => void run('queryDeals')}>在同花顺查看成交</button>
     </div>
     <div className="mt-cancel">
-      <label>真实委托编号<input value={contractNo} disabled={busy} onChange={event => setContractNo(event.target.value)} placeholder="仅在本机使用，不导出" /></label>
-      <button type="button" data-testid="mac-ths-cancel-live" disabled={busy || !riskAcknowledged || !liveEnabled || !/^[a-zA-Z0-9-]{1,32}$/.test(contractNo.trim()) || result?.unknownPending}
+      <label>真实委托编号<input value={contractNo} disabled={busy || !isMac} onChange={event => setContractNo(event.target.value)} placeholder="仅在本机使用，不导出" /></label>
+      <button type="button" data-testid="mac-ths-cancel-live" disabled={busy || !isMac || !riskAcknowledged || !liveEnabled || !/^[a-zA-Z0-9-]{1,32}$/.test(contractNo.trim()) || result?.unknownPending}
         onClick={() => void run('cancelLive')}>撤销指定真实委托（本人确认）</button>
     </div>
     {result?.unknownPending && <div className="mt-warning">
       <p>请到同花顺核对委托、成交和仍打开的确认弹窗，确认或取消均由本人完成；未核对前不要重复提交。</p>
-      <button type="button" disabled={busy} onClick={() => void run('resolveUnknown')}>已本人核对结果，解除防重复保护</button>
+      <button type="button" disabled={busy || !isMac} onClick={() => void run('resolveUnknown')}>已本人核对结果，解除防重复保护</button>
     </div>}
     <div className="mt-status" data-testid="mac-ths-status" role="status">{busy ? '正在本机执行，请勿操作同花顺或再次点击…' : result ? MESSAGES[result.code] : '尚未检查连接，真实交易默认关闭。'}{notice && <p>{notice}</p>}</div>
     <details open><summary>可分享的去敏运行结果</summary><pre data-testid="mac-ths-diagnostic">{JSON.stringify(safeMacThsDiagnostic(result), null, 2)}</pre></details>

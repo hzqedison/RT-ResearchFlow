@@ -80,7 +80,7 @@ export default function QuantTradingOnboarding({ navigationExpanded }: { navigat
       onClick={(event) => { if (event.target === event.currentTarget) setOpen(false) }}>
       <div className="qt-shell">
         <header className="qt-header">
-          <div><p className="qt-eyebrow">MAC 本机 / 同花顺 / 中信证券</p><h2 id="quant-onboarding-title">量化交易开通引导</h2></div>
+          <div><p className="qt-eyebrow">{runtime === 'macos' ? 'MAC 本机 / 同花顺 / 中信证券' : '本机投研 / AI / 交易兼容说明'}</p><h2 id="quant-onboarding-title">量化交易开通引导</h2></div>
           <button type="button" className="qt-close" aria-label="关闭量化开通引导" onClick={() => setOpen(false)}>关闭</button>
         </header>
         <div className="qt-layout">
@@ -96,7 +96,7 @@ export default function QuantTradingOnboarding({ navigationExpanded }: { navigat
               <h3>先确认你需要的不是普通交易登录</h3>
               <p>能在同花顺手动买卖，不代表外部程序可以自动下单。需要中信与同花顺明确确认 Mac 本机的接入方式和权限。</p>
               <div className="qt-callout"><strong>这一条路线不会变</strong><p>只使用 Mac 本机，通过同花顺完成交易。不使用 Windows 后台，也不改为其他软件替你下单。</p></div>
-              {runtime !== 'macos' && <p className="qt-warning">当前不是 Mac 环境，可以查看引导，但不能在这里启用交易。</p>}
+              {runtime !== 'macos' && <p className="qt-warning">Windows 等非 Mac 环境已同步投研、AI 和开通引导；当前同花顺交易执行桥接仅适用于 Mac，不能在这里启用真实交易。</p>}
               <p>量化交易已作为同一产品的内置模块，采用 Mac 同花顺桌面桥接。不是券商官方 API；真实交易需在“真实交易”页显式启用，并由本人逐笔系统确认。先核实权限和客户端兼容性，不进行无人值守。</p>
               <button type="button" className="qt-primary" onClick={() => setStep(1)}>查看开通步骤</button>
             </>}
