@@ -1,0 +1,33 @@
+name: Publish tested macOS preview
+
+on:
+  push:
+    branches: [codex/macos-preview-release]
+    paths:
+      - .github/workflows/publish-macos-preview.yml
+      - macos/publish-preview.mjs
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: macos-preview-release-f9efe4e
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'hzqedison/RT-ResearchFlow'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Publish the previously tested DMGs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node macos/publish-preview.mjs
