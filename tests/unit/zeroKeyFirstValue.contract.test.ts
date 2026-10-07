@@ -19,17 +19,24 @@ describe('FR-252 zero-key first-value contracts', () => {
     expect(fetchStart).toBeGreaterThan(0)
     expect(refreshStart).toBeGreaterThan(0)
     expect(fetchHandler).toContain("getCachedStockFetchSummary(db, stockCode, 'local-cache', 0)")
-    expect(fetchHandler).toContain('fetchEastmoneySingleStockDaily(db, stockCode)')
+    expect(fetchHandler).toContain('fetchSelectedStockDaily(db, stockCode)')
     expect(fetchHandler).not.toContain('TUSHARE_NOT_CONFIGURED')
-    expect(refreshHandler).toContain('fetchEastmoneySingleStockDaily(db, stockCode)')
+    expect(refreshHandler).toContain('fetchSelectedStockDaily(db, stockCode)')
     expect(refreshHandler).toContain("reason: 'invalid_code'")
+
+    const router = source('electron/main/services/multiSourceMarketService.ts')
+    expect(router).toContain('const config = getMultiSourcePreference(db)')
+    expect(router).toContain('config.dailyProviders')
+    expect(router).toContain("provider === 'eastmoney'")
+    expect(router).toContain('fetchEastmoneySingleStockDaily(db, stockCode)')
+    expect(router).toContain("provider === 'tencent' || provider === 'sina'")
   })
 
   it('exposes source, fact date and coverage without adding a preload namespace', () => {
     const preload = source('electron/preload/index.ts')
     const chart = source('src/components/StockChart/StockChart.tsx')
 
-    expect(preload).toContain("provider: 'tushare' | 'eastmoney' | 'local-cache'")
+    expect(preload).toContain("provider: DailyDataProvider | 'local-cache'")
     expect(preload).toContain("dataState: 'complete' | 'degraded'")
     expect(preload).toContain('latestTradeDate: string | null')
     expect(preload).toContain('totalRows: number')
