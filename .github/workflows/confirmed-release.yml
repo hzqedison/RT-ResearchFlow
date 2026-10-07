@@ -15,82 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  macos-build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
-      npm_config_electron_mirror: https://github.com/electron/electron/releases/download/
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: 41f8429149f646c7dec7f1610082702e7d9cce48
-          persist-credentials: false
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.14.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: pnpm
-      - name: Confirm native architecture
-        run: test "$(node -p process.arch)" = '${{ matrix.arch }}'
-      - name: Install and rebuild native dependencies
-        run: pnpm install --frozen-lockfile --config.side-effects-cache=false
-      - name: Verify source and safe upstream merging
-        run: |
-          pnpm run verify
-          node --test macos/sync-upstream.test.mjs
-      - name: Build DMG and ZIP
-        run: node macos/build.mjs
-      - name: Install from DMG and test the installed application
-        shell: bash
-        run: |
-          set -euo pipefail
-          mount="$RUNNER_TEMP/rt-dmg"
-          install="$RUNNER_TEMP/rt-installed"
-          mkdir -p "$mount" "$install"
-          dmg="$(find release -maxdepth 1 -name '*-${{ matrix.arch }}.dmg' -print -quit)"
-          test -n "$dmg"
-          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount"
-          trap 'hdiutil detach "$mount" || true' EXIT
-          ditto "$mount/RT-ResearchFlow.app" "$install/RT-ResearchFlow.app"
-          hdiutil detach "$mount"
-          trap - EXIT
-          codesign --verify --deep --strict "$install/RT-ResearchFlow.app"
-          export TRADE_WATCH_PACKAGED_EXECUTABLE="$install/RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow"
-          pnpm exec playwright test tests/e2e/macos-app-smoke.spec.ts tests/e2e/quant-trading-onboarding.spec.ts tests/e2e/mac-ths-experiment.spec.ts --workers=1 --reporter=line
-          shasum -a 256 release/*.dmg release/*.zip > release/SHA256SUMS.txt
-      - name: Upload tested packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: confirmed-1.0-macOS-${{ matrix.arch }}-${{ github.sha }}
-          path: |
-            release/*.dmg
-            release/*.zip
-            release/SHA256SUMS.txt
-          if-no-files-found: error
-          retention-days: 30
-      - name: Upload smoke-test evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: confirmed-1.0-smoke-evidence-${{ matrix.arch }}
-          path: test-results/
-          if-no-files-found: ignore
-          retention-days: 14
-
   publish:
-    needs: macos-build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -101,39 +26,164 @@ jobs:
       GH_REPO: hzqedison/RT-ResearchFlow
       FROZEN_SOURCE: 41f8429149f646c7dec7f1610082702e7d9cce48
     steps:
-      - name: Download tested Mac packages
-        uses: actions/download-artifact@v4
-        with:
-          pattern: confirmed-1.0-macOS-*
-          path: inputs/macos
-      - name: Retrieve the already tested Windows 1.0 package
+      - name: Verify successful builds and reuse their tested installers
         shell: bash
         run: |
           set -euo pipefail
-          gh api "repos/$GH_REPO/actions/runs/37653940356" > windows-run.json
-          jq -e --arg sha "$FROZEN_SOURCE" '.head_sha == $sha and .conclusion == "success"' windows-run.json
-          gh api "repos/$GH_REPO/actions/artifacts/11497932890" > windows-artifact.json
-          jq -e --arg sha "$FROZEN_SOURCE" '.expired == false and .workflow_run.head_sha == $sha' windows-artifact.json
-          gh api "repos/$GH_REPO/actions/artifacts/11497932890/zip" > windows.zip
-          mkdir -p inputs/windows
-          unzip -q windows.zip -d inputs/windows
-      - name: Verify artifacts and prepare direct installer assets
-        shell: bash
-        run: |
-          set -euo pipefail
-          (cd inputs/windows && sha256sum -c SHA256SUMS.txt)
-          for directory in inputs/macos/*; do
-            (cd "$directory" && sha256sum -c SHA256SUMS.txt)
-          done
-          mkdir -p assets
-          cp inputs/windows/RT-ResearchFlow-Setup-1.0.0-x64.exe assets/
-          for arch in arm64 x64; do
-            name="RT-ResearchFlow-macOS-1.0.0-$arch.dmg"
-            mapfile -t packages < <(find inputs/macos -type f -name "$name")
-            test "${#packages[@]}" -eq 1
-            cp "${packages[0]}" "assets/$name"
-          done
-          (cd assets && sha256sum RT-ResearchFlow-Setup-1.0.0-x64.exe RT-ResearchFlow-macOS-1.0.0-arm64.dmg RT-ResearchFlow-macOS-1.0.0-x64.dmg > SHA256SUMS.txt)
+          python3 <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import re
+          import shutil
+          import subprocess
+          import zipfile
+
+          repo = os.environ["GH_REPO"]
+          source = os.environ["FROZEN_SOURCE"]
+          mac_head = "d0843f9870a3d61cb512901e06d6da90c43a7240"
+          mac_workflow_blob = "d431de8eeb09c1e21a0d2b0f81220a7c26c06830"
+
+          def api(endpoint):
+              result = subprocess.run(["gh", "api", "repos/" + repo + "/" + endpoint],
+                                      check=True, capture_output=True, text=True)
+              return json.loads(result.stdout)
+
+          releases = json.loads(subprocess.run(
+              ["gh", "api", "--paginate", "--slurp", "repos/" + repo + "/releases?per_page=100"],
+              check=True, capture_output=True, text=True).stdout)
+          if any(r["tag_name"] == "v1.0.0" for page in releases for r in page):
+              raise RuntimeError("v1.0.0 already exists; refusing to replace any release or asset")
+
+          windows_run = api("actions/runs/37653940356")
+          if not (windows_run["head_sha"] == source and
+                  windows_run["status"] == "completed" and windows_run["conclusion"] == "success"):
+              raise RuntimeError("Windows build has not succeeded for the frozen application source")
+          windows_jobs = api("actions/runs/37653940356/jobs")["jobs"]
+          if not windows_jobs or any(j["conclusion"] != "success" for j in windows_jobs):
+              raise RuntimeError("Windows build or installed-application check job did not succeed")
+
+          mac_run = api("actions/runs/37659004838")
+          if mac_run["head_sha"] != mac_head or mac_run["status"] != "completed":
+              raise RuntimeError("Mac build run source mismatch")
+          original_workflow = api("contents/.github/workflows/confirmed-release.yml?ref=" + mac_head)
+          if original_workflow["sha"] != mac_workflow_blob:
+              raise RuntimeError("Mac workflow differs from the reviewed frozen-source build definition")
+          for job_id, expected_name in [
+              (112921398024, "macos-build (macos-15-intel, x64)"),
+              (112921398538, "macos-build (macos-15, arm64)"),
+          ]:
+              job = api("actions/jobs/" + str(job_id))
+              if not (job["run_id"] == mac_run["id"] and job["head_sha"] == mac_head and
+                      job["name"] == expected_name and job["status"] == "completed" and
+                      job["conclusion"] == "success"):
+                  raise RuntimeError("Mac build job did not succeed for the reviewed source")
+              required_steps = {
+                  "Verify source and safe upstream merging",
+                  "Install from DMG and test the installed application",
+                  "Upload tested packages",
+              }
+              successful_steps = {s["name"] for s in job["steps"] if s["conclusion"] == "success"}
+              if not required_steps.issubset(successful_steps):
+                  raise RuntimeError("Mac source, installed-application or upload check is incomplete")
+
+          specs = [
+              (11497932890, 37653940356, source,
+               "RT-ResearchFlow-Windows-x64-" + source,
+               "RT-ResearchFlow-Setup-1.0.0-x64.exe",
+               "sha256:327f3ad43a8337023cbf6da38d88be5354a63b2d9eb0dfa40511a2c5c262ff5c"),
+              (11499968594, 37659004838, mac_head,
+               "confirmed-1.0-macOS-arm64-" + mac_head,
+               "RT-ResearchFlow-macOS-1.0.0-arm64.dmg",
+               "sha256:91a98a179ee4fc1a055285d762174970e31b4d5cd26c0297a4822632a6e2dd7f"),
+              (11501650076, 37659004838, mac_head,
+               "confirmed-1.0-macOS-x64-" + mac_head,
+               "RT-ResearchFlow-macOS-1.0.0-x64.dmg",
+               "sha256:92f8e686457fcec14f528bf6810e06e73f05bd9aa04d7ed0b8f98660b63d88e0"),
+          ]
+          assets = pathlib.Path("assets")
+          assets.mkdir(exist_ok=False)
+          archives = pathlib.Path("archives")
+          archives.mkdir(exist_ok=False)
+          evidence = {"sourceSha": source, "windowsRun": windows_run["id"],
+                      "macRun": mac_run["id"], "macWorkflowCommit": mac_head, "assets": []}
+
+          def digest_stream(stream):
+              digest = hashlib.sha256()
+              for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                  digest.update(chunk)
+              return digest.hexdigest()
+
+          for artifact_id, run_id, head, expected_name, installer, pinned_digest in specs:
+              artifact = api("actions/artifacts/" + str(artifact_id))
+              if not (artifact["id"] == artifact_id and not artifact["expired"] and
+                      artifact["name"] == expected_name and
+                      artifact["workflow_run"]["id"] == run_id and
+                      artifact["workflow_run"]["head_sha"] == head and
+                      artifact.get("digest") == pinned_digest):
+                  raise RuntimeError("Artifact identity, source or archive digest mismatch")
+              archive = archives / (str(artifact_id) + ".zip")
+              with archive.open("wb") as output:
+                  subprocess.run(["gh", "api", "repos/" + repo + "/actions/artifacts/" +
+                                  str(artifact_id) + "/zip"], check=True, stdout=output)
+              with archive.open("rb") as stream:
+                  if "sha256:" + digest_stream(stream) != pinned_digest:
+                      raise RuntimeError("Downloaded artifact ZIP does not match its pinned digest")
+
+              with zipfile.ZipFile(archive) as package:
+                  members = {}
+                  for entry in package.infolist():
+                      if entry.is_dir():
+                          continue
+                      path = pathlib.PurePosixPath(entry.filename)
+                      if path.is_absolute() or ".." in path.parts or "\\" in entry.filename:
+                          raise RuntimeError("Unsafe artifact member path")
+                      if path.name in members:
+                          raise RuntimeError("Ambiguous artifact basenames")
+                      members[path.name] = entry
+                  manifest = members.get("SHA256SUMS.txt")
+                  if manifest is None:
+                      raise RuntimeError("Build checksum manifest is missing")
+                  hashes = {}
+                  for line in package.read(manifest).decode("utf-8-sig").splitlines():
+                      if not line.strip():
+                          continue
+                      match = re.fullmatch(r"([0-9a-fA-F]{64})[ \t]+\*?(.+)", line)
+                      if match is None:
+                          raise RuntimeError("Malformed build checksum entry")
+                      checksum, original_path = match.groups()
+                      path = pathlib.PurePosixPath(original_path)
+                      if path.is_absolute() or ".." in path.parts or "\\" in original_path:
+                          raise RuntimeError("Unsafe build checksum path")
+                      # Build manifests can retain release/, while uploaded artifacts are flat.
+                      if tuple(path.parts) not in [(path.name,), ("release", path.name)]:
+                          raise RuntimeError("Unexpected build checksum directory")
+                      if path.name in hashes or path.name not in members:
+                          raise RuntimeError("Duplicate or missing checksum target")
+                      hashes[path.name] = checksum.lower()
+                  if set(hashes) != set(members) - {"SHA256SUMS.txt"} or installer not in hashes:
+                      raise RuntimeError("Checksum manifest does not cover the complete build payload")
+                  for name, expected_hash in hashes.items():
+                      with package.open(members[name]) as stream:
+                          if digest_stream(stream) != expected_hash:
+                              raise RuntimeError("Build payload checksum mismatch: " + name)
+                  target = assets / installer
+                  with package.open(members[installer]) as stream, target.open("xb") as output:
+                      shutil.copyfileobj(stream, output)
+                  with target.open("rb") as stream:
+                      actual_hash = digest_stream(stream)
+                  if actual_hash != hashes[installer]:
+                      raise RuntimeError("Prepared installer checksum mismatch")
+                  evidence["assets"].append({"name": installer, "size": target.stat().st_size,
+                                             "sha256": actual_hash, "artifactId": artifact_id})
+                  print("Verified " + installer + " SHA256=" + actual_hash)
+
+          with (assets / "SHA256SUMS.txt").open("x", encoding="utf-8") as manifest:
+              for item in evidence["assets"]:
+                  manifest.write(item["sha256"] + "  " + item["name"] + "\n")
+          pathlib.Path("release-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
+          PY
       - name: Publish confirmed 1.0 testing release
         shell: bash
         run: |
@@ -141,22 +191,27 @@ jobs:
           cat > release-notes.md <<'NOTES'
           # RT-ResearchFlow 1.0
 
-          One integrated product: research, multi-source data, AI analysis, strategy validation, and user-confirmed trading.
+          资讯监控、研报检索、多数据源行情、AI 分析、策略验证、复盘与本人确认的交易功能，集成在同一个产品中。
 
-          ## Direct downloads
-          - Windows x64: RT-ResearchFlow-Setup-1.0.0-x64.exe
-          - Apple Silicon Mac: RT-ResearchFlow-macOS-1.0.0-arm64.dmg
-          - Intel Mac: RT-ResearchFlow-macOS-1.0.0-x64.dmg
-          - SHA256SUMS.txt contains installer integrity hashes.
+          ## 直接安装
+          - Windows：下载 RT-ResearchFlow-Setup-1.0.0-x64.exe。
+          - Apple 芯片 Mac：下载 RT-ResearchFlow-macOS-1.0.0-arm64.dmg。
+          - Intel Mac：下载 RT-ResearchFlow-macOS-1.0.0-x64.dmg。
+          - SHA256SUMS.txt 提供三个安装包的校验值，无需先解压 ZIP。
 
-          ## Testing scope
-          These packages contain the confirmed 1.0 source at 41f8429149f646c7dec7f1610082702e7d9cce48, including the product description rewrite and the previously integrated features.
-          Subsequent, unverified in-app updater and free official-calendar changes are NOT included. They remain on the development branch for a later iteration.
+          ## 版本与检查范围
+          本次交付此前已确认的 1.0，应用源码固定于 41f8429149f646c7dec7f1610082702e7d9cce48。
+          Windows 安装后检查及两种 Mac 的 DMG 安装、启动和隔离检查均已通过。发布流程复用这些已测试产物，并核对原始产物及安装包 SHA256。
+          后续开发分支中的应用内更新器和免 Key 官方交易日历改动尚未包含，将随下一次版本迭代交付。
+          交易功能通过 Mac 本机同花顺桥接，订单需本人确认；她的同花顺版本和中信账户仍需本人本机测试。构建检查未连接券商、未提交真实订单，Windows 同花顺实盘执行及无人值守交易尚未验证。
+          Mac 安装包采用临时签名，尚未完成 Apple Developer ID 签名及公证。
+          安装包为完整安装包。本次未实现增量更新。请保留个人数据库备份，反馈时勿发送账户、密码、API Key 或个人交易数据。
 
-          Windows passed the installed-application tests. Both Mac architectures passed the DMG installation and isolated smoke checks before publication.
-          No broker account was accessed and no real order was submitted during these checks. Local THS/CITIC compatibility still requires the account owner's sanitized testing; Windows THS execution and unattended trading are not promised.
-          Mac builds are ad-hoc signed, not Apple Developer ID signed or notarized. Keep account credentials and private trading data local; never share API keys or account passwords in test reports.
-          Use the installer for your system and chip. These are full installers, not delta updates. Existing installation identity and data paths are unchanged.
+          [Windows 安装检查](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/37653940356)
+          [两种 Mac 构建与安装检查](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/37659004838)
+          [对应应用源码](https://github.com/hzqedison/RT-ResearchFlow/tree/41f8429149f646c7dec7f1610082702e7d9cce48)
+
+          <!-- tested-source:41f8429149f646c7dec7f1610082702e7d9cce48 publisher-schema:2 -->
           NOTES
           gh release create v1.0.0 \
             assets/RT-ResearchFlow-Setup-1.0.0-x64.exe \
@@ -165,6 +220,47 @@ jobs:
             assets/SHA256SUMS.txt \
             --target "$FROZEN_SOURCE" \
             --title 'RT-ResearchFlow 1.0' \
+            --draft \
             --prerelease \
             --notes-file release-notes.md
-          printf '%s\n' 'Release: https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.0.0' >> "$GITHUB_STEP_SUMMARY"
+          python3 <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import subprocess
+
+          repo = os.environ["GH_REPO"]
+          def api(endpoint):
+              return json.loads(subprocess.run(
+                  ["gh", "api", "repos/" + repo + "/" + endpoint],
+                  check=True, capture_output=True, text=True).stdout)
+
+          release = api("releases/tags/v1.0.0")
+          if not (release["target_commitish"] == os.environ["FROZEN_SOURCE"] and
+                  release["draft"] and release["prerelease"]):
+              raise RuntimeError("Draft release source or testing status mismatch")
+          expected = {p.name: {"size": p.stat().st_size,
+                      "digest": "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()}
+                      for p in pathlib.Path("assets").iterdir()}
+          uploaded = {a["name"]: a for a in release["assets"]}
+          if set(uploaded) != set(expected):
+              raise RuntimeError("Draft release asset set is incomplete or unexpected")
+          for name, item in expected.items():
+              remote = uploaded[name]
+              if remote["size"] != item["size"] or remote["digest"] != item["digest"] or remote["state"] != "uploaded":
+                  raise RuntimeError("Uploaded release asset integrity mismatch: " + name)
+          pathlib.Path("published-assets.json").write_text(json.dumps(release, indent=2) + "\n")
+          PY
+          gh release edit v1.0.0 --draft=false
+          gh api "repos/$GH_REPO/releases/tags/v1.0.0" --jq '.assets[] | [.name, .browser_download_url, .size, .digest] | @tsv' >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve publication integrity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: confirmed-1.0-publication-evidence
+          path: |
+            release-evidence.json
+            published-assets.json
+          if-no-files-found: ignore
+          retention-days: 30
