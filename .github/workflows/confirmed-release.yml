@@ -1,0 +1,170 @@
+name: Deliver confirmed 1.0 installers
+
+on:
+  push:
+    branches: [codex/release-1.0]
+    paths: [.github/workflows/confirmed-release.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: confirmed-release-1.0
+  cancel-in-progress: false
+
+jobs:
+  macos-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+      npm_config_electron_mirror: https://github.com/electron/electron/releases/download/
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 41f8429149f646c7dec7f1610082702e7d9cce48
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+      - name: Confirm native architecture
+        run: test "$(node -p process.arch)" = '${{ matrix.arch }}'
+      - name: Install and rebuild native dependencies
+        run: pnpm install --frozen-lockfile --config.side-effects-cache=false
+      - name: Verify source and safe upstream merging
+        run: |
+          pnpm run verify
+          node --test macos/sync-upstream.test.mjs
+      - name: Build DMG and ZIP
+        run: node macos/build.mjs
+      - name: Install from DMG and test the installed application
+        shell: bash
+        run: |
+          set -euo pipefail
+          mount="$RUNNER_TEMP/rt-dmg"
+          install="$RUNNER_TEMP/rt-installed"
+          mkdir -p "$mount" "$install"
+          dmg="$(find release -maxdepth 1 -name '*-${{ matrix.arch }}.dmg' -print -quit)"
+          test -n "$dmg"
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount"
+          trap 'hdiutil detach "$mount" || true' EXIT
+          ditto "$mount/RT-ResearchFlow.app" "$install/RT-ResearchFlow.app"
+          hdiutil detach "$mount"
+          trap - EXIT
+          codesign --verify --deep --strict "$install/RT-ResearchFlow.app"
+          export TRADE_WATCH_PACKAGED_EXECUTABLE="$install/RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow"
+          pnpm exec playwright test tests/e2e/macos-app-smoke.spec.ts tests/e2e/quant-trading-onboarding.spec.ts tests/e2e/mac-ths-experiment.spec.ts --workers=1 --reporter=line
+          shasum -a 256 release/*.dmg release/*.zip > release/SHA256SUMS.txt
+      - name: Upload tested packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: confirmed-1.0-macOS-${{ matrix.arch }}-${{ github.sha }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload smoke-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: confirmed-1.0-smoke-evidence-${{ matrix.arch }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  publish:
+    needs: macos-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: hzqedison/RT-ResearchFlow
+      FROZEN_SOURCE: 41f8429149f646c7dec7f1610082702e7d9cce48
+    steps:
+      - name: Download tested Mac packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: confirmed-1.0-macOS-*
+          path: inputs/macos
+      - name: Retrieve the already tested Windows 1.0 package
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/actions/runs/37653940356" > windows-run.json
+          jq -e --arg sha "$FROZEN_SOURCE" '.head_sha == $sha and .conclusion == "success"' windows-run.json
+          gh api "repos/$GH_REPO/actions/artifacts/11497932890" > windows-artifact.json
+          jq -e --arg sha "$FROZEN_SOURCE" '.expired == false and .workflow_run.head_sha == $sha' windows-artifact.json
+          gh api "repos/$GH_REPO/actions/artifacts/11497932890/zip" > windows.zip
+          mkdir -p inputs/windows
+          unzip -q windows.zip -d inputs/windows
+      - name: Verify artifacts and prepare direct installer assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd inputs/windows && sha256sum -c SHA256SUMS.txt)
+          for directory in inputs/macos/*; do
+            (cd "$directory" && sha256sum -c SHA256SUMS.txt)
+          done
+          mkdir -p assets
+          cp inputs/windows/RT-ResearchFlow-Setup-1.0.0-x64.exe assets/
+          for arch in arm64 x64; do
+            name="RT-ResearchFlow-macOS-1.0.0-$arch.dmg"
+            mapfile -t packages < <(find inputs/macos -type f -name "$name")
+            test "${#packages[@]}" -eq 1
+            cp "${packages[0]}" "assets/$name"
+          done
+          (cd assets && sha256sum RT-ResearchFlow-Setup-1.0.0-x64.exe RT-ResearchFlow-macOS-1.0.0-arm64.dmg RT-ResearchFlow-macOS-1.0.0-x64.dmg > SHA256SUMS.txt)
+      - name: Publish confirmed 1.0 testing release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # RT-ResearchFlow 1.0
+
+          One integrated product: research, multi-source data, AI analysis, strategy validation, and user-confirmed trading.
+
+          ## Direct downloads
+          - Windows x64: RT-ResearchFlow-Setup-1.0.0-x64.exe
+          - Apple Silicon Mac: RT-ResearchFlow-macOS-1.0.0-arm64.dmg
+          - Intel Mac: RT-ResearchFlow-macOS-1.0.0-x64.dmg
+          - SHA256SUMS.txt contains installer integrity hashes.
+
+          ## Testing scope
+          These packages contain the confirmed 1.0 source at 41f8429149f646c7dec7f1610082702e7d9cce48, including the product description rewrite and the previously integrated features.
+          Subsequent, unverified in-app updater and free official-calendar changes are NOT included. They remain on the development branch for a later iteration.
+
+          Windows passed the installed-application tests. Both Mac architectures passed the DMG installation and isolated smoke checks before publication.
+          No broker account was accessed and no real order was submitted during these checks. Local THS/CITIC compatibility still requires the account owner's sanitized testing; Windows THS execution and unattended trading are not promised.
+          Mac builds are ad-hoc signed, not Apple Developer ID signed or notarized. Keep account credentials and private trading data local; never share API keys or account passwords in test reports.
+          Use the installer for your system and chip. These are full installers, not delta updates. Existing installation identity and data paths are unchanged.
+          NOTES
+          gh release create v1.0.0 \
+            assets/RT-ResearchFlow-Setup-1.0.0-x64.exe \
+            assets/RT-ResearchFlow-macOS-1.0.0-arm64.dmg \
+            assets/RT-ResearchFlow-macOS-1.0.0-x64.dmg \
+            assets/SHA256SUMS.txt \
+            --target "$FROZEN_SOURCE" \
+            --title 'RT-ResearchFlow 1.0' \
+            --prerelease \
+            --notes-file release-notes.md
+          printf '%s\n' 'Release: https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.0.0' >> "$GITHUB_STEP_SUMMARY"
