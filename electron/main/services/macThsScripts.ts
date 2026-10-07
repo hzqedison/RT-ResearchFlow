@@ -143,17 +143,17 @@ on orderSnapshot(theWindow)
         set stateColumn to my columnOf(headings, {"委托状态", "状态", "委托结果"})
         if idColumn is 0 or codeColumn is 0 or priceColumn is 0 or quantityColumn is 0 or sideColumn is 0 then error "unsupported table"
         if (count rows of theTable) > 2000 then error "unsupported table"
-        set records to {}
+        set orderEntries to {}
         repeat with theRow in rows of theTable
           set cells to value of every static text of theRow
           set identifier to item idColumn of cells as text
           if identifier is not "" then
             set orderState to ""
             if stateColumn > 0 then set orderState to item stateColumn of cells as text
-            set end of records to {identifier, item codeColumn of cells as text, item priceColumn of cells as text, item quantityColumn of cells as text, item sideColumn of cells as text, orderState}
+            set end of orderEntries to {identifier, item codeColumn of cells as text, item priceColumn of cells as text, item quantityColumn of cells as text, item sideColumn of cells as text, orderState}
           end if
         end repeat
-        return records
+        return orderEntries
       end try
     end repeat
   end tell
@@ -168,9 +168,9 @@ on contractSnapshot(theWindow)
   return identifiers
 end contractSnapshot
 
-on matchingNewContracts(records, beforeContracts, theSide, theSymbol, thePrice, theQuantity)
+on matchingNewContracts(orderEntries, beforeContracts, theSide, theSymbol, thePrice, theQuantity)
   set identifiers to {}
-  repeat with entry in records
+  repeat with entry in orderEntries
     try
       set identifier to item 1 of entry as text
       set sideText to item 5 of entry as text
