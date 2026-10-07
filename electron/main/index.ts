@@ -429,9 +429,7 @@ app.on('window-all-closed', () => {
   if (applicationDataReady && databaseReady) recordCloseTime()
   stopHeartbeat()
   stopScheduler()
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  app.quit()
 })
 
 app.on('activate', () => {
