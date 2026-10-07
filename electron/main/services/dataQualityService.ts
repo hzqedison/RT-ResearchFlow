@@ -1,5 +1,12 @@
 import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
+import { getLastSettledCalendarDate } from './marketSettlementPolicy'
+import {
+  isOfficialSseTradingDay,
+  getLastOfficialSseTradingDay,
+  OFFICIAL_SSE_CALENDAR_START,
+  OFFICIAL_SSE_CALENDAR_END,
+} from '../../shared/officialSseTradingCalendar'
 import {
   countDailyCloseByTradeDates,
   getDailyCloseQualitySummary,
@@ -135,10 +142,22 @@ function stockBasicQuality(db: Database.Database, now: number): DataQualityDatas
   }
 }
 
+function expectedCompletedTradeDate(db: Database.Database, now: number): string {
+  const settledDate = getLastSettledCalendarDate(now)
+  if (tableExists(db, 'trade_cal')) {
+    const known = db.prepare('SELECT is_open FROM trade_cal WHERE cal_date = ?').get(settledDate) as { is_open: number } | undefined
+    if (known && (known.is_open === 0 || known.is_open === 1)) {
+      const previous = getLastNTradingDays(db, 1, settledDate)[0]
+      if (previous) return previous
+    }
+  }
+  return getLastOfficialSseTradingDay(settledDate) ?? getHistoricalDailyDefaultEndDate(now)
+}
+
 function tradeCalendarQuality(db: Database.Database, now: number): DataQualityDatasetResult {
   const action = { key: 'syncTradeCalendar' as const, label: '补齐交易日历' }
   if (!tableExists(db, 'trade_cal')) {
-    return missingTable('tradeCalendar', '交易日历', 'Tushare 交易日历', ['任务调度', 'T+N回访', '策略评估'], action)
+    return missingTable('tradeCalendar', '交易日历', '本地日历 / Tushare / 上交所官方免 Key 兜底', ['任务调度', 'T+N回访', '策略评估'], action)
   }
   const today = bjYmd(now)
   const futureTarget = addDaysYmd(today, 60)
@@ -153,14 +172,30 @@ function tradeCalendarQuality(db: Database.Database, now: number): DataQualityDa
   if (stats.historical_open_days < HISTORICAL_DAILY_TARGET_TRADE_DAYS) {
     reasons.push(reason('HISTORY_INCOMPLETE', `历史开市日只有 ${stats.historical_open_days}/${HISTORICAL_DAILY_TARGET_TRADE_DAYS}。`, 'error'))
   }
-  if (!stats.latest_date || stats.latest_date < futureTarget) reasons.push(reason('FUTURE_COVERAGE_LOW', '未来60天开闭市安排尚未完整覆盖。', 'warning'))
-  const status: DataTrustStatus = stats.total === 0 || stats.historical_open_days < HISTORICAL_DAILY_TARGET_TRADE_DAYS
+  const current = db.prepare('SELECT is_open FROM trade_cal WHERE cal_date = ?').get(today) as { is_open: number } | undefined
+  if (!current) reasons.push(reason('CURRENT_DATE_UNKNOWN', '今日开闭市安排未知；请补齐日历，不能按普通工作日猜测。', 'error'))
+  const invalid = (db.prepare('SELECT COUNT(*) AS count FROM trade_cal WHERE is_open NOT IN (0, 1) OR is_open IS NULL').get() as { count: number }).count
+  if (invalid > 0) reasons.push(reason('INVALID_OPEN_FLAG', `${invalid} 条日历开闭市标记异常。`, 'error'))
+  const futureRows = (db.prepare('SELECT COUNT(*) AS count FROM trade_cal WHERE cal_date >= ? AND cal_date <= ?').get(today, futureTarget) as { count: number }).count
+  if (!stats.latest_date || stats.latest_date < futureTarget || futureRows < 61) {
+    reasons.push(reason('FUTURE_COVERAGE_LOW', '未来60天开闭市安排尚未完整覆盖；官方免 Key 日历仅到2026年底，未公布日期不会推测。', 'warning'))
+  }
+  const announced = db.prepare('SELECT cal_date, is_open FROM trade_cal WHERE cal_date >= ? AND cal_date <= ?')
+    .all(OFFICIAL_SSE_CALENDAR_START, OFFICIAL_SSE_CALENDAR_END) as Array<{ cal_date: string; is_open: number }>
+  const conflicts = announced.filter((row) => {
+    const official = isOfficialSseTradingDay(row.cal_date)
+    return official !== null && row.is_open !== (official ? 1 : 0)
+  })
+  if (conflicts.length > 0) {
+    reasons.push(reason('OFFICIAL_SCHEDULE_DIFFERENCE', `${conflicts.length} 条已有记录与年度公告不同，未自动覆盖；请核对临时调整或数据来源。`, 'warning'))
+  }
+  const status: DataTrustStatus = reasons.some((item) => item.severity === 'error')
     ? 'blocked' : reasons.length > 0 ? 'degraded' : 'reliable'
   return {
     key: 'tradeCalendar', title: '交易日历', status,
     summary: status === 'reliable' ? '历史与未来交易日安排完整' : status === 'blocked' ? '交易日推进与T+N统计暂不可信' : '历史可用，未来日历需要补齐',
     recordCount: stats.total, earliestDate: stats.earliest_date, latestDate: stats.latest_date,
-    sourceLabel: 'Tushare 交易日历', affectedModules: ['任务调度', 'T+N回访', '策略评估'], reasons, action,
+    sourceLabel: '本地日历 / Tushare / 上交所官方免 Key 兜底', affectedModules: ['任务调度', 'T+N回访', '策略评估'], reasons, action,
   }
 }
 
@@ -173,7 +208,7 @@ function dailyMarketQuality(
   if (!tableHasColumns(db, 'daily_close_cache', ['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'vol'])) {
     return missingTable('dailyMarket', '日线与复权', 'Tushare 日线 / 复权因子', ['行情图表', '趋势评分', '策略回测', '产业决策'], action)
   }
-  const asOf = getHistoricalDailyDefaultEndDate(now)
+  const asOf = expectedCompletedTradeDate(db, now)
   const quality = suppliedQuality ?? getDailyCloseQualitySummary(db, asOf)
   const tradeDays = tableExists(db, 'trade_cal') ? getLastNTradingDays(db, HISTORICAL_DAILY_TARGET_TRADE_DAYS, asOf) : []
   const coverage = tradeDays.length > 0 ? countDailyCloseByTradeDates(db, tradeDays) : new Map<string, number>()
@@ -277,7 +312,7 @@ function benchmarkQuality(db: Database.Database, now: number): DataQualityDatase
     SELECT code, COUNT(DISTINCT trade_date) AS trade_days, MIN(trade_date) AS earliest_date, MAX(trade_date) AS latest_date
     FROM (${parts.join(' UNION ALL ')}) GROUP BY code
   `).all(...params) as Array<{ code: string; trade_days: number; earliest_date: string; latest_date: string }>
-  const asOf = getHistoricalDailyDefaultEndDate(now)
+  const asOf = expectedCompletedTradeDate(db, now)
   const byCode = new Map(rows.map((row) => [row.code, row]))
   const missing = CORE_BENCHMARK_CODES.filter((code) => !byCode.has(code))
   const short = rows.filter((row) => row.trade_days < 30)

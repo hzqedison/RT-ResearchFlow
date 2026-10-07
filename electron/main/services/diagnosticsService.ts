@@ -28,6 +28,7 @@ import {
   type DataQualitySnapshot,
 } from './dataQualityService'
 import { syncTradeCalFull } from './tradeCalSyncService'
+import { OFFICIAL_SSE_CALENDAR_LABEL } from '../../shared/officialSseTradingCalendar'
 import { fetchIndexDailyForCodes, getTushareAccessErrorCode } from './tushareService'
 import { getPublicMarketSyncJob } from '../database/publicMarketDataRepository'
 import { runPublicHistoricalDailySync } from './publicHistoricalDailySyncService'
@@ -207,7 +208,7 @@ function buildConfigGroup(db: Database.Database, checkedAt: number): DiagnosticG
     title: 'Tushare 配置',
     status: hasTushare ? 'ok' : 'warning',
     message: hasTushare ? 'Tushare 已启用且 Token 已保存' : '尚未启用或保存 Tushare Token',
-    detail: '股票搜索、行情同步、短线策略、筹码和趋势评分依赖该配置。',
+    detail: '基础证券、历史日线和已公布交易日历可走免 Key 路径；竞价、专业题材、筹码等接口仍需相应数据权限。',
     checkedAt,
     actions: hasTushare ? [] : [{ key: 'open-datasource', label: '打开数据源配置', kind: 'navigate' }]
   })
@@ -352,6 +353,15 @@ function buildSyncGroup(db: Database.Database, checkedAt: number): DiagnosticGro
       detail: '零Key路径按单股保存检查点，新浪主源、腾讯仅按需兜底沪深，不阻断基础入口。',
       checkedAt,
       actions: [{ key: 'syncHistoricalDaily', label: '立即同步', kind: 'run' }]
+    },
+    {
+      key: 'sync.tradeCalendar',
+      title: '交易日历同步',
+      status: 'ok',
+      message: '可直接补齐已公布的交易日历，无需 Token',
+      detail: '内置上交所 2024 至 2026 年年度安排，只补缺失日期；启用 Tushare 时保留其同步路线，范围外不猜测。',
+      checkedAt,
+      actions: [{ key: 'syncTradeCalendar', label: '补齐交易日历', kind: 'run' }],
     },
     {
       key: 'sync.conceptMembers',
@@ -507,12 +517,30 @@ export async function runDiagnosticAction(db: Database.Database, action: Diagnos
       }
     }
     case 'syncTradeCalendar': {
-      const token = ensureTushareConfigured(db)
+      const config = getDataSourceConfig(db)
+      let token: string | null = null
+      if (config.tushareEnabled && config.tushareTokenEncrypted) {
+        try {
+          token = decryptApiKey(config.tushareTokenEncrypted)
+        } catch {
+          console.warn('[Diagnostics] Saved Token unavailable; calendar can still use the no-Key route')
+        }
+      }
       const result = await syncTradeCalFull(db, token)
-      persistDataQualitySnapshot(db)
       if (result.status === 'empty') throw new Error('TRADE_CAL_SYNC_EMPTY')
       if (result.status === 'failed') throw new Error('TRADE_CAL_SYNC_FAILED')
-      return { action, status: 'completed', message: `交易日历同步完成，写入 ${result.rowCount} 条并重新检查` }
+      persistDataQualitySnapshot(db)
+      const source = result.source === 'official-sse' ? OFFICIAL_SSE_CALENDAR_LABEL : 'Tushare'
+      const coverage = result.coverageStart && result.coverageEnd
+        ? `，范围 ${result.coverageStart} 至 ${result.coverageEnd}` : ''
+      const preserved = result.source === 'official-sse'
+        ? `，新增 ${result.insertedRows ?? 0} 条，已有数据未覆盖` : ''
+      const conflicts = result.conflictRows
+        ? `；${result.conflictRows} 条已有记录与年度安排不同，已保留，请查看质量说明` : ''
+      return {
+        action, status: 'completed',
+        message: `交易日历处理完成：${source}，${result.rowCount} 条${coverage}${preserved}${conflicts}`,
+      }
     }
     case 'syncHistoricalDaily': {
       const config = getDataSourceConfig(db)
@@ -591,3 +619,4 @@ export async function runDiagnosticAction(db: Database.Database, action: Diagnos
       throw new Error('INVALID_ACTION')
   }
 }
+

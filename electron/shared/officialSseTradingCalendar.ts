@@ -1,4 +1,9 @@
-{
+/**
+ * Scheduled SSE cash-equity calendar from published annual notices.
+ * This is not an auction feed, an instrument suspension feed, or an
+ * authorization to submit orders. Dates outside coverage remain unknown.
+ */
+export const OFFICIAL_SSE_CALENDAR = {
   "schemaVersion": 1,
   "exchange": "SSE",
   "market": "cash-equity",
@@ -209,4 +214,79 @@
       ]
     }
   ]
+} as const
+
+export const OFFICIAL_SSE_CALENDAR_START = '20240101'
+export const OFFICIAL_SSE_CALENDAR_END = '20261231'
+export const OFFICIAL_SSE_CALENDAR_LABEL = '上交所官方年度休市安排（免 Key）'
+
+export interface OfficialSseTradeCalRow {
+  calDate: string
+  isOpen: number
+  pretradeDate: string | null
+}
+
+function formatYmd(date: Date): string {
+  return date.toISOString().slice(0, 10).replace(/-/g, '')
+}
+
+function parseYmd(ymd: string): Date | null {
+  if (!/^\d{8}$/.test(ymd)) return null
+  const date = new Date(Date.UTC(
+    Number(ymd.slice(0, 4)), Number(ymd.slice(4, 6)) - 1, Number(ymd.slice(6, 8)),
+  ))
+  return formatYmd(date) === ymd ? date : null
+}
+
+export function isOfficialSseTradingDay(ymd: string): boolean | null {
+  const date = parseYmd(ymd)
+  if (!date || ymd < OFFICIAL_SSE_CALENDAR_START || ymd > OFFICIAL_SSE_CALENDAR_END) return null
+  const schedule = OFFICIAL_SSE_CALENDAR.years.find((item) => item.year === date.getUTCFullYear())
+  if (!schedule) return null
+  const weekday = date.getUTCDay()
+  if (weekday === 0 || weekday === 6) return false
+  return !schedule.holidayClosures.some((range) =>
+    ymd >= range.start.replace(/-/g, '') && ymd <= range.end.replace(/-/g, ''),
+  )
+}
+
+export function getLastOfficialSseTradingDay(onOrBefore: string): string | null {
+  const date = parseYmd(onOrBefore)
+  if (!date || isOfficialSseTradingDay(onOrBefore) === null) return null
+  while (formatYmd(date) >= OFFICIAL_SSE_CALENDAR_START) {
+    const ymd = formatYmd(date)
+    if (isOfficialSseTradingDay(ymd) === true) return ymd
+    date.setUTCDate(date.getUTCDate() - 1)
+  }
+  return null
+}
+
+export function getPreviousOfficialSseTradingDay(ymd: string): string | null {
+  const date = parseYmd(ymd)
+  if (!date || isOfficialSseTradingDay(ymd) === null) return null
+  date.setUTCDate(date.getUTCDate() - 1)
+  return getLastOfficialSseTradingDay(formatYmd(date))
+}
+
+export function buildOfficialSseTradingCalendar(
+  requestedStart = OFFICIAL_SSE_CALENDAR_START,
+  requestedEnd = OFFICIAL_SSE_CALENDAR_END,
+): OfficialSseTradeCalRow[] {
+  if (!parseYmd(requestedStart) || !parseYmd(requestedEnd) || requestedStart > requestedEnd) {
+    throw new Error('INVALID_CALENDAR_RANGE')
+  }
+  const start = requestedStart < OFFICIAL_SSE_CALENDAR_START ? OFFICIAL_SSE_CALENDAR_START : requestedStart
+  const end = requestedEnd > OFFICIAL_SSE_CALENDAR_END ? OFFICIAL_SSE_CALENDAR_END : requestedEnd
+  if (start > end) return []
+  const rows: OfficialSseTradeCalRow[] = []
+  const date = parseYmd(OFFICIAL_SSE_CALENDAR_START)!
+  let previous: string | null = null
+  while (formatYmd(date) <= end) {
+    const calDate = formatYmd(date)
+    const isOpen = isOfficialSseTradingDay(calDate) === true ? 1 : 0
+    if (calDate >= start) rows.push({ calDate, isOpen, pretradeDate: previous })
+    if (isOpen === 1) previous = calDate
+    date.setUTCDate(date.getUTCDate() + 1)
+  }
+  return rows
 }

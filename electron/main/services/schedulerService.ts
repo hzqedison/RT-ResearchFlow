@@ -69,7 +69,8 @@ import { cleanupStkAuctionCache } from '../database/stkAuctionCacheRepository'
 import { cleanupBacktestDetail } from '../database/backtestDetailRepository'
 import { cleanupBacktestRuns } from '../database/strategyBacktestRepository'
 import { getLastNTradingDays, isTradeDay } from '../database/tradeCalRepository'
-import { syncTradeCalIfNeeded } from './tradeCalSyncService'
+import { seedOfficialTradeCalendar, syncTradeCalIfNeeded } from './tradeCalSyncService'
+import { isOfficialSseTradingDay } from '../../shared/officialSseTradingCalendar'
 import { cleanupTimelineOlderThan } from '../database/marketTimelineRepository'
 import { recomputeTrendScoresRealtime, computeAndSaveTrendScoresEOD, cleanupTrendData } from './trendWatchlistService'
 import { cleanupOldDecisionSignals, expireOldDecisionSignals } from './decisionSignalService'
@@ -157,6 +158,11 @@ export function getNextScanAt(): number | null {
 
 export function startScheduler(): void {
   stopScheduler()
+  try {
+    seedOfficialTradeCalendar(getDb())
+  } catch {
+    console.warn('[TradeCal] Official calendar initialization failed; inspect database diagnostics')
+  }
   scheduleNext()
   scheduleBacktestCron()
   scheduleMinuteCleanupCron()
@@ -188,10 +194,13 @@ export function startScheduler(): void {
     .finally(() => {
       if (!_token) schedulePublicHistoricalDailyResumeCheck()
     })
+  void refreshTradingCalendar(_token).catch(() =>
+    console.warn('[TradingCalendar] startup refresh failed')
+  )
+  void syncTradeCalIfNeeded(getDb(), _token).catch(() =>
+    console.warn('[TradeCal] startup sync failed')
+  )
   if (_token) {
-    void refreshTradingCalendar(_token).catch((error) =>
-      console.warn('[TradingCalendar] startup refresh failed:', error instanceof Error ? error.message : String(error))
-    )
     void runStartupDailyCloseCatchUp(getDb(), _token)
       .then((result) => console.log(`[DailyCloseCatchUp] checked=${result.totalTradeDays} synced=${result.syncedTradeDays} failed=${result.failedTradeDays}`))
       .catch((error) => console.warn('[DailyCloseCatchUp] startup catch-up failed:', error instanceof Error ? error.message : String(error)))
@@ -555,13 +564,12 @@ function offsetBjDateYmd(ymd: string, days: number): string {
 }
 
 function isBjWeekday(): boolean {
-  const dow = new Date(Date.now() + 8 * 60 * 60 * 1000).getUTCDay()
-  return dow !== 0 && dow !== 6
+  return isTradingDay(getBjTodayYmd())
 }
 
 /**
  * 判断指定 YYYYMMDD 日期是否为 A 股交易日。
- * 优先读 trade_cal DB（精确识别调休补班）；表为空时 fallback 到 weekday 判断。
+ * 优先读本地记录；缺失时使用官方已公布范围，未知日期不触发交易日任务。
  */
 function isTradingDay(ymd: string): boolean {
   try {
@@ -570,7 +578,7 @@ function isTradingDay(ymd: string): boolean {
   } catch {
     // DB 不可用时使用 fallback
   }
-  return isWeekdayYmd(ymd)
+  return isOfficialSseTradingDay(ymd) === true
 }
 
 function clearPremarketCaptureTimers(): void {
@@ -1443,7 +1451,7 @@ export function scheduleRtKRefresh(): void {
     console.log('[RtKRefresh] daily cache cleared at 04:00 BJ')
     // 04:00 日切后重新拉取今日交易日历
     const tok = getTushareTokenOrNull()
-    if (tok) void refreshTradingCalendar(tok)
+    void refreshTradingCalendar(tok)
   }, msUntil4)
 }
 
@@ -1560,12 +1568,10 @@ function scheduleTradeCalSync(): void {
     const bjNow = new Date(Date.now() + 8 * 60 * 60 * 1000)
     if (bjNow.getUTCDate() === 1) {
       const token = getTushareTokenOrNull()
-      if (token) {
-        try {
-          await syncTradeCalIfNeeded(getDb(), token)
-        } catch (err) {
-          console.warn('[TradeCal] monthly sync failed:', err instanceof Error ? err.message : String(err))
-        }
+      try {
+        await syncTradeCalIfNeeded(getDb(), token)
+      } catch {
+        console.warn('[TradeCal] monthly sync failed')
       }
     }
     scheduleTradeCalSync()

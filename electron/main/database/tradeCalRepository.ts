@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3'
 import { TradeCalRow } from './types'
+import { isOfficialSseTradingDay, getPreviousOfficialSseTradingDay } from '../../shared/officialSseTradingCalendar'
 
 /**
  * 批量写入/更新交易日历（幂等，INSERT OR REPLACE）
@@ -20,21 +21,13 @@ export function upsertTradeCal(db: Database.Database, rows: TradeCalRow[]): void
 
 /**
  * 查询指定日期是否为交易日。
- * 返回 true/false；trade_cal 表为空或无该日记录时返回 null（触发 fallback）
+ * 优先返回本地记录，缺失时查官方已公布范围；范围外返回 null（未知）
  */
 export function isTradeDay(db: Database.Database, calDate: string): boolean | null {
   const row = db
     .prepare('SELECT is_open FROM trade_cal WHERE cal_date = ?')
     .get(calDate) as { is_open: number } | undefined
-  if (row === undefined) {
-    // 检查表是否完全为空
-    const count = (
-      db.prepare('SELECT COUNT(*) as cnt FROM trade_cal').get() as { cnt: number }
-    ).cnt
-    if (count === 0) return null
-    // 表有数据但无该日期记录：该日为非交易日（节假日补录缺失，保守返回 false）
-    return false
-  }
+  if (row === undefined) return isOfficialSseTradingDay(calDate)
   return row.is_open === 1
 }
 
@@ -46,7 +39,7 @@ export function getPrevTradeDay(db: Database.Database, calDate: string): string 
   const row = db
     .prepare('SELECT pretrade_date FROM trade_cal WHERE cal_date = ?')
     .get(calDate) as { pretrade_date: string | null } | undefined
-  return row?.pretrade_date ?? null
+  return row?.pretrade_date ?? getPreviousOfficialSseTradingDay(calDate)
 }
 
 /**
@@ -107,4 +100,32 @@ export function getLatestCalDate(db: Database.Database): string | null {
     .prepare('SELECT MAX(cal_date) as latest FROM trade_cal')
     .get() as { latest: string | null }
   return row?.latest ?? null
+}
+
+/** Only fill absent dates; retain existing facts and report schedule differences. */
+export function insertTradeCalIfMissing(
+  db: Database.Database,
+  rows: TradeCalRow[],
+): { insertedRows: number; conflictRows: number; firstConflictDate: string | null } {
+  const existing = db.prepare('SELECT is_open, pretrade_date FROM trade_cal WHERE cal_date = ?')
+  const insert = db.prepare('INSERT OR IGNORE INTO trade_cal (cal_date, is_open, pretrade_date) VALUES (?, ?, ?)')
+  return db.transaction(() => {
+    let insertedRows = 0
+    let conflictRows = 0
+    let firstConflictDate: string | null = null
+    for (const row of rows) {
+      const current = existing.get(row.calDate) as { is_open: number; pretrade_date: string | null } | undefined
+      if (current) {
+        const differs = current.is_open !== row.isOpen
+          || (current.pretrade_date !== null && row.pretradeDate !== null && current.pretrade_date !== row.pretradeDate)
+        if (differs) {
+          conflictRows += 1
+          firstConflictDate ??= row.calDate
+        }
+        continue
+      }
+      insertedRows += insert.run(row.calDate, row.isOpen, row.pretradeDate).changes
+    }
+    return { insertedRows, conflictRows, firstConflictDate }
+  })()
 }
