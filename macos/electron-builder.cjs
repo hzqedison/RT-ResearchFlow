@@ -6,6 +6,9 @@ module.exports = {
   ...base,
   // Rebuild for the target Electron ABI and architecture, never reuse Windows bindings.
   npmRebuild: true,
+  // Reuse the pinned, native Electron installed by pnpm instead of downloading
+  // it again through the older builder's incompatible mirror URL template.
+  electronDist: path.join(path.dirname(require.resolve('electron/package.json')), 'dist'),
   asarUnpack: ['**/*.node'],
   mac: {
     category: 'public.app-category.finance',
