@@ -53,8 +53,12 @@ jobs:
           releases = json.loads(subprocess.run(
               ["gh", "api", "--paginate", "--slurp", "repos/" + repo + "/releases?per_page=100"],
               check=True, capture_output=True, text=True).stdout)
-          if any(r["tag_name"] == "v1.0.0" for page in releases for r in page):
-              raise RuntimeError("v1.0.0 already exists; refusing to replace any release or asset")
+          existing = [r for page in releases for r in page if r["tag_name"] == "v1.0.0"]
+          if existing:
+              if not (len(existing) == 1 and existing[0]["id"] == 406014888 and
+                      existing[0]["draft"] and existing[0]["target_commitish"] == source):
+                  raise RuntimeError("Existing release is not our verified recovery draft; refusing modification")
+              pathlib.Path("existing-release.json").write_text(json.dumps(existing[0]))
 
           windows_run = api("actions/runs/37653940356")
           if not (windows_run["head_sha"] == source and
@@ -213,6 +217,7 @@ jobs:
 
           <!-- tested-source:41f8429149f646c7dec7f1610082702e7d9cce48 publisher-schema:2 -->
           NOTES
+          if [ ! -f existing-release.json ]; then
           gh release create v1.0.0 \
             assets/RT-ResearchFlow-Setup-1.0.0-x64.exe \
             assets/RT-ResearchFlow-macOS-1.0.0-arm64.dmg \
@@ -223,6 +228,7 @@ jobs:
             --draft \
             --prerelease \
             --notes-file release-notes.md
+          fi
           python3 <<'PY'
           import hashlib
           import json
@@ -236,7 +242,13 @@ jobs:
                   ["gh", "api", "repos/" + repo + "/" + endpoint],
                   check=True, capture_output=True, text=True).stdout)
 
-          release = api("releases/tags/v1.0.0")
+          pages = json.loads(subprocess.run(
+              ["gh", "api", "--paginate", "--slurp", "repos/" + repo + "/releases?per_page=100"],
+              check=True, capture_output=True, text=True).stdout)
+          candidates = [r for page in pages for r in page if r["tag_name"] == "v1.0.0"]
+          if len(candidates) != 1:
+              raise RuntimeError("Cannot identify the single release draft")
+          release = api("releases/" + str(candidates[0]["id"]))
           if not (release["target_commitish"] == os.environ["FROZEN_SOURCE"] and
                   release["draft"] and release["prerelease"]):
               raise RuntimeError("Draft release source or testing status mismatch")
@@ -252,7 +264,8 @@ jobs:
                   raise RuntimeError("Uploaded release asset integrity mismatch: " + name)
           pathlib.Path("published-assets.json").write_text(json.dumps(release, indent=2) + "\n")
           PY
-          gh release edit v1.0.0 --draft=false
+          release_id="$(python3 -c 'import json; print(json.load(open("published-assets.json"))["id"])')"
+          gh api --method PATCH "repos/$GH_REPO/releases/$release_id" -F draft=false > public-release.json
           gh api "repos/$GH_REPO/releases/tags/v1.0.0" --jq '.assets[] | [.name, .browser_download_url, .size, .digest] | @tsv' >> "$GITHUB_STEP_SUMMARY"
       - name: Preserve publication integrity evidence
         if: always()
