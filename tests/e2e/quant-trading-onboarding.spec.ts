@@ -4,6 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { QUANT_ONBOARDING_STORAGE_KEY } from '../../src/utils/quantTradingOnboarding'
 
+type QuantDownloadResult = { state: string; filename: string; isLocalBlob: boolean }
+type QuantDownloadGlobal = typeof globalThis & { quantDiagnosticDownload: QuantDownloadResult }
+
 test('installed Mac guide persists progress, stays blocked, and exports only safe diagnostics', async () => {
   test.skip(process.platform !== 'darwin' || process.env.CI !== 'true' || !process.env.TRADE_WATCH_PACKAGED_EXECUTABLE,
     'This installed-app test runs only on an isolated Mac CI runner.')
@@ -37,12 +40,33 @@ test('installed Mac guide persists progress, stays blocked, and exports only saf
     await page.getByTestId('quant-onboarding-open').click()
     await page.getByTestId('quant-onboarding-step-3').click()
     await expect(page.getByTestId('quant-trading-disabled')).toBeDisabled()
-    const downloadPromise = page.waitForEvent('download')
-    await page.getByTestId('quant-diagnostic-export').click()
-    const download = await downloadPromise
-    expect(download.suggestedFilename()).toBe('RT-ResearchFlow-quant-diagnostic-v1.json')
     const diagnosticPath = join(fixture, 'diagnostic.json')
-    await download.saveAs(diagnosticPath)
+    // Electron uses its native save dialog, not Chromium's page download event.
+    // Observe the real download and choose a path only inside this CI fixture.
+    await application.evaluate(({ BrowserWindow }, savePath) => {
+      const host = globalThis as QuantDownloadGlobal
+      host.quantDiagnosticDownload = { state: 'waiting', filename: '', isLocalBlob: false }
+      const window = BrowserWindow.getAllWindows().find((candidate) => candidate.isVisible())
+      if (!window) throw new Error('Installed application window is missing')
+      window.webContents.session.once('will-download', (event, item, initiator) => {
+        const result = host.quantDiagnosticDownload
+        result.isLocalBlob = item.getURL().startsWith('blob:')
+        if (initiator !== window.webContents || !result.isLocalBlob) {
+          result.state = 'unexpected-download'
+          event.preventDefault()
+          return
+        }
+        result.filename = item.getFilename()
+        item.setSavePath(savePath)
+        item.once('done', (_event, state) => { result.state = state })
+      })
+    }, diagnosticPath)
+    await page.getByTestId('quant-diagnostic-export').click()
+    await expect.poll(() => application!.evaluate(() =>
+      (globalThis as QuantDownloadGlobal).quantDiagnosticDownload.state), { timeout: 30_000 }).toBe('completed')
+    const download = await application.evaluate(() => (globalThis as QuantDownloadGlobal).quantDiagnosticDownload)
+    expect(download.filename).toBe('RT-ResearchFlow-quant-diagnostic-v1.json')
+    expect(download.isLocalBlob).toBe(true)
     const raw = readFileSync(diagnosticPath, 'utf8')
     const diagnostic = JSON.parse(raw)
     expect(raw).not.toContain('SENSITIVE_')

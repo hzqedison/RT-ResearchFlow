@@ -20,7 +20,7 @@ function readProgress() {
   }
 }
 
-export default function QuantTradingOnboarding() {
+export default function QuantTradingOnboarding({ navigationExpanded }: { navigationExpanded: boolean }) {
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState(0)
   const [progress, setProgress] = useState<QuantOnboardingProgress>(readProgress)
@@ -63,16 +63,16 @@ export default function QuantTradingOnboarding() {
     link.click()
     link.remove()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
-    setNotice('已发起脱敏诊断下载。文件只含下方预览的字段，不会自动上传。')
+    setNotice('请在保存窗口选择位置。文件只含下方预览的字段，不会自动上传。')
   }
 
   return <>
-    <button type="button" className="qt-entry electron-no-drag" data-testid="quant-onboarding-open"
-      aria-haspopup="dialog" onClick={() => setOpen(true)}>
+    <button type="button" className={`qt-entry electron-no-drag app-primary-nav-button group relative flex h-11 shrink-0 items-center rounded-sm border border-transparent text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-100 hover:text-cyan-700 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-1 motion-reduce:transition-none dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-cyan-200 dark:focus:ring-cyan-300 ${navigationExpanded ? 'w-full justify-start gap-3 px-3' : 'w-11 justify-center'}`} data-testid="quant-onboarding-open"
+      aria-label="量化开通" title="量化开通" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
         <path d="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5zM12 14v3" />
       </svg>
-      量化开通
+      {navigationExpanded && <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">量化开通</span>}
     </button>
     <dialog ref={dialogRef} className="qt-dialog electron-no-drag" aria-labelledby="quant-onboarding-title"
       onCancel={(event) => { event.preventDefault(); setOpen(false) }} onClose={() => setOpen(false)}

@@ -1,20 +1,3 @@
-.qt-entry {
-  position: fixed;
-  left: 84px;
-  bottom: 16px;
-  z-index: 35;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 12px;
-  border: 1px solid #a5d9e3;
-  border-radius: 8px;
-  background: #f0fafc;
-  color: #155e75;
-  font: inherit;
-  font-size: 12px;
-  box-shadow: 0 3px 12px rgb(15 23 42 / 8%);
-}
 .qt-dialog {
   --qt-bg: #ffffff;
   --qt-text: #0f172a;
@@ -72,11 +55,9 @@
 .qt-dialog button:not(:disabled), .qt-entry { cursor: pointer; }
 .qt-dialog button:focus-visible, .qt-entry:focus-visible, .qt-dialog a:focus-visible { outline: 2px solid #06b6d4; outline-offset: 3px; }
 .dark .qt-dialog { --qt-bg: #0f172a; --qt-text: #f1f5f9; --qt-muted: #94a3b8; --qt-border: #334155; --qt-panel: #020617; --qt-accent: #0891b2; }
-.dark .qt-entry { background: #0f172a; border-color: #155e75; color: #67e8f9; }
 .dark .qt-warning { color: #fbbf24; }
 @keyframes qt-reveal { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 640px) {
-  .qt-entry { left: 16px; }
   .qt-dialog { width: calc(100vw - 24px); max-height: calc(100vh - 80px); }
   .qt-layout { grid-template-columns: 1fr; }
   .qt-steps { display: flex; overflow-x: auto; padding: 8px; border-right: 0; border-bottom: 1px solid var(--qt-border); }

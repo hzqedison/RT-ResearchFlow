@@ -15,6 +15,7 @@ import { AIAnalysisProgressPanel } from './components/AIAnalysisProgressPanel/AI
 import { ConfigDrawer, type ConfigDrawerTab } from './components/ConfigDrawer/ConfigDrawer'
 import { MessageCenterDrawer } from './components/MessageCenter/MessageCenterDrawer'
 import { AppTitleBar } from './components/AppWindow/AppTitleBar'
+import QuantTradingOnboarding from './components/QuantTradingOnboarding'
 import { PrimaryNavigationIcon, type PrimaryNavigationIconName } from './components/AppWindow/PrimaryNavigationIcon'
 import { formatBjTime, type MessageCenterItem } from './components/MessageCenter/messageCenterModel'
 import { ColdStartGuide } from './components/Onboarding/ColdStartGuide'
@@ -1073,6 +1074,7 @@ export default function App() {
             </div>
             )
           })}
+          <QuantTradingOnboarding navigationExpanded={navigationExpanded} />
         </nav>
         <div className="flex shrink-0 flex-col items-center gap-1 border-t border-slate-200 px-2 py-2 dark:border-slate-800">
           <button
