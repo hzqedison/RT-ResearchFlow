@@ -1,6 +1,33 @@
 const { execFileSync } = require('node:child_process')
+const { lstatSync, readlinkSync, readdirSync } = require('node:fs')
 const path = require('node:path')
 const base = require('../electron-builder.js')
+
+function describeFramework(label, frameworkPath) {
+  const entries = []
+  function describe(relative, depth) {
+    const target = path.join(frameworkPath, relative)
+    try {
+      const stat = lstatSync(target)
+      if (stat.isSymbolicLink()) {
+        entries.push(`${relative || '.'}: symlink -> ${readlinkSync(target)}`)
+      } else if (stat.isDirectory()) {
+        entries.push(`${relative || '.'}: directory`)
+        if (depth < 3) {
+          for (const name of readdirSync(target).sort().slice(0, 40)) {
+            describe(path.join(relative, name), depth + 1)
+          }
+        }
+      } else {
+        entries.push(`${relative}: file`)
+      }
+    } catch (error) {
+      entries.push(`${relative || '.'}: ${error.code || 'unavailable'}`)
+    }
+  }
+  describe('', 0)
+  console.error(`Mac framework layout (${label}):\n${entries.join('\n')}`)
+}
 
 module.exports = {
   ...base,
@@ -24,8 +51,17 @@ module.exports = {
   afterPack(context) {
     if (context.electronPlatformName !== 'darwin') return
     const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
-    execFileSync('/usr/bin/codesign', [
-      '--force', '--deep', '--sign', '-', '--timestamp=none', appPath,
-    ], { stdio: 'inherit' })
+    try {
+      execFileSync('/usr/bin/codesign', [
+        '--force', '--deep', '--sign', '-', '--timestamp=none', appPath,
+      ], { stdio: 'inherit' })
+    } catch (error) {
+      // Only public runtime filenames and symlink targets, never application data.
+      // Keep the build failed rather than distributing an invalid signature.
+      const framework = path.join('Contents', 'Frameworks', 'Electron Framework.framework')
+      describeFramework('installed Electron', path.join(module.exports.electronDist, 'Electron.app', framework))
+      describeFramework('packaged application', path.join(appPath, framework))
+      throw error
+    }
   },
 }
