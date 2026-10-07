@@ -9,29 +9,29 @@ import { tmpdir } from 'node:os';
 // Publish immutable, already-tested artifacts; do not build or access user data.
 const release = {
   "repository": "hzqedison/RT-ResearchFlow",
-  "version": "0.1.0-beta.8",
-  "sourceSha": "6f8becee303f856915ff959df0c082e5e1c4eb03",
-  "runId": 37634485830,
-  "tag": "v0.1.0-beta.8",
-  "title": "RT-ResearchFlow v0.1.0-beta.8（Windows / Mac 一体化同步）",
+  "version": "0.1.0-beta.9",
+  "sourceSha": "4c6431bd9a39a459b68cac62d702ad93fe20357c",
+  "runId": 37645883721,
+  "tag": "v0.1.0-beta.9",
+  "title": "RT-ResearchFlow v0.1.0-beta.9（多选数据源 / Windows 与 Mac 同步）",
   "artifacts": [
     {
       "arch": "arm64",
-      "id": 11489330736,
-      "digest": "sha256:2e7e98d30f0b1d0f38f552a16805cf3ce7ddeaf38ba361a5a262afe73138af85"
+      "id": 11494323781,
+      "digest": "sha256:01f820273704b7bf4b96a0e31f0f63ae11679c145fb1efcf86cef94997e4367b"
     },
     {
       "arch": "x64",
-      "id": 11489584865,
-      "digest": "sha256:5717abb0f662c9378e2b7ba0eff0164cb05482708bbeedcceca259e38ae58d9d"
+      "id": 11494329333,
+      "digest": "sha256:014430be80384e17f471812c3c0b196e73abf24d7f0dc03a4b7fbe5a37bfd467"
     }
   ],
   "windows": {
-    "runId": 37634485859,
-    "id": 11487962928,
-    "digest": "sha256:3f41e2204a0bd52d2ae2570cfe39a691b1e0f29d398572dc977d0fda4fedc887"
+    "runId": 37645883786,
+    "id": 11493964218,
+    "digest": "sha256:17d624cae2fe0e997c4b11fc9242b72f17a138dabe756761527c8c4f1cfa50ef"
   },
-  "notes": "# RT-ResearchFlow v0.1.0-beta.8\n\n## beta.8 Windows / Mac 同步\n\n- 同一源码与版本号提供 Windows x64 安装器、Mac Apple 芯片和 Intel 构建；投研、AI 与量化模块不拆成独立产品。\n- Windows 同步 beta.7 的 AI 配置保存修复、DeepSeek 官方模型与逐行保存入口；保留旧数据和加密密钥，不附带任何用户凭据。\n- Windows 可以查看量化开通引导和去敏兼容状态；当前同花顺执行桥接只支持 Mac，Windows 不启用买卖、撤单或系统控制权限，不能把同步界面当作 Windows 实盘支持。\n- Windows 安装器可选择非系统盘，升级默认保留安装目录下的 data；建议先备份并沿用旧安装目录。构建与安装检查在隔离 CI 执行，不操作用户账户。\n- 新包递增到 0.1.0-beta.8，不覆盖 beta.7。真实交易仍须本人逐笔确认，实际客户端与券商账户兼容性需要本人测试。\n\n\nWindows 下载 RT-ResearchFlow-Setup-0.1.0-beta.8-x64.exe。安装时选择 K、D 等有空间的非系统盘；更新前备份并沿用原安装目录。Mac Apple 芯片选择 arm64.dmg，Intel 选择 x64.dmg。\n\n安装包无需额外安装 Node.js 或数据库，研究数据和模型服务仍需各自合法权限。测试包未配置商业代码签名或 Apple 公证，请核对自己的发布来源，不要全局关闭系统安全保护。\n\n原作者署名和 AGPL-3.0-only 许可保留；去除赞赏入口不改变许可证。Mac 同花顺接入参考 zetatez/evolving 的 MIT 代码，版权保留。不承诺真实账户已验证、自动成交或投资收益。\n\n## 本轮隔离检查\n\nWindows x64 已从 NSIS 安装器实际安装并检查启动、沙箱、SQLite、无密钥 AI 厂商设置保存、版本号与 Mac 专用交易在 Windows 禁用。两种 Mac 架构分别进行本机依赖编译、源码检查、DMG 安装以及启动、设置、窗口重开、退出、量化引导和交易面板检查。\n\n所有检查使用隔离数据，不使用用户 Key，不连接用户券商账户，不提交真实买卖或撤单；检查通过不代表她的实际同花顺和中信账户已验证。\n\n## 构建来源\n\n[Windows 安装与检查记录](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/37634485859)\n\n[两种 Mac 架构构建与检查](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/37634485830)\n\n[本轮完整源码](https://github.com/hzqedison/RT-ResearchFlow/tree/6f8becee303f856915ff959df0c082e5e1c4eb03)\n\nSHA256SUMS.txt 包含本页 Windows EXE 与两个 Mac DMG 的校验值。\n\n<!-- tested-source:6f8becee303f856915ff959df0c082e5e1c4eb03 publisher-schema:2 -->\n"
+  "notes": "# RT-ResearchFlow v0.1.0-beta.9\n\n## 多选数据源，一体化桌面版本\n\n- Windows x64、Mac Apple 芯片和 Intel 使用同一份源码和 beta.9 版本号，保留原有投研、AI 与量化模块，不拆分产品。\n- 个股日线可多选 Tushare、腾讯财经、东方财富、新浪、通达信、AKShare，按优先级尝试；腾讯、东财、新浪不要求购买 Tushare Token。\n- 新增东财/AKShare 研报索引与 PDF 原文入口，i问财提供实验性条件选股查询。本版不自动提取或总结研报 PDF 全文。\n- 通达信、AKShare、i问财的 Python 扩展按需安装到应用数据目录。Windows 沿用 K 盘安装时，扩展环境、缓存和临时目录也放在 K 盘；不自动改系统 Python。\n- 旧 Tushare Token 留空时保留，i问财 Cookie 仅本人本机填写并加密保存。不附带、读取浏览器或上传用户凭据。\n- 个股新增、刷新、图表和 AI 二轮缺失日线补齐接入统一路由。全市场、板块、分钟、筹码、财务和特殊 Tushare 接口不在本轮全部替换，不能宣称专业能力已全部免费。\n\n## 安装和使用\n\nWindows 下载 RT-ResearchFlow-Setup-0.1.0-beta.9-x64.exe，升级前备份并沿用旧安装目录，可选择 K、D 等非系统盘。Mac Apple 芯片选择 arm64.dmg，Intel 选择 x64.dmg，替换应用但不要删除用户数据目录。\n\n打开“配置中心 > 数据源”，选择来源并保存。建议先用腾讯、东财、新浪测试日线和东财研报；需要通达信、AKShare 时再安装 Python 3.10+，点击“安装所选扩展”。i问财还需本人登录 Cookie 和 Node.js 16+。每项“检测”必须取得有效样本才算成功，不把空结果或依赖安装成功当作数据可用。\n\n[完整多源接入说明](https://github.com/hzqedison/RT-ResearchFlow/blob/4c6431bd9a39a459b68cac62d702ad93fe20357c/docs/data-sources.md)\n\n## 检查和边界\n\nWindows 已从 NSIS 实际安装并检查启动、SQLite、AI 设置保存、版本号及 Windows 交易禁用；Mac 两种架构分别经过本机依赖编译、源码与隔离测试、DMG 安装和应用运行检查。新版另有多源配置、Cookie 加密保存、数据单位、交易日截止及研报链接过滤的离线测试。\n\n上述检查不使用用户 Key、Cookie 或券商账户，不提交买卖或撤单，也不能证明每个公开接口在她的网络中仍可用。mootdx 0.11.7 和 pywencai 0.13.1 发布较旧，明确标注实验；遇到空响应、登录策略变更或限流会报告失败，不绕过验证码、付费或访问权限。\n\n交易边界未变：Mac 同花顺桥接需要本人逐笔确认；Windows 不能执行同花顺实盘。尚未验证测试者的具体同花顺版本及中信账户，不承诺实际受理、成交、自动交易或投资收益。\n\n测试包未配置商业代码签名或 Apple 公证，请核对本发布来源，不全局关闭系统安全保护。保留原作者署名与 AGPL-3.0-only 许可；移除赞赏入口不改变许可，引用项目版权保留。\n\n## 可追溯构建\n\n[Windows 安装与检查记录](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/37645883786)\n\n[Mac 两种架构构建与检查](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/37645883721)\n\n[本轮完整源码](https://github.com/hzqedison/RT-ResearchFlow/tree/4c6431bd9a39a459b68cac62d702ad93fe20357c)\n\nSHA256SUMS.txt 包含 Windows EXE 和两个 Mac DMG 的校验值。\n\n<!-- tested-source:4c6431bd9a39a459b68cac62d702ad93fe20357c publisher-schema:2 -->\n"
 };
 assert.match(release.version, /^\d+\.\d+\.\d+(?:-beta\.\d+)?$/);
 assert.equal(release.tag, `v${release.version}`, 'Release tag must match the application version');
