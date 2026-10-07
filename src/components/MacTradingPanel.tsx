@@ -34,7 +34,7 @@ const MESSAGES: Record<string, string> = {
   CONFIRMATION_REQUIRED: '请核对本次操作，只有点击确认才会继续。',
   CONFIRMATION_EXPIRED: '本次确认已过期或参数已改变，没有执行。请重新发起并核对。',
 }
-export default function MacTradingPanel() {
+export default function MacTradingPanel({ confirmationHost }: { confirmationHost?: HTMLElement | null }) {
   const [mode, setMode] = useState<MacThsMode>('simulation')
   const [side, setSide] = useState<'buy' | 'sell'>('buy')
   const [symbol, setSymbol] = useState('')
@@ -128,6 +128,7 @@ export default function MacTradingPanel() {
       confirmLabel={confirmation?.review.confirmLabel}
       busy={busy}
       testId="mac-ths-confirmation"
+      portalContainer={confirmationHost}
       onCancel={cancelReview}
       onConfirm={() => {
         if (confirmation) void executeRequest({ ...confirmation.request, confirmationToken: confirmation.review.token })

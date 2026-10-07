@@ -145,7 +145,7 @@ export default function QuantTradingOnboarding({ navigationExpanded }: { navigat
               </div>
               <p className="qt-small">此文件只反映开通登记；实际桥接测试结果请在“交易实验”页导出。开发迭代不需要账户密码或远程控制。</p>
             </>}
-            {step === 4 && <MacTradingPanel />}
+            {step === 4 && <MacTradingPanel confirmationHost={dialogRef.current} />}
           </section>
         </div>
         <footer className="qt-footer">

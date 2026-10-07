@@ -15,6 +15,7 @@ interface AppConfirmDialogProps {
   busy?: boolean
   error?: string | null
   testId?: string
+  portalContainer?: HTMLElement | null
   onCancel: () => void
   onConfirm: () => void
 }
@@ -63,6 +64,7 @@ export function AppConfirmDialog({
   busy = false,
   error,
   testId = 'app-confirm-dialog',
+  portalContainer,
   onCancel,
   onConfirm,
 }: AppConfirmDialogProps): JSX.Element | null {
@@ -99,8 +101,17 @@ export function AppConfirmDialog({
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const appRoot = document.getElementById('root')
     const rootWasInert = appRoot?.inert ?? false
+    // Nested native <dialog> content must remain in the browser top layer.
+    // Inert only its background siblings, not the root containing this confirmation.
+    const inertAppRoot = !portalContainer || !appRoot?.contains(portalContainer)
+    const backgroundSiblings = portalContainer
+      ? Array.from(portalContainer.children)
+        .filter((element): element is HTMLElement => element instanceof HTMLElement && !element.contains(dialogRef.current))
+        .map((element) => ({ element, wasInert: element.inert }))
+      : []
     const previousBodyOverflow = document.body.style.overflow
-    if (appRoot) appRoot.inert = true
+    if (appRoot && inertAppRoot) appRoot.inert = true
+    for (const sibling of backgroundSiblings) sibling.element.inert = true
     document.body.style.overflow = 'hidden'
     closingRef.current = false
 
@@ -142,12 +153,13 @@ export function AppConfirmDialog({
       window.cancelAnimationFrame(frame)
       window.removeEventListener('keydown', handleKeyDown)
       if (closeTimerRef.current != null) window.clearTimeout(closeTimerRef.current)
-      if (appRoot) appRoot.inert = rootWasInert
+      if (appRoot && inertAppRoot) appRoot.inert = rootWasInert
+      for (const sibling of backgroundSiblings) sibling.element.inert = sibling.wasInert
       document.body.style.overflow = previousBodyOverflow
       setEntered(false)
       if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus({ preventScroll: true })
     }
-  }, [open, requestClose])
+  }, [open, requestClose, portalContainer])
 
   if (!open) return null
 
@@ -223,5 +235,6 @@ export function AppConfirmDialog({
     </div>
   )
 
-  return typeof document === 'undefined' ? dialog : createPortal(dialog, document.body)
+  return typeof document === 'undefined' ? dialog : createPortal(dialog, portalContainer ?? document.body)
 }
+
