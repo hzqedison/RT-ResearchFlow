@@ -1,0 +1,65 @@
+name: D0 published Windows 1.0 installer diagnostic only
+
+on:
+  push:
+    branches: [codex/diagnose-windows-installer-1.0]
+    paths:
+      - .github/workflows/windows-installer-diagnostic.yml
+      - tools/native-acceptance/windows-diagnostic/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-installer-diagnostic-D0
+  cancel-in-progress: false
+
+env:
+  GIT_CONFIG_COUNT: '2'
+  GIT_CONFIG_KEY_0: core.autocrlf
+  GIT_CONFIG_VALUE_0: 'false'
+  GIT_CONFIG_KEY_1: core.eol
+  GIT_CONFIG_VALUE_1: lf
+
+jobs:
+  diagnostic:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: '20'
+          architecture: x64
+      - name: Require first-attempt hosted Windows case on the D0 branch
+        id: initialize
+        run: node tools/native-acceptance/windows-diagnostic/diagnostic.mjs init
+      - name: Verify D0 and reused frozen files against exact commit blobs
+        timeout-minutes: 4
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/native-acceptance/windows-diagnostic/diagnostic.mjs verify
+      - name: Obtain immutable assets using the unchanged fixed downloader
+        timeout-minutes: 11
+        run: node tools/native-acceptance/windows-diagnostic/diagnostic.mjs download
+      - name: Single D0 invocation of published 1.0 only (never upgrade acceptance)
+        timeout-minutes: 6
+        run: node tools/native-acceptance/windows-diagnostic/diagnostic.mjs run
+      - name: Always clean only owned processes and original protection state
+        if: ${{ always() && steps.initialize.outcome == 'success' }}
+        timeout-minutes: 2
+        run: node tools/native-acceptance/windows-diagnostic/diagnostic.mjs cleanup
+      - name: Publish only sanitized diagnostic JSON
+        if: ${{ always() && steps.initialize.outcome == 'success' }}
+        run: node tools/native-acceptance/windows-diagnostic/diagnostic.mjs publish
+      - uses: actions/upload-artifact@v4.6.2
+        if: ${{ always() && steps.initialize.outcome == 'success' }}
+        with:
+          name: windows-installer-D0-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.D0_PUBLIC_EVIDENCE }}
+          if-no-files-found: error
+          retention-days: 14

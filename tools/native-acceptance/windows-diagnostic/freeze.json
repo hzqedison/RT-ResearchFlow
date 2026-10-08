@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "commitBinding": "workflow-checkout-commit",
+  "parent": {
+    "path": "tools/native-acceptance/fixtures/harness-freeze.json",
+    "size": 2988,
+    "sha256": "942aa01bdc012b180bcc40aa880944d703d190cec3ca577246f60f1f31ac063c",
+    "combinedSha256": "8fef94360d98b7be394def53a2f455794a8ac12707136a42971c7dbff67a6795"
+  },
+  "files": [
+    {
+      "path": ".github/workflows/windows-installer-diagnostic.yml",
+      "size": 2431,
+      "sha256": "b2bf4b7004b210d039b281978a50e330101b9cded23c74c75c8e52c2c40f160a"
+    },
+    {
+      "path": "tools/native-acceptance/windows-diagnostic/README.md",
+      "size": 7936,
+      "sha256": "8ab68c6e344f3e8a1b50fde5b289df02e2350736311f7480edcaee4d57b3df31"
+    },
+    {
+      "path": "tools/native-acceptance/windows-diagnostic/deadline.test.mjs",
+      "size": 35264,
+      "sha256": "c342adb8d61494ef1f58a7f8cf50bd253532e51dac36b40ad589efc0c27fddd4"
+    },
+    {
+      "path": "tools/native-acceptance/windows-diagnostic/diagnostic.mjs",
+      "size": 28755,
+      "sha256": "a2a8a02da5b3b0743e4a6cba8f3ee374c161a00d1216beff2896ab86550df347"
+    },
+    {
+      "path": "tools/native-acceptance/windows-diagnostic/observe.ps1",
+      "size": 52583,
+      "sha256": "51e2241b3cd8f68d0b406dfd1c9b50f8db09da9ac9d8b74b26d91eaf70f64b70"
+    },
+    {
+      "path": "tools/native-acceptance/windows-diagnostic/offline.test.mjs",
+      "size": 21264,
+      "sha256": "93b99c53d629a2024b743a5d58ac192d958cd658d64c772acaf2c4f8330085c9"
+    }
+  ],
+  "combinedSha256": "21eb31013f7c81900d2bc9b401fd7dc371d7e66ec7db7cc386cd3e6f4c4644b6"
+}
