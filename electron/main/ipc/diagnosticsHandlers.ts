@@ -4,6 +4,7 @@ import { getDb } from '../database/db'
 import { getDiagnosticsHealth, runDiagnosticAction, type DiagnosticRunAction } from '../services/diagnosticsService'
 import { recordSupportFailure } from '../services/supportDiagnosticsService'
 import type { SupportErrorCode } from '../../shared/supportDiagnostics'
+import { FACT_REASON_MESSAGES } from '../../shared/dataReadiness'
 
 const ALLOWED_ACTIONS: DiagnosticRunAction[] = [
   'refreshHealth',
@@ -13,6 +14,8 @@ const ALLOWED_ACTIONS: DiagnosticRunAction[] = [
   'syncHistoricalDaily',
   'syncMarketBenchmarks',
   'syncConceptMembers',
+  'syncAuctionSnapshot',
+  'syncLimitList',
   'backfillDecisionSignals'
 ]
 
@@ -22,6 +25,7 @@ function toErrorCode(err: unknown): string {
     : ''
   const message = err instanceof Error ? err.message : String(err)
   const knownCodes = [
+    ...Object.keys(FACT_REASON_MESSAGES),
     'TUSHARE_DISABLED',
     'TUSHARE_QUOTA_INSUFFICIENT',
     'TUSHARE_RATE_LIMITED',
@@ -46,6 +50,7 @@ function toErrorCode(err: unknown): string {
 }
 
 function toErrorMessage(code: string): string {
+  if (FACT_REASON_MESSAGES[code]) return FACT_REASON_MESSAGES[code]
   if (code === 'TUSHARE_DISABLED') return '请先启用并配置 Tushare'
   if (code === 'TUSHARE_QUOTA_INSUFFICIENT') return 'Tushare 权限或积分不足。任务已停止，不会继续重复请求；已完成日期已保留，可稍后重试或导入全市场基座包。'
   if (code === 'TUSHARE_RATE_LIMITED') return 'Tushare 触发访问频率限制。任务已停止，不会继续重复请求；已完成日期已保留，请稍后重试。'
@@ -76,6 +81,12 @@ function toSupportErrorCode(code: string): SupportErrorCode {
     case 'TRADE_CAL_HISTORY_INCOMPLETE':
     case 'TRADE_CAL_SYNC_EMPTY':
     case 'BENCHMARK_SYNC_EMPTY':
+    case 'CALENDAR_UNAVAILABLE':
+    case 'UPSTREAM_EMPTY':
+    case 'FACT_INVALID':
+    case 'FACT_CONFLICT':
+    case 'PAGINATION_INCOMPLETE':
+    case 'CONCEPT_PARTIAL':
     case 'PUBLIC_STOCK_UNIVERSE_INCOMPLETE':
     case 'PUBLIC_STOCK_UNIVERSE_NOT_READY': return 'DATA_MISSING'
     case 'INVALID_PARAM':
@@ -101,7 +112,12 @@ export function registerDiagnosticsHandlers(getWindow: TrustedWindowGetter): voi
     }
     try {
       const win = BrowserWindow.fromWebContents(event.sender) ?? undefined
-      return { ok: true as const, data: await runDiagnosticAction(getDb(), action, win) }
+      const data = await runDiagnosticAction(getDb(), action, win)
+      if (data.outcome && data.outcome !== 'success' && data.outcome !== 'started') {
+        const code = data.reasonCode && FACT_REASON_MESSAGES[data.reasonCode] ? data.reasonCode : 'DIAGNOSTICS_FAILED'
+        return { ok: false as const, error: code, message: data.message, receipt: data }
+      }
+      return { ok: true as const, data }
     } catch (err) {
       const code = toErrorCode(err)
       const failure = recordSupportFailure(toSupportErrorCode(code), action === 'refreshHealth' ? 'runtime' : 'data')

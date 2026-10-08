@@ -1,8 +1,9 @@
 import type { ConfigDrawerTab } from '../ConfigDrawer/ConfigDrawer'
 import type { Tab } from '../../store/appStore'
+import type { ConceptSource, DiagnosticReadiness, EvaluationCounts } from '../../../electron/shared/dataReadiness'
 
 export type DiagnosticStatus = 'ok' | 'warning' | 'error'
-export type DiagnosticRunAction = 'refreshHealth' | 'syncStockBasic' | 'syncHistoricalDaily' | 'syncConceptMembers' | 'backfillDecisionSignals'
+export type DiagnosticRunAction = 'refreshHealth' | 'refreshDataQuality' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals' | 'syncAuctionSnapshot' | 'syncLimitList'
 
 export interface DiagnosticAction {
   key: 'open-datasource' | 'open-ai-config' | DiagnosticRunAction
@@ -10,7 +11,7 @@ export interface DiagnosticAction {
   kind: 'navigate' | 'run'
 }
 
-export interface DiagnosticItem {
+export interface DiagnosticItem extends DiagnosticReadiness {
   key: string
   title: string
   status: DiagnosticStatus
@@ -31,7 +32,8 @@ export interface DiagnosticGroup {
 export interface DiagnosticsHealthSnapshot {
   status: DiagnosticStatus
   checkedAt: number
-  summary: Record<DiagnosticStatus, number>
+  summary: Record<DiagnosticStatus, number> & Partial<EvaluationCounts>
+  selectedConceptSource?: ConceptSource
   groups: DiagnosticGroup[]
 }
 
@@ -69,13 +71,16 @@ function findItem(snapshot: DiagnosticsHealthSnapshot | null, keys: string[]): D
 function findActionableConceptItem(snapshot: DiagnosticsHealthSnapshot | null): DiagnosticItem | undefined {
   if (!snapshot) return undefined
   const allItems = getAllDiagnosticItems(snapshot)
+  if (snapshot.selectedConceptSource) {
+    return allItems.find(item => item.key === `freshness.${snapshot.selectedConceptSource}Concept` || item.key === `${snapshot.selectedConceptSource}Concept`)
+  }
   return allItems.find(item => ['kplConcept', 'thsConcept', 'dcConcept'].includes(item.key) && item.actions?.some(action => action.key === 'syncConceptMembers'))
     ?? allItems.find(item => ['kplConcept', 'thsConcept', 'dcConcept'].includes(item.key) && item.status !== 'ok')
     ?? allItems.find(item => ['kplConcept', 'thsConcept', 'dcConcept'].includes(item.key))
 }
 
 function itemStatus(item: DiagnosticItem | undefined): DiagnosticStatus {
-  return item?.status ?? 'warning'
+  return item?.displayStatus === 'neutral' ? 'warning' : item?.status ?? 'warning'
 }
 
 function firstRunAction(item: DiagnosticItem | undefined): DiagnosticRunAction | null {

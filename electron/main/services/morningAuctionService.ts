@@ -8,19 +8,19 @@
  *  - weakToStrong 5 形态：基于 limit_list_daily 字段（firstTime/lastTime/openTimes/limitTimes/limit）判断，
  *    仅在 auctionMap 有该股竞价数据（09:25 当日已拉取）时生成候选
  *
- * 降级路径：Tushare 未配置时 auctionPrice=0，仍展示分池结构（DB 可用）
+ * 缺口保留：缺失事实不以零值候选代替，前日结构与观察资格通过 readiness 单独表达。
  */
 
 import { getDb } from '../database/db'
-import { getLimitListByDate, getLatestAvailableTradeDate } from '../database/limitListDailyRepository'
-import { getLastNTradingDays, getNextTradeDay, isTradeDay } from '../database/tradeCalRepository'
+import { getLimitListByDate } from '../database/limitListDailyRepository'
+import { getNextTradeDay } from '../database/tradeCalRepository'
 import { getConceptsByStockRouted } from './conceptRouter'
 import { insertConceptMembersIfAbsent } from '../database/kplConceptMembersRepository'
 import { getConceptSource } from '../database/settingsRepository'
 import { getDataSourceConfig } from '../database/dataSourceRepository'
 import { decryptApiKey } from '../utils/apiKeyEncryption'
 import { fetchStkAuction, fetchDailyForCandidates, fetchKplConceptConsByStock } from './tushareService'
-import { getRtKCache, refreshRtKCache, getLimitPct } from './sharedRtKCache'
+import { getRtKCache, getLimitPct } from './sharedRtKCache'
 import { queryDailyClose, queryDailyCloseExact, upsertDailyClose } from '../database/dailyCloseCacheRepository'
 import { queryByDate as queryStkAuctionByDate, upsertStkAuctionCache } from '../database/stkAuctionCacheRepository'
 import { getKplListByDate } from '../database/kplConceptDailyRepository'
@@ -30,6 +30,7 @@ import {
 } from '../database/sectorFlowObservationRepository'
 import type {
   LimitListDailyRow,
+  StkAuctionRow,
   MorningAuctionMarketThemeSummary,
   MorningAuctionThemeAttribution,
 } from '../database/types'
@@ -42,11 +43,19 @@ import {
 import { buildMorningAuctionMarketThemes } from './morningAuctionMarketThemeModel'
 import {
   MorningAuctionPriceHistoryCoordinator,
+  buildMorningAuctionPriceHistoryCoverage,
   loadMorningAuctionPriceHistoryEntries,
   type MorningAuctionPriceHistoryCoverage,
   type MorningAuctionPriceHistoryEntry,
 } from './morningAuctionPriceHistoryCoordinator'
-import { getBeijingYmd } from './marketSettlementPolicy'
+import { getBeijingYmd, getBeijingEpochForYmd } from './marketSettlementPolicy'
+import { readKnownCalendar } from './dataReadinessService'
+import {
+  AUCTION_REQUEST_MS, AUCTION_RETRY_COOLDOWN_MS, MAX_ENTRY_DATES, MAX_AUCTION_COOLDOWNS,
+  resolveEntryDate, entryFingerprint, validAuctionFact, validPreviousLimit,
+  mergeAuctionFacts, describeEntry, signalObservation, cutoffObservation, entryFailureCode,
+  type EntryDateContext, type EntryReadiness, type EntryAttempt,
+} from './morningAuctionEntryPolicy'
 import {
   applyMorningAuctionCloseProjection,
   isCurrentMorningAuctionTradeDate,
@@ -59,6 +68,7 @@ export interface MorningAuctionStock {
   /** 6 位纯数字代码: 000001 / 600519，前端 navigateToStock 使用 */
   stockCode: string
   stockName: string
+  stockNameKnown?: boolean
   /** 竞价开盘价（元） */
   auctionPrice: number
   /** 前收盘价（元） */
@@ -139,41 +149,27 @@ export interface MorningAuctionSnapshot {
   marketThemes?: MorningAuctionMarketThemeSummary
   /** 当前候选去重后的 3 日/5 日涨跌覆盖摘要。 */
   priceHistoryCoverage?: MorningAuctionPriceHistoryCoverage
+  /** Observed facts and dependency gaps, not a full-market completeness certificate. */
+  readiness?: EntryReadiness
 }
 
 export interface MorningAuctionTradeDateStatus {
+  reasonCode?: string
   isTradeDay: boolean
   previousTradeDate: string | null
   nextTradeDate: string | null
   recommendedTradeDate: string | null
 }
 
-function isWeekdayYmd(tradeDate: string): boolean {
-  const year = Number(tradeDate.slice(0, 4))
-  const month = Number(tradeDate.slice(4, 6))
-  const day = Number(tradeDate.slice(6, 8))
-  const date = new Date(Date.UTC(year, month - 1, day))
-  const valid = date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
-  const weekday = date.getUTCDay()
-  return valid && weekday >= 1 && weekday <= 5
-}
-
 export function resolveMorningAuctionTradeDateStatus(tradeDate: string): MorningAuctionTradeDateStatus {
   const db = getDb()
-  const calendarResult = isTradeDay(db, tradeDate)
-  const tradeDay = calendarResult ?? isWeekdayYmd(tradeDate)
-  const recentTradeDates = getLastNTradingDays(db, 2, tradeDate)
-  const previousTradeDate = tradeDay
-    ? (recentTradeDates.at(-1) === tradeDate ? recentTradeDates.at(-2) ?? null : recentTradeDates.at(-1) ?? null)
-    : recentTradeDates.at(-1) ?? null
-  const fallbackDate = getLatestAvailableTradeDate(db)
-  const recommendedTradeDate = previousTradeDate ?? (fallbackDate && fallbackDate < tradeDate ? fallbackDate : null)
-
+  const context = resolveEntryDate(readKnownCalendar(db), tradeDate, Date.now())
   return {
-    isTradeDay: tradeDay,
-    previousTradeDate,
-    nextTradeDate: getNextTradeDay(db, tradeDate),
-    recommendedTradeDate: tradeDay ? null : recommendedTradeDate
+    isTradeDay: context.status === 'open',
+    previousTradeDate: context.previousTradeDate,
+    nextTradeDate: context.status === 'open' || context.status === 'closed' ? getNextTradeDay(db, tradeDate) : null,
+    recommendedTradeDate: context.status === 'closed' ? context.previousTradeDate : null,
+    reasonCode: context.reasonCode,
   }
 }
 
@@ -294,7 +290,8 @@ function buildAuctionStock(
   return {
     tsCode: row.tsCode,
     stockCode: row.tsCode.split('.')[0],
-    stockName: row.name ?? '',
+    stockName: row.name || row.tsCode,
+    stockNameKnown: Boolean(row.name),
     auctionPrice,
     prevClose,
     pctChg,
@@ -312,76 +309,20 @@ function buildAuctionStock(
 }
 
 /** 构建真实晨间竞价快照 */
-async function buildRealMorningAuctionSnapshot(tradeDate: string): Promise<MorningAuctionSnapshot> {
+async function buildRealMorningAuctionSnapshot(input: EntryInputs): Promise<MorningAuctionSnapshot> {
   const db = getDb()
-
-  // 获取候选股基准日期（即「前一交易日」）
-  // 始终取 limit_list_daily 中 < tradeDate 的最大日期，无论今日数据是否已发布。
-  // 不依赖 getLatestAvailableTradeDate()，避免 DB 日内新增数据后 prevDate 发生漂移。
-  const prevRow = db.prepare(
-    'SELECT MAX(trade_date) AS prev FROM limit_list_daily WHERE trade_date < ?'
-  ).get(tradeDate) as { prev: string | null } | undefined
-  const prevDate = prevRow?.prev ?? null
-
-  const emptySnapshot = createEmptyMorningAuctionSnapshot(tradeDate)
-
-  if (!prevDate) return emptySnapshot
-
-  // 读取前一交易日全部涨停/炸板记录
-  const prevRows = getLimitListByDate(db, prevDate)
-  if (prevRows.length === 0) return emptySnapshot
-
-  // stk_auction 支持历史查询（传 trade_date 参数），任何时段均可调用，不受时间窗口限制
-  // 只要 Tushare token 已配置即调用；时间窗口判断仅在调度器自动预热逻辑中使用
-  const cfg = getDataSourceConfig(db)
-  const token = cfg.tushareEnabled && cfg.tushareTokenEncrypted
-    ? decryptApiKey(cfg.tushareTokenEncrypted)
-    : null
-
-  const auctionMap = new Map<string, { price: number | null; preClose: number | null; turnoverRate: number | null; volumeRatio: number | null; amount: number | null; floatShare: number | null }>()
-
-  for (const row of queryStkAuctionByDate(db, tradeDate)) {
-    auctionMap.set(row.tsCode, {
-      price: row.price,
-      preClose: row.preClose,
-      turnoverRate: row.turnoverRate,
-      volumeRatio: row.volumeRatio,
-      amount: row.amount,
-      floatShare: row.floatShare,
-    })
-  }
-
-  // stk_auction 支持按 trade_date 查历史，任何时段均可获取当日竞价成交数据
-  if (token) {
-    try {
-      const auctionRows = await fetchStkAuction(token, tradeDate)
-      for (const r of auctionRows) {
-        auctionMap.set(r.tsCode, {
-          price: r.price,
-          preClose: r.preClose,
-          turnoverRate: r.turnoverRate,
-          volumeRatio: r.volumeRatio,
-          amount: r.amount,
-          floatShare: r.floatShare
-        })
-      }
-      if (auctionRows.length > 0) {
-        try {
-          upsertStkAuctionCache(db, auctionRows)
-        } catch (error) {
-          console.warn(`[morningAuction] persist stk_auction ${tradeDate} failed:`, error)
-        }
-      }
-    } catch (err) {
-      console.warn('[morningAuction] fetchStkAuction failed:', err)
-    }
+  const { tradeDate } = input.context
+  const prevRows = input.limits.filter(row => validPreviousLimit(row, input.context.previousTradeDate))
+  const auctionMap = new Map(input.auction.filter(row => validAuctionFact(row, tradeDate)).map(row => [row.tsCode, row]))
+  const conceptSource = input.source
+  const localConcepts = (code: string) => {
+    try { return getConceptsByStockRouted(db, code, conceptSource, tradeDate) } catch { return [] }
   }
 
   // 批量查询 DB 中已有的题材信息，减少重复 IO
-  const conceptSource = getConceptSource()
   const dbConceptMap = new Map<string, { names: string[]; hotNum: number | null }>()
   for (const row of prevRows) {
-    const concepts = getConceptsByStockRouted(db, row.tsCode, conceptSource)
+    const concepts = localConcepts(row.tsCode)
     if (concepts.length > 0) {
       // 按名称去重（THS 模式下同名概念可能对应多个 conceptCode，避免重复显示）
       const uniqueNames = [...new Set(concepts.map(c => c.conceptName).filter(n => n !== '无题材' && n !== ''))]
@@ -397,6 +338,7 @@ async function buildRealMorningAuctionSnapshot(tradeDate: string): Promise<Morni
 
 
   for (const row of prevRows) {
+    if (!auctionMap.has(row.tsCode)) continue
     const limitTimes = row.limitTimes ?? 0
     const openTimes = row.openTimes ?? 0
     const limit = row.limit
@@ -431,32 +373,14 @@ async function buildRealMorningAuctionSnapshot(tradeDate: string): Promise<Morni
   // 筛选条件：竞价涨幅≥3%、竞价金额≥500万元、竞价换手率≥0.15%、流通市值≥30亿
   // 注意：不排除已在其他池中的股票——allMarket 视角纯粹基于今日竞价数据，与昨日连板状态无关
 
-  // 方案A：若 rtK 缓存尚未预热（首次启动或日切），先刷新一次确保名称数据可用
-  let rtKCache = getRtKCache()
-  if (!rtKCache && token) {
-    try {
-      await refreshRtKCache(token)
-      rtKCache = getRtKCache()
-    } catch (e) {
-      console.warn('[allMarket] rtK 预热失败，名称将依赖兜底表:', e)
-    }
+  // Missing optional names never trigger another remote request or block facts.
+  const rtKCache = getRtKCache()
+  const names = (sql: string): Array<{ ts_code: string; name: string; stockCode: string; stockName: string }> => {
+    try { return db.prepare(sql).all() as ReturnType<typeof names> } catch { return [] }
   }
-
-  // 兜底表1：limit_list_daily 历史涨停股名称（stk_auction / rt_k 接口不保证返回 name 字段）
-  const histNameRows = db
-    .prepare('SELECT DISTINCT ts_code, name FROM limit_list_daily WHERE name IS NOT NULL')
-    .all() as { ts_code: string; name: string }[]
-  const histNameMap = new Map(histNameRows.map(r => [r.ts_code, r.name]))
-  // 兜底表2：kpl_concept_members 题材成分股名称（ts_code=股票代码，name=股票名称）
-  const kplNameRows = db
-    .prepare('SELECT DISTINCT ts_code, name FROM kpl_concept_members WHERE name IS NOT NULL')
-    .all() as { ts_code: string; name: string }[]
-  const kplNameMap = new Map(kplNameRows.map(r => [r.ts_code, r.name]))
-  // 兜底表3：stock_info（用户历史访问股票，key=6位纯数字 stockCode）
-  const stockInfoRows = db
-    .prepare('SELECT stockCode, stockName FROM stock_info WHERE stockName IS NOT NULL')
-    .all() as { stockCode: string; stockName: string }[]
-  const stockInfoMap = new Map(stockInfoRows.map(r => [r.stockCode, r.stockName]))
+  const histNameMap = new Map(names('SELECT DISTINCT ts_code, name FROM limit_list_daily WHERE name IS NOT NULL').map(row => [row.ts_code, row.name]))
+  const kplNameMap = new Map(names('SELECT DISTINCT ts_code, name FROM kpl_concept_members WHERE name IS NOT NULL').map(row => [row.ts_code, row.name]))
+  const stockInfoMap = new Map(names('SELECT stockCode, stockName FROM stock_info WHERE stockName IS NOT NULL').map(row => [row.stockCode, row.stockName]))
   const allMarket: MorningAuctionStock[] = []
   for (const [tsCode, entry] of auctionMap.entries()) {
     const { price, preClose, amount, turnoverRate, floatShare } = entry
@@ -476,13 +400,11 @@ async function buildRealMorningAuctionSnapshot(tradeDate: string): Promise<Morni
     const nameFromStockInfo = stockInfoMap.get(stockCode6) ?? null
     // 名称优先级：rt_k 缓存 → limit_list_daily 历史 → kpl_concept_members → stock_info → 空字符串
     const resolvedName = nameFromRt ?? nameFromHist ?? nameFromKpl ?? nameFromStockInfo ?? ''
-    if (!resolvedName) {
-      console.warn(`[allMarket] 无法解析股票名称 tsCode=${tsCode}: rtK=${nameFromRt} hist=${nameFromHist} kpl=${nameFromKpl} stockInfo=${nameFromStockInfo} rtKCacheSize=${rtKCache?.size ?? 0}`)
-    }
     const stock: MorningAuctionStock = {
       tsCode,
       stockCode: stockCode6,
-      stockName: resolvedName,
+      stockName: resolvedName || tsCode,
+      stockNameKnown: Boolean(resolvedName),
       auctionPrice: price,
       prevClose: preClose,
       pctChg: Number(pctChg.toFixed(2)),
@@ -498,7 +420,7 @@ async function buildRealMorningAuctionSnapshot(tradeDate: string): Promise<Morni
         const cached = dbConceptMap.get(tsCode)
         if (cached) return cached.names
         // allMarket 池可能包含昨日未涨停的股票，dbConceptMap 中无记录，需单独查路由层
-        const cs = getConceptsByStockRouted(db, tsCode, conceptSource)
+        const cs = localConcepts(tsCode)
         return [...new Set(cs.map(c => c.conceptName).filter(n => n !== '无题材' && n !== ''))]
       })(),
     }
@@ -511,7 +433,7 @@ async function buildRealMorningAuctionSnapshot(tradeDate: string): Promise<Morni
   const bcThird: BoardCategoryStock[] = []
   const bcN: BoardCategoryStock[] = []
 
-  for (const row of prevRows.filter(r => r.limit === 'U')) {
+  for (const row of prevRows.filter(r => r.limit === 'U' && auctionMap.has(r.tsCode))) {
     const limitTimes = row.limitTimes ?? 1
     const conceptEntry = dbConceptMap.get(row.tsCode)
     const hotNum = conceptEntry?.hotNum ?? 0
@@ -618,10 +540,34 @@ async function buildRealMorningAuctionSnapshot(tradeDate: string): Promise<Morni
 }
 
 /** 内存缓存：避免前端每次切换 Tab 都重新计算 */
-let cachedSnapshot: MorningAuctionSnapshot | null = null
+interface EntryInputs {
+  context: EntryDateContext
+  source: ReturnType<typeof getConceptSource>
+  auction: StkAuctionRow[]
+  limits: LimitListDailyRow[]
+  fingerprint: string
+}
+interface EntryCache {
+  snapshot: MorningAuctionSnapshot
+  fingerprint: string
+  generation: number
+  lastAttempt: EntryAttempt | null
+  publishedFingerprint?: string
+}
+interface EntryFlight {
+  force: boolean
+  generation: number
+  startedToday: string
+  promise: Promise<MorningAuctionSnapshot>
+}
+const entryCache = new Map<string, EntryCache>()
+const entryFlights = new Map<string, EntryFlight>()
+// Never evict an unexpired request gate when snapshot dates rotate.
+const auctionRequestGates = new Map<string, { attempt: EntryAttempt; pending: boolean; startedMonotonicMs: number }>()
+let activeGeneration = 0
 
 // ===== 题材列异步填充 =====
-let _conceptCache: { tradeDate: string; data: Map<string, string[]> } | null = null
+let _conceptCache: { key: string; data: Map<string, string[]> } | null = null
 let _conceptFetchInFlight = false
 
 /** 将缓存好的题材数据 apply 到快照中所有 conceptNames 为空的股票 */
@@ -651,8 +597,13 @@ function applyConceptToSnap(snap: MorningAuctionSnapshot, data: Map<string, stri
  * 最终 in-place 更新 cachedSnapshot 中对应字段，前端二次 get() 即可拿到数据。
  */
 async function mergeConceptData(snap: MorningAuctionSnapshot, tradeDate: string): Promise<void> {
+  const source = snap.readiness?.source
+  const owns = () => entryCache.get(tradeDate)?.snapshot === snap
+    && entryCache.get(tradeDate)?.generation === activeGeneration && getConceptSource() === source
+  if (!owns() || source !== 'kpl' || tradeDate !== getBeijingYmd()) return
+  const key = JSON.stringify([tradeDate, source, [...new Set(getSnapshotPools(snap).flat().map(stock => stock.tsCode))].sort()])
   // 缓存命中直接 apply
-  if (_conceptCache && _conceptCache.tradeDate === tradeDate) {
+  if (_conceptCache && _conceptCache.key === key) {
     applyConceptToSnap(snap, _conceptCache.data)
     applyThemeAttributionToSnapshot(snap)
     return
@@ -684,10 +635,12 @@ async function mergeConceptData(snap: MorningAuctionSnapshot, tradeDate: string)
     const resultMap = new Map<string, string[]>()
     const BATCH = 5
     for (let i = 0; i < missingCodes.length; i += BATCH) {
+      if (!owns()) return
       const batch = missingCodes.slice(i, i + BATCH)
       await Promise.all(batch.map(async (tsCode) => {
         try {
           const rows = await fetchKplConceptConsByStock(token, tsCode)
+          if (!owns()) return
           if (rows.length > 0) {
             insertConceptMembersIfAbsent(db, rows)
             // 按 hotNum 降序存全部题材名，并去重（API 可能返回同名重复行）
@@ -702,7 +655,8 @@ async function mergeConceptData(snap: MorningAuctionSnapshot, tradeDate: string)
       }))
     }
 
-    _conceptCache = { tradeDate, data: resultMap }
+    if (!owns()) return
+    _conceptCache = { key, data: resultMap }
     applyConceptToSnap(snap, resultMap)
     applyThemeAttributionToSnapshot(snap)
   } catch (err) {
@@ -759,11 +713,19 @@ function applyHistoryToSnap(
 async function mergePriceHistory(
   snap: MorningAuctionSnapshot,
   tradeDate: string,
-  options: { retryUnresolved?: boolean } = {},
+  options: { retryUnresolved?: boolean; localOnly?: boolean } = {},
 ): Promise<void> {
   const tsCodes = [...new Set(getSnapshotPools(snap).flat().map(stock => stock.tsCode))]
   if (tsCodes.length === 0) {
     snap.priceHistoryCoverage = priceHistoryCoordinator.getCoverage(tradeDate, [])
+    return
+  }
+  if (options.localOnly) {
+    const entries = await loadMorningAuctionPriceHistoryEntries(tradeDate, tsCodes, {
+      queryLocal: (codes, startDate) => queryDailyClose(getDb(), codes, startDate),
+    })
+    applyHistoryToSnap(snap, entries)
+    snap.priceHistoryCoverage = buildMorningAuctionPriceHistoryCoverage(tsCodes, entries)
     return
   }
   const entries = await priceHistoryCoordinator.ensure(tradeDate, tsCodes, options)
@@ -859,11 +821,7 @@ function applyThemeAttributionToSnapshot(snap: MorningAuctionSnapshot): void {
   ).values()]
 
   const db = getDb()
-  const candidateDateRow = db.prepare(
-    'SELECT MAX(trade_date) AS trade_date FROM limit_list_daily WHERE trade_date < ?',
-  ).get(snap.tradeDate) as { trade_date: string | null } | undefined
-  const previousTradeDate = candidateDateRow?.trade_date
-    ?? resolveMorningAuctionTradeDateStatus(snap.tradeDate).previousTradeDate
+  const previousTradeDate = snap.readiness?.previousTradeDate ?? null
   const directFacts = new Map<string, MorningAuctionDirectThemeFact>()
   if (previousTradeDate) {
     for (const row of getKplListByDate(db, previousTradeDate)) {
@@ -910,64 +868,238 @@ function applyThemeAttributionToSnapshot(snap: MorningAuctionSnapshot): void {
   )
 }
 
-export async function getOrCreateMorningAuctionSnapshot(tradeDate: string): Promise<MorningAuctionSnapshot> {
-  if (!resolveMorningAuctionTradeDateStatus(tradeDate).isTradeDay) {
-    cachedSnapshot = createEmptyMorningAuctionSnapshot(tradeDate)
-    return cachedSnapshot
+function readEntryInputs(tradeDate: string): EntryInputs {
+  const db = getDb()
+  const context = resolveEntryDate(readKnownCalendar(db), tradeDate, Date.now())
+  const source = getConceptSource()
+  // Facts first: an unknown predecessor never prevents this exact-date read.
+  const auction = context.status === 'open' ? queryStkAuctionByDate(db, tradeDate) : []
+  const limits = context.status === 'open' && context.previousTradeDate ? getLimitListByDate(db, context.previousTradeDate) : []
+  return { context, source, auction, limits, fingerprint: entryFingerprint(context, source, auction, limits) }
+}
+
+// Match the builder's previous-day structural inputs, BEFORE auction thresholds.
+// A stale row excluded by a price threshold is still a dependency of a "no match" result.
+function isPreviousPoolInput(row: LimitListDailyRow, group: string, name: string): boolean {
+  const times = row.limitTimes ?? 0
+  const opens = row.openTimes ?? 0
+  const up = row.limit === 'U'
+  if (group === 'threeOne') {
+    if (name === 'firstBoard') return up && opens < 1 && times < 2
+    if (name === 'secondBoard') return up && opens < 1 && times >= 2
+    if (name === 'brokenBoard') return up && opens >= 1
+    if (name === 'brokenConsec') return !up && times >= 2
   }
-  if (!cachedSnapshot || cachedSnapshot.tradeDate !== tradeDate) {
-    cachedSnapshot = await buildRealMorningAuctionSnapshot(tradeDate)
+  if (group === 'boardCategory') {
+    if (name === 'first') return up && times < 4 && times !== 2 && times !== 3
+    if (name === 'second') return up && times === 2
+    if (name === 'third') return up && times === 3
+    if (name === 'n') return up && times >= 4
   }
-  const currentTradeDate = isCurrentMorningAuctionTradeDate(tradeDate, getBeijingYmd())
-  mergeTradeDateClose(cachedSnapshot, tradeDate, { replaceExisting: !currentTradeDate })
-  if (currentTradeDate) mergeCurrentPrices(cachedSnapshot)
-  // FR-134: 填充 3d/5d 数据
-  // DB 全命中时 mergePriceHistory 仅做 SQLite 查询（< 5ms），await 对用户无感知；
-  // 仅当候选股为新股/首次使用时才会触发 Tushare API 补拉（~1s），比原来「5s 后二次刷新」快得多。
-  await mergePriceHistory(cachedSnapshot, tradeDate)
-  applyThemeAttributionToSnapshot(cachedSnapshot)
-  emitMorningAuctionDecisionSignals(cachedSnapshot)
-  // 题材列异步填充（不阻塞返回）
-  void mergeConceptData(cachedSnapshot, tradeDate)
-  return cachedSnapshot
+  if (group === 'weakToStrong') {
+    if (name === 'badBoard') return up && opens >= 3
+    if (name === 'tailAttack') return up && parseTimeToMinutes(row.firstTime ?? '') >= 14 * 60 + 30
+    if (name === 'brokenBoard') return !up && row.limit !== 'D' && times >= 2
+    if (name === 'afternoonReseal') {
+      const first = parseTimeToMinutes(row.firstTime ?? '')
+      return up && opens >= 1 && first > 0 && first < 12 * 60 && parseTimeToMinutes(row.lastTime ?? '') > 13 * 60
+    }
+    if (name === 'reversal') return row.limit === 'D'
+  }
+  return true // Unknown future pool: conservatively retain all previous-day dependencies.
+}
+
+function attachReadiness(snap: MorningAuctionSnapshot, input: EntryInputs, attempt: EntryAttempt | null): void {
+  const now = Date.now()
+  const meta = describeEntry(input.context, input.source, input.fingerprint, input.auction, input.limits, now, attempt)
+  const auctionMap = new Map(input.auction.filter(row => validAuctionFact(row, snap.tradeDate)).map(row => [row.tsCode, row]))
+  const previous = input.limits.filter(row => validPreviousLimit(row, input.context.previousTradeDate))
+  const provisional = input.context.tradeDate === input.context.today && now < getBeijingEpochForYmd(snap.tradeDate, 9, 30)
+  for (const [group, pools] of Object.entries({ threeOne: snap.threeOne, weakToStrong: snap.weakToStrong, boardCategory: snap.boardCategory })) {
+    for (const [name, stocks] of Object.entries(pools)) {
+      const independent = group === 'threeOne' && name === 'allMarket'
+      const dependencies = independent ? input.auction
+        : previous.filter(row => isPreviousPoolInput(row, group, name)).map(row => auctionMap.get(row.tsCode))
+      const incompleteObservation = dependencies.some(row => !row || cutoffObservation(row, snap.tradeDate, now) === null)
+      const reason = input.context.status !== 'open' ? input.context.reasonCode
+        : !independent && !input.context.previousTradeDate ? 'PREVIOUS_TRADE_DATE_UNKNOWN'
+          : !independent && meta.previousLimit.validRows === 0 ? 'PREVIOUS_LIMIT_MISSING_OR_INVALID'
+            : !meta.auction.validRows ? 'AUCTION_MISSING_OR_INVALID'
+              : independent && !meta.auction.allMarketInputRows ? 'AUCTION_FIELDS_MISSING' : null
+      const partial = provisional || incompleteObservation
+        || (independent ? meta.auction.invalidRows > 0 || meta.auction.allMarketInputRows < meta.auction.validRows
+          : meta.previousLimit.state === 'partial')
+      meta.pools[group + '.' + name] = { state: reason ? 'blocked' : partial ? 'partial' : stocks.length ? 'ready' : 'no_match',
+        reasonCode: reason ?? (incompleteObservation ? 'AUCTION_OBSERVATION_INCOMPLETE'
+          : partial ? 'PARTIAL_OR_PROVISIONAL_INPUT' : stocks.length ? 'COMPUTED_FROM_OBSERVED_FACTS' : 'NO_MATCH'),
+        candidates: stocks.length }
+    }
+  }
+  snap.readiness = meta
+}
+
+function blockedEntry(input: EntryInputs, reason: string, retryable = false): MorningAuctionSnapshot {
+  const snap = createEmptyMorningAuctionSnapshot(input.context.tradeDate)
+  attachReadiness(snap, input, null)
+  snap.readiness!.phase = 'blocked'
+  snap.readiness!.reasonCode = reason
+  snap.readiness!.retryable = retryable
+  for (const pool of Object.values(snap.readiness!.pools)) Object.assign(pool, { state: 'blocked', reasonCode: reason })
+  return snap
+}
+
+async function acquireAuction(input: EntryInputs, attempt: EntryAttempt): Promise<EntryAttempt> {
+  const startedAt = attempt.startedAt
+  const controller = new AbortController()
+  const deadlineMs = startedAt + AUCTION_REQUEST_MS
+  const timer = setTimeout(() => controller.abort(), AUCTION_REQUEST_MS)
+  try {
+    const db = getDb()
+    const cfg = getDataSourceConfig(db)
+    const token = cfg.tushareEnabled && cfg.tushareTokenEncrypted ? decryptApiKey(cfg.tushareTokenEncrypted) : null
+    if (!token) return attempt
+    const remote = await fetchStkAuction(token, input.context.tradeDate, undefined, {
+      deadlineMs, signal: controller.signal, maxPages: 4, maxAttempts: 1, retryDelayMs: 0,
+    })
+    if (controller.signal.aborted || Date.now() >= deadlineMs) throw new Error('TUSHARE_REQUEST_TIMEOUT')
+    const current = readEntryInputs(input.context.tradeDate)
+    if (current.context.status !== 'open') throw new Error('CALENDAR_UNAVAILABLE')
+    if (!remote.length) {
+      attempt.outcome = 'empty'
+      attempt.reasonCode = 'UPSTREAM_EMPTY'
+      return attempt
+    }
+    const merged = mergeAuctionFacts(current.auction, remote, input.context.tradeDate, startedAt)
+    try { upsertStkAuctionCache(db, merged.rows) } catch { throw new Error('PERSIST_FAILED') }
+    attempt.outcome = merged.partial ? 'partial' : 'success'
+    attempt.reasonCode = merged.partial ? 'PARTIAL_OBSERVATION_RETAINED_FACTS' : 'OBSERVED_ROWS_PERSISTED'
+  } catch (error) {
+    attempt.outcome = 'failed'
+    attempt.reasonCode = Date.now() >= deadlineMs ? 'TUSHARE_REQUEST_TIMEOUT' : entryFailureCode(error)
+  } finally {
+    clearTimeout(timer)
+    attempt.endedAt = Date.now()
+  }
+  return attempt
+}
+
+async function executeEntry(tradeDate: string, flight: EntryFlight): Promise<MorningAuctionSnapshot> {
+  let input = readEntryInputs(tradeDate)
+  if (input.context.status !== 'open') return blockedEntry(input, input.context.reasonCode)
+  const prior = entryCache.get(tradeDate)
+  const now = Date.now()
+  // Audit timestamps stay on the wall clock; admission and capacity expiry use elapsed time only.
+  const monotonicNow = performance.now()
+  // Only completed, expired gates can free capacity. In-flight ownership is not a cache entry.
+  for (const [date, gate] of auctionRequestGates) {
+    if (!gate.pending && monotonicNow - gate.startedMonotonicMs >= AUCTION_RETRY_COOLDOWN_MS) auctionRequestGates.delete(date)
+  }
+  const gate = auctionRequestGates.get(tradeDate)
+  let attempt = gate?.attempt ?? prior?.lastAttempt ?? null
+  const state = describeEntry(input.context, input.source, input.fingerprint, input.auction, input.limits, now, attempt)
+  const allowed = tradeDate < input.context.today || now >= getBeijingEpochForYmd(tradeDate, 9, 28)
+  const changed = prior && prior.fingerprint !== input.fingerprint
+  const needsObservation = !state.auction.validRows
+    || (tradeDate === input.context.today && state.phase === 'due_unconfirmed')
+  if (allowed && !gate && (flight.force || (!changed && needsObservation))) {
+    attempt = { targetTradeDate: tradeDate, startedAt: now, endedAt: now, source: 'tushare',
+      outcome: 'blocked', reasonCode: 'AUCTION_REQUEST_CAPACITY' }
+    if (auctionRequestGates.size < MAX_AUCTION_COOLDOWNS) {
+      attempt.reasonCode = 'NOT_CONFIGURED'
+      const admitted = { attempt, pending: true, startedMonotonicMs: performance.now() }
+      // Reserve synchronously, before the first transport await.
+      auctionRequestGates.set(tradeDate, admitted)
+      try { attempt = await acquireAuction(input, attempt) } finally { admitted.pending = false }
+    }
+  }
+
+  // At most two builds, the second local-only; never chase a writer indefinitely.
+  for (let pass = 0; pass < 2; pass++) {
+    input = readEntryInputs(tradeDate)
+    if (input.context.status !== 'open') return blockedEntry(input, input.context.reasonCode)
+    const cached = entryCache.get(tradeDate)
+    const reusable = cached?.fingerprint === input.fingerprint
+    const snap = reusable ? structuredClone(cached.snapshot) : await buildRealMorningAuctionSnapshot(input)
+    attachReadiness(snap, input, attempt)
+    if (!reusable) await mergePriceHistory(snap, tradeDate, { localOnly: Boolean(prior) || pass > 0 })
+    try { applyThemeAttributionToSnapshot(snap) } catch { /* Optional attribution cannot erase valid auction facts. */ }
+    const latest = readEntryInputs(tradeDate)
+    if (latest.fingerprint !== input.fingerprint) {
+      if (pass === 0) continue
+      return blockedEntry(latest, 'DATA_CHANGED_RETRY', true)
+    }
+    const current = isCurrentMorningAuctionTradeDate(tradeDate, getBeijingYmd())
+    mergeTradeDateClose(snap, tradeDate, { replaceExisting: !current })
+    if (current) mergeCurrentPrices(snap)
+    attachReadiness(snap, input, attempt)
+    // A late request can return its own facts, never overwrite a newer active generation.
+    if (flight.generation === activeGeneration && getConceptSource() === input.source) {
+      const entry: EntryCache = { snapshot: snap, fingerprint: input.fingerprint, generation: flight.generation,
+        lastAttempt: attempt, publishedFingerprint: cached?.publishedFingerprint }
+      entryCache.delete(tradeDate)
+      entryCache.set(tradeDate, entry)
+      while (entryCache.size > MAX_ENTRY_DATES) entryCache.delete(entryCache.keys().next().value!)
+      if (tradeDate === flight.startedToday && tradeDate === getBeijingYmd()
+        && Date.now() >= getBeijingEpochForYmd(tradeDate, 9, 28)) {
+        const eligible = new Map(input.auction.map(row => [row.tsCode, signalObservation(row, tradeDate, Date.now())] as const)
+          .filter((pair): pair is readonly [string, number] => pair[1] !== null))
+        // Persistent lookup and emit are synchronous: no publisher can interleave here.
+        emitMorningAuctionDecisionSignals(snap, eligible, entry.publishedFingerprint !== input.fingerprint)
+        entry.publishedFingerprint = input.fingerprint
+      }
+      void mergeConceptData(snap, tradeDate)
+    }
+    return structuredClone(snap)
+  }
+  return blockedEntry(input, 'DATA_CHANGED_RETRY', true)
+}
+
+function enterMorningAuction(tradeDate: string, force: boolean): Promise<MorningAuctionSnapshot> {
+  const running = entryFlights.get(tradeDate)
+  if (running) { running.force ||= force; return running.promise.then(snap => structuredClone(snap)) }
+  if (entryFlights.size >= MAX_ENTRY_DATES) return Promise.resolve(blockedEntry(readEntryInputs(tradeDate), 'ENTRY_BUSY', true))
+  const flight: EntryFlight = { force, generation: ++activeGeneration, startedToday: getBeijingYmd(),
+    promise: Promise.resolve(createEmptyMorningAuctionSnapshot(tradeDate)) }
+  entryFlights.set(tradeDate, flight)
+  flight.promise = Promise.resolve().then(() => executeEntry(tradeDate, flight)).finally(() => {
+    if (entryFlights.get(tradeDate) === flight) entryFlights.delete(tradeDate)
+  })
+  return flight.promise.then(snap => structuredClone(snap))
+}
+
+export function getOrCreateMorningAuctionSnapshot(tradeDate: string): Promise<MorningAuctionSnapshot> {
+  return enterMorningAuction(tradeDate, false)
 }
 
 export function getCachedMorningAuctionSnapshot(tradeDate: string): MorningAuctionSnapshot | null {
-  if (!cachedSnapshot || cachedSnapshot.tradeDate !== tradeDate) return null
-  return structuredClone(cachedSnapshot)
+  const entry = entryCache.get(tradeDate)
+  if (!entry) return null
+  const input = readEntryInputs(tradeDate)
+  if (input.context.status !== 'open' || input.fingerprint !== entry.fingerprint) return null
+  const snap = structuredClone(entry.snapshot)
+  attachReadiness(snap, input, entry.lastAttempt)
+  return snap
 }
 
-export async function refreshMorningAuctionSnapshot(tradeDate: string): Promise<MorningAuctionSnapshot> {
-  if (!resolveMorningAuctionTradeDateStatus(tradeDate).isTradeDay) {
-    cachedSnapshot = createEmptyMorningAuctionSnapshot(tradeDate)
-    return cachedSnapshot
-  }
-  // 显式刷新和09:28确认均重新读取已固化竞价缓存，避免09:15早期候选池冻结。
-  // buildRealMorningAuctionSnapshot 会先装载 stk_auction_cache；远端为空或失败时不会抹掉本地快照。
-  cachedSnapshot = await buildRealMorningAuctionSnapshot(tradeDate)
-  _conceptCache = null  // 强制重新拉取题材
-  const currentTradeDate = isCurrentMorningAuctionTradeDate(tradeDate, getBeijingYmd())
-  mergeTradeDateClose(cachedSnapshot, tradeDate, { replaceExisting: !currentTradeDate })
-  if (currentTradeDate) mergeCurrentPrices(cachedSnapshot)
-  // FR-134: 填充 3d/5d 数据后再返回，避免刷新后表格长期显示横线
-  await mergePriceHistory(cachedSnapshot, tradeDate, { retryUnresolved: true })
-  applyThemeAttributionToSnapshot(cachedSnapshot)
-  emitMorningAuctionDecisionSignals(cachedSnapshot)
-  // 题材列异步填充
-  void mergeConceptData(cachedSnapshot, tradeDate)
-  return cachedSnapshot
+export function refreshMorningAuctionSnapshot(tradeDate: string): Promise<MorningAuctionSnapshot> {
+  return enterMorningAuction(tradeDate, true)
 }
 
-function emitMorningAuctionDecisionSignals(snap: MorningAuctionSnapshot): void {
+function emitMorningAuctionDecisionSignals(snap: MorningAuctionSnapshot, eligible: Map<string, number>, newObservation: boolean): void {
+  if (!eligible.size) return
   try {
-    dismissOneWordMorningAuctionSignals(snap)
+    if (newObservation) dismissOneWordMorningAuctionSignals(snap, eligible)
+    const existing = getDb().prepare('SELECT 1 FROM decision_signals WHERE dedup_key = ?')
+
     const candidates = snap.threeOne.allMarket
-      .filter((stock) => !isAuctionOneWordBoard(stock))
+      .filter((stock) => eligible.has(stock.tsCode) && !isAuctionOneWordBoard(stock))
       .slice(0, 12)
     if (candidates.length === 0) return
     const signals: DecisionSignalInput[] = candidates
-      .filter((s) => s.pctChg >= 3 && s.auctionAmount >= 500)
+      .filter((s) => s.pctChg >= 3 && s.auctionAmount >= 500
+        && !existing.get(`short_term:morningAuction.allMarket:${snap.tradeDate}:${s.tsCode}`))
       .map((s, idx) => ({
+        signalTime: eligible.get(s.tsCode),
         sourceModule: 'short_term',
         strategyKey: 'morningAuction.allMarket',
         tsCode: s.tsCode,
@@ -986,18 +1118,18 @@ function emitMorningAuctionDecisionSignals(snap: MorningAuctionSnapshot): void {
           auctionTurnover: s.auctionTurnover,
           conceptNames: s.conceptNames,
         },
-        sourceRef: { tradeDate: snap.tradeDate, pool: 'allMarket' },
+        sourceRef: { tradeDate: snap.tradeDate, pool: 'allMarket', observedAt: eligible.get(s.tsCode), phase: snap.readiness?.phase },
         dedupKey: `short_term:morningAuction.allMarket:${snap.tradeDate}:${s.tsCode}`,
       }))
-    emitDecisionSignals(getDb(), signals)
+    if (signals.length) emitDecisionSignals(getDb(), signals)
   } catch (err) {
     console.warn('[morningAuction] emit decision signals failed:', err)
   }
 }
 
-function dismissOneWordMorningAuctionSignals(snap: MorningAuctionSnapshot): void {
+function dismissOneWordMorningAuctionSignals(snap: MorningAuctionSnapshot, eligible: Map<string, number>): void {
   const dedupKeys = snap.threeOne.allMarket
-    .filter(isAuctionOneWordBoard)
+    .filter(stock => eligible.has(stock.tsCode) && isAuctionOneWordBoard(stock))
     .map((stock) => `short_term:morningAuction.allMarket:${snap.tradeDate}:${stock.tsCode}`)
   if (dedupKeys.length === 0) return
 

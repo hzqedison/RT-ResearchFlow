@@ -3,17 +3,17 @@ name: Release
 on:
   push:
     branches:
-      - 'codex/release-1.1'
+      - 'codex/release-1.2'
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Existing tested tag, for example v1.1.0 or v1.1.0-beta.1
+        description: Existing tested tag, for example v1.2.0 or v1.2.0-beta.1
         required: true
         type: string
       tested_run_id:
-        description: Original tag or authorized 1.1 branch Release run ID (reuse tested packages, never rebuild)
+        description: Original tag or authorized 1.2 branch Release run ID (reuse tested packages, never rebuild)
         required: true
         type: string
       publish:
@@ -25,13 +25,13 @@ permissions:
   contents: read
   actions: read
 
-# The one-time 1.1 branch, its tag and publish-only retries share the same lock.
+# The one-time 1.2 branch, its tag and publish-only retries share the same lock.
 concurrency:
-  group: release-${{ (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.1' && 'v1.1.0') || github.event.inputs.release_tag || github.ref_name }}
+  group: release-${{ (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.2' && 'v1.2.0') || github.event.inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
-  RELEASE_TAG: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.1' && 'v1.1.0') || github.event.inputs.release_tag || github.ref_name }}
+  RELEASE_TAG: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.2' && 'v1.2.0') || github.event.inputs.release_tag || github.ref_name }}
   GH_REPO: ${{ github.repository }}
 
 jobs:
@@ -60,11 +60,11 @@ jobs:
             }
             const repo = context.repo;
             const build = context.eventName === 'push';
-            const bootstrap = build && context.ref === 'refs/heads/codex/release-1.1';
+            const bootstrap = build && context.ref === 'refs/heads/codex/release-1.2';
             if (build && (context.payload.deleted || (!bootstrap && context.ref !== 'refs/tags/' + tag))) {
-              throw new Error('Only existing release tags or the authorized 1.1 branch may build.');
+              throw new Error('Only existing release tags or the authorized 1.2 branch may build.');
             }
-            if (bootstrap && tag !== 'v1.1.0') throw new Error('Branch bootstrap is limited to v1.1.0.');
+            if (bootstrap && tag !== 'v1.2.0') throw new Error('Branch bootstrap is limited to v1.2.0.');
             // Check public releases before any tag resolution or build. Include private drafts.
             const matches = (await github.paginate(github.rest.repos.listReleases,
               { ...repo, per_page: 100 })).filter(release => release.tag_name === tag);
@@ -87,7 +87,7 @@ jobs:
             if (object && object.type !== 'commit') throw new Error('Tag must resolve to a commit.');
             const sha = bootstrap ? context.sha : object.sha;
             if (bootstrap && object && object.sha !== sha) {
-              throw new Error('Existing v1.1.0 tag points to another commit; never move it.');
+              throw new Error('Existing v1.2.0 tag points to another commit; never move it.');
             }
             if (build && !bootstrap && context.sha !== sha && context.sha !== ref.object.sha) {
               throw new Error('Tag moved after the triggering event; refusing to build.');
@@ -417,7 +417,7 @@ jobs:
       RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
       TESTED_RUN_ID: ${{ needs.prepare.outputs.tested_run_id }}
       RELEASE_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
-      PUBLISH_RELEASE: ${{ needs.prepare.outputs.bootstrap_release == 'true' || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
+      PUBLISH_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
@@ -525,7 +525,7 @@ jobs:
             const { execFileSync } = require('node:child_process');
             const tag = process.env.RELEASE_TAG;
             const bootstrap = context.eventName === 'push' &&
-              context.ref === 'refs/heads/codex/release-1.1' && tag === 'v1.1.0';
+              context.ref === 'refs/heads/codex/release-1.2' && tag === 'v1.2.0';
             async function assertTag() {
               let ref;
               try {
@@ -536,7 +536,7 @@ jobs:
                 // Create once, never update/force a ref. GITHUB_TOKEN prevents another push run.
                 try {
                   await github.rest.git.createRef({ ...context.repo,
-                    ref: 'refs/tags/v1.1.0', sha: process.env.SOURCE_SHA });
+                    ref: 'refs/tags/v1.2.0', sha: process.env.SOURCE_SHA });
                 } catch (creationError) {
                   if (creationError.status !== 422) throw creationError;
                   // A competing creation is acceptable only if the readback has the same SHA.

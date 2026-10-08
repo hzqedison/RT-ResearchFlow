@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { ConceptSource, DiagnosticReadiness, EvaluationCounts, FactSyncReceipt } from '../shared/dataReadiness'
 import type { SupportDiagnosticPreview, SupportFeedbackResult, SupportFeedbackSaveOutcome } from '../shared/supportDiagnostics'
 import type { AppUpdateCheck, AppUpdateDownload, AppUpdateInfo, AppUpdateProgress, AppUpdateResult } from '../shared/appUpdateTypes'
 import type { DailyDataProvider, DataProbeProvider, DataSourcePreference, SaveDataSourcePreference, DataSourceProbeResult, ResearchReportResult, WencaiResult } from '../shared/dataSourceTypes'
@@ -2844,7 +2845,8 @@ const api = {
           data: {
             status: 'ok' | 'warning' | 'error'
             checkedAt: number
-            summary: Record<'ok' | 'warning' | 'error', number>
+            summary: Record<'ok' | 'warning' | 'error', number> & Partial<EvaluationCounts>
+            selectedConceptSource?: ConceptSource
             dailyCloseQuality?: {
               targetTradeDays: number
               retentionTradeDays: number
@@ -2872,11 +2874,13 @@ const api = {
               fingerprint: string
               persistedRunId: number | null
               persistedAt: number | null
-              summary: Record<'reliable' | 'degraded' | 'blocked', number>
+              summary: Record<'reliable' | 'degraded' | 'blocked', number> & Partial<EvaluationCounts>
               datasets: Array<{
                 key: 'stockBasic' | 'tradeCalendar' | 'dailyMarket' | 'auction' | 'benchmarks' | 'financials'
                 title: string
                 status: 'reliable' | 'degraded' | 'blocked'
+                displayStatus?: DiagnosticReadiness['displayStatus']
+                evidence?: DiagnosticReadiness['evidence']
                 summary: string
                 recordCount: number
                 earliestDate: string | null
@@ -2885,7 +2889,7 @@ const api = {
                 affectedModules: string[]
                 reasons: Array<{ code: string; message: string; severity: 'warning' | 'error' }>
                 action: null | {
-                  key: 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks'
+                  key: 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncAuctionSnapshot' | 'syncLimitList'
                   label: string
                 }
               }>
@@ -2897,13 +2901,15 @@ const api = {
                 key: string
                 title: string
                 status: 'ok' | 'warning' | 'error'
+                displayStatus?: DiagnosticReadiness['displayStatus']
+                evidence?: DiagnosticReadiness['evidence']
                 message: string
                 detail?: string
                 recordCount?: number | null
                 latestDate?: string | null
                 checkedAt: number
                 actions?: Array<{
-                  key: 'open-datasource' | 'open-ai-config' | 'syncStockBasic' | 'syncHistoricalDaily' | 'syncConceptMembers' | 'backfillDecisionSignals'
+                  key: 'open-datasource' | 'open-ai-config' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals' | 'syncAuctionSnapshot' | 'syncLimitList'
                   label: string
                   kind: 'navigate' | 'run'
                 }>
@@ -2913,10 +2919,10 @@ const api = {
         }
       | { ok: false; error: string; message: string }
     >,
-    runCheck: (action: 'refreshHealth' | 'refreshDataQuality' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals') =>
+    runCheck: (action: 'refreshHealth' | 'refreshDataQuality' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals' | 'syncAuctionSnapshot' | 'syncLimitList') =>
       ipcRenderer.invoke('diagnostics:runCheck', { action }) as Promise<
-        | { ok: true; data: { action: string; status: 'completed' | 'started'; message: string } }
-        | { ok: false; error: string; message: string }
+        | { ok: true; data: { action: string; status: 'completed' | 'started'; message: string } & Partial<FactSyncReceipt> }
+        | { ok: false; error: string; message: string; receipt?: FactSyncReceipt }
       >,
     onHistoricalDailyProgress: (cb: (p: {
       totalTradeDays: number

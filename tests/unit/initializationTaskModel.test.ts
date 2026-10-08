@@ -5,6 +5,7 @@ import {
   getFlowProgress,
   getQuickStartDeferral,
   INITIALIZATION_TASKS,
+  shouldSkipInitializationTask,
 } from '../../src/components/Onboarding/initializationTaskModel'
 import type { DiagnosticsHealthSnapshot } from '../../src/components/Onboarding/onboardingModel'
 
@@ -53,6 +54,33 @@ function snapshotWith(options: { tushare: 'ok' | 'warning'; stockRows: number })
 }
 
 describe('new-user initialization task model', () => {
+  it('only the explicitly selected source with proved target scope may skip', () => {
+    const snapshot = snapshotWith({ tushare: 'ok', stockRows: 5572 })
+    snapshot.selectedConceptSource = 'ths'
+    const task = INITIALIZATION_TASKS.find(task => task.key === 'sync-concepts')!
+    const items = snapshot.groups[1].items
+    items.push({ key: 'freshness.kplConcept', title: 'KPL', status: 'ok', message: 'other source has rows', recordCount: 100, checkedAt: 1 })
+    const ths = { key: 'freshness.thsConcept', title: 'THS', status: 'warning' as const, message: 'selected source empty', recordCount: 0, checkedAt: 1 }
+    items.push(ths)
+    expect(shouldSkipInitializationTask(snapshot, task)).toBeNull()
+    items[items.length - 1] = { ...ths, status: 'ok', recordCount: 1, evidence: { applicability: 'selected', selectedSource: 'ths', readiness: 'ready', reasonCode: 'FACTS_SAVED', targetScope: 'complete-directory-members', lastAttempt: { outcome: 'success', source: 'ths', targetDate: null, insertedRows: 1, reasonCode: 'FACTS_SAVED', access: 'unknown', checkedAt: 1, coverage: 'unknown' } } }
+    expect(shouldSkipInitializationTask(snapshot, task)).toContain('THS')
+    snapshot.selectedConceptSource = 'dc'
+    expect(shouldSkipInitializationTask(snapshot, task)).toBeNull()
+  })
+  it('neutral or a mismatched session never proves current-source readiness', () => {
+    const snapshot = snapshotWith({ tushare: 'ok', stockRows: 5572 }); snapshot.selectedConceptSource = 'dc'
+    const task = INITIALIZATION_TASKS.find(task => task.key === 'sync-concepts')!
+    const item = { key: 'freshness.dcConcept', title: 'DC', status: 'ok' as const, message: 'old', recordCount: 1, checkedAt: 1, evidence: { applicability: 'selected' as const, selectedSource: 'dc' as const, readiness: 'ready' as const, reasonCode: 'FACTS_SAVED', expectedTradeDate: '20261008', lastAttempt: { outcome: 'success' as const, source: 'dc', targetDate: '20260930', insertedRows: 1, reasonCode: 'FACTS_SAVED', access: 'unknown' as const, checkedAt: 1, coverage: 'unknown' as const } } }
+    snapshot.groups[1].items.push(item)
+    expect(shouldSkipInitializationTask(snapshot, task)).toBeNull()
+    item.evidence.lastAttempt.targetDate = '20261008'
+    expect(shouldSkipInitializationTask(snapshot, task)).toContain('DC')
+    snapshot.groups[1].items[snapshot.groups[1].items.length - 1] = { ...item, displayStatus: 'neutral' }
+    expect(shouldSkipInitializationTask(snapshot, task)).toBeNull()
+    delete snapshot.selectedConceptSource
+    expect(shouldSkipInitializationTask(snapshot, task)).toBeNull()
+  })
   it('快速初始化延后两年全市场日线，单独执行时不延后', () => {
     const historical = INITIALIZATION_TASKS.find(task => task.key === 'sync-historical-daily')
     expect(historical).toBeDefined()

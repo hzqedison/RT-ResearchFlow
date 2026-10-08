@@ -1106,12 +1106,137 @@ function parseStrOrNull(v: unknown): string | null {
 }
 
 /** 通用辅助: 调用 Tushare API + 统一错误转换；积分不足抛 TUSHARE_QUOTA_INSUFFICIENT */
+export interface BoundedTushareOptions {
+  signal?: AbortSignal
+  deadlineMs: number
+  /** Shared absolute performance.now() deadline; wall time is translated only at entry. */
+  monotonicDeadlineMs?: number
+  maxPages?: number
+  maxAttempts?: number
+  retryDelayMs?: number
+}
+
+function boundedError(code: string): Error & { code: string } {
+  return Object.assign(new Error(code), { code })
+}
+
+function queryAbortError(options: BoundedTushareOptions): Error {
+  return boundedError((options.signal?.reason as { code?: string } | undefined)?.code === 'TUSHARE_REQUEST_TIMEOUT'
+    ? 'TUSHARE_REQUEST_TIMEOUT' : 'QUERY_CANCELLED')
+}
+
+/** Own one total-operation timer and propagate cancellation to all pages/body/retries. */
+export function createBoundedTushareScope(options: BoundedTushareOptions): {
+  options: BoundedTushareOptions
+  check: () => void
+  dispose: () => void
+} {
+  const monotonicNow = performance.now()
+  const monotonicDeadlineMs = options.monotonicDeadlineMs ?? monotonicNow + (options.deadlineMs - Date.now())
+  if (!Number.isFinite(options.deadlineMs) || !Number.isFinite(monotonicDeadlineMs)) throw boundedError('TUSHARE_REQUEST_TIMEOUT')
+  const controller = new AbortController()
+  const relayAbort = () => controller.abort(queryAbortError(options))
+  const timer = setTimeout(() => controller.abort(boundedError('TUSHARE_REQUEST_TIMEOUT')),
+    Math.max(0, Math.min(2_147_483_647, monotonicDeadlineMs - monotonicNow)))
+  options.signal?.addEventListener('abort', relayAbort, { once: true })
+  if (options.signal?.aborted) relayAbort()
+  const scoped = { ...options, monotonicDeadlineMs, signal: controller.signal }
+  return {
+    options: scoped,
+    check: () => checkQueryBoundary(scoped),
+    dispose: () => {
+      clearTimeout(timer)
+      options.signal?.removeEventListener('abort', relayAbort)
+      controller.abort(boundedError('QUERY_CANCELLED'))
+    },
+  }
+}
+
+function checkQueryBoundary(options: BoundedTushareOptions): void {
+  if (!Number.isFinite(options.monotonicDeadlineMs) || performance.now() >= options.monotonicDeadlineMs!) throw boundedError('TUSHARE_REQUEST_TIMEOUT')
+  if (options.signal?.aborted) throw queryAbortError(options)
+}
+
+async function boundedRetryWait(ms: number, options: BoundedTushareOptions): Promise<void> {
+  checkQueryBoundary(options)
+  await new Promise<void>((resolve, reject) => {
+    const remaining = options.monotonicDeadlineMs! - performance.now()
+    const abort = () => finish(queryAbortError(options))
+    const timer = setTimeout(() => finish(ms >= remaining ? boundedError('TUSHARE_REQUEST_TIMEOUT') : undefined), Math.min(ms, remaining))
+    function finish(error?: Error) {
+      clearTimeout(timer)
+      options.signal?.removeEventListener('abort', abort)
+      if (error) reject(error)
+      else resolve()
+    }
+    options.signal?.addEventListener('abort', abort, { once: true })
+    if (options.signal?.aborted) abort()
+  })
+  checkQueryBoundary(options)
+}
+
+/** Diagnostic-only bounded path. The same signal cancels fetch AND response body consumption. */
+async function callBoundedTushareApi(token: string, apiName: string, params: Record<string, string>, fields: string, options: BoundedTushareOptions): Promise<TushareResponse> {
+  const attempts = Math.min(3, Math.max(1, Math.floor(options.maxAttempts ?? 1)))
+  if (!Number.isFinite(attempts)) throw boundedError('FACT_INVALID')
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    checkQueryBoundary(options)
+    const controller = new AbortController()
+    const relayAbort = () => controller.abort()
+    options.signal?.addEventListener('abort', relayAbort, { once: true })
+    const timer = setTimeout(() => controller.abort(), Math.min(TUSHARE_REQUEST_TIMEOUT_MS, options.monotonicDeadlineMs! - performance.now()))
+    try {
+      if (options.signal?.aborted) relayAbort()
+      const response = await fetch(TUSHARE_API_URL, { ...buildRequest(token, apiName, params, fields), signal: controller.signal })
+      if (response.ok === false) throw boundedError(`HTTP_${response.status}`)
+      const json = await response.json() as TushareResponse
+      checkQueryBoundary(options)
+      if (controller.signal.aborted) throw boundedError('TUSHARE_REQUEST_TIMEOUT')
+      if (!json || typeof json !== 'object' || typeof json.code !== 'number') throw boundedError('FACT_INVALID')
+      if (json.code !== 0) throw boundedError(getTushareAccessErrorCode(json.msg ?? '') ?? 'UPSTREAM_FAILED')
+      // A missing envelope is not an empty terminal page, even after a valid full page.
+      if (!json.data || !Array.isArray(json.data.fields) || !Array.isArray(json.data.items)
+        || json.data.fields.some(field => typeof field !== 'string')
+        || new Set(json.data.fields).size !== json.data.fields.length) throw boundedError('FACT_INVALID')
+      return json
+    } catch (error) {
+      checkQueryBoundary(options)
+      if (controller.signal.aborted) throw boundedError('TUSHARE_REQUEST_TIMEOUT')
+      const accessCode = getTushareAccessErrorCode(error)
+      if (accessCode) throw boundedError(accessCode)
+      if ((error as { code?: string })?.code === 'FACT_INVALID') throw boundedError('FACT_INVALID')
+      if (attempt + 1 >= attempts) throw boundedError('UPSTREAM_FAILED')
+    } finally {
+      clearTimeout(timer)
+      options.signal?.removeEventListener('abort', relayAbort)
+      // Also close an unread error response body; a stable error is not a live-request receipt.
+      controller.abort()
+    }
+    await boundedRetryWait(Math.max(0, options.retryDelayMs ?? 500), options)
+  }
+  throw boundedError('UPSTREAM_FAILED')
+}
+
+/** Bounded facts accept only finite numbers or whole decimal/exponent strings, not prefixes. */
+function parseFactNumber(value: unknown, options?: BoundedTushareOptions, integer = false, signed = false, positive = false): number | null {
+  if (!options) return integer ? parseIntOrNull(value) : parseNumOrNull(value)
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'number' && (typeof value !== 'string'
+    || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim()))) throw boundedError('FACT_INVALID')
+  const number = typeof value === 'number' ? value : Number(value.trim())
+  if (!Number.isFinite(number) || (!signed && number < 0) || (positive && number <= 0)
+    || (integer && !Number.isSafeInteger(number))) throw boundedError('FACT_INVALID')
+  return number
+}
+
 async function callTushareApi(
   token: string,
   apiName: string,
   params: Record<string, string>,
-  fields: string
+  fields: string,
+  options?: BoundedTushareOptions
 ): Promise<TushareResponse> {
+  if (options) return callBoundedTushareApi(token, apiName, params, fields, options)
   let json: TushareResponse
   try {
     json = await withRetry(async () => {
@@ -1151,38 +1276,57 @@ async function callTushareApi(
  */
 export async function fetchLimitListDaily(
   token: string,
-  tradeDate?: string
+  tradeDate?: string,
+  options?: BoundedTushareOptions
+): Promise<LimitListDailyRow[]> {
+  const scope = options ? createBoundedTushareScope(options) : null
+  try {
+    scope?.check()
+    const rows = await fetchLimitListDailyRows(token, tradeDate, scope?.options)
+    scope?.check()
+    return rows
+  } finally { scope?.dispose() }
+}
+
+async function fetchLimitListDailyRows(
+  token: string,
+  tradeDate?: string,
+  options?: BoundedTushareOptions
 ): Promise<LimitListDailyRow[]> {
   const params: Record<string, string> = {}
   if (tradeDate) params.trade_date = tradeDate
   const fields =
     'trade_date,ts_code,name,close,pct_chg,amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit'
-  const json = await callTushareApi(token, 'limit_list_d', params, fields)
+  const json = await callTushareApi(token, 'limit_list_d', params, fields, options)
   if (!json.data) return []
   const { fields: fs, items } = json.data
   const idx = (n: string) => fs.indexOf(n)
   const nowMs = Date.now()
   const rows: LimitListDailyRow[] = []
   for (const it of items) {
+    if (options && !Array.isArray(it)) throw boundedError('FACT_INVALID')
     const td = parseStrOrNull(it[idx('trade_date')])
     const tsCode = parseStrOrNull(it[idx('ts_code')])
-    if (!td || !tsCode) continue
+    if (!td || !tsCode) {
+      if (options) throw boundedError('FACT_INVALID')
+      continue
+    }
     rows.push({
       tradeDate: td,
       tsCode,
       name: parseStrOrNull(it[idx('name')]),
-      close: parseNumOrNull(it[idx('close')]),
-      pctChg: parseNumOrNull(it[idx('pct_chg')]),
-      amount: parseNumOrNull(it[idx('amount')]),
-      floatMv: parseNumOrNull(it[idx('float_mv')]),
-      totalMv: parseNumOrNull(it[idx('total_mv')]),
-      turnoverRatio: parseNumOrNull(it[idx('turnover_ratio')]),
-      fdAmount: parseNumOrNull(it[idx('fd_amount')]),
+      close: parseFactNumber(it[idx('close')], options, false, false, true),
+      pctChg: parseFactNumber(it[idx('pct_chg')], options, false, true),
+      amount: parseFactNumber(it[idx('amount')], options),
+      floatMv: parseFactNumber(it[idx('float_mv')], options),
+      totalMv: parseFactNumber(it[idx('total_mv')], options),
+      turnoverRatio: parseFactNumber(it[idx('turnover_ratio')], options),
+      fdAmount: parseFactNumber(it[idx('fd_amount')], options),
       firstTime: parseStrOrNull(it[idx('first_time')]),
       lastTime: parseStrOrNull(it[idx('last_time')]),
-      openTimes: parseIntOrNull(it[idx('open_times')]),
+      openTimes: parseFactNumber(it[idx('open_times')], options, true),
       upStat: parseStrOrNull(it[idx('up_stat')]),
-      limitTimes: parseIntOrNull(it[idx('limit_times')]),
+      limitTimes: parseFactNumber(it[idx('limit_times')], options, true),
       limit: parseStrOrNull(it[idx('limit')]),
       fetchedAt: nowMs
     })
@@ -1243,7 +1387,23 @@ export async function fetchKplList(
 export async function fetchStkAuction(
   token: string,
   tradeDate?: string,
-  tsCode?: string
+  tsCode?: string,
+  options?: BoundedTushareOptions
+): Promise<StkAuctionRow[]> {
+  const scope = options ? createBoundedTushareScope(options) : null
+  try {
+    scope?.check()
+    const rows = await fetchStkAuctionRows(token, tradeDate, tsCode, scope?.options)
+    scope?.check()
+    return rows
+  } finally { scope?.dispose() }
+}
+
+async function fetchStkAuctionRows(
+  token: string,
+  tradeDate?: string,
+  tsCode?: string,
+  options?: BoundedTushareOptions
 ): Promise<StkAuctionRow[]> {
   const fields =
     'ts_code,trade_date,vol,price,amount,pre_close,turnover_rate,volume_ratio,float_share'
@@ -1252,21 +1412,26 @@ export async function fetchStkAuction(
 
   const parseItems = (fs: string[], items: unknown[][]) => {
     const idx = (n: string) => fs.indexOf(n)
+    const observedAt = options ? Date.now() : nowMs
     for (const it of items) {
+      if (options && !Array.isArray(it)) throw boundedError('FACT_INVALID')
       const tc = parseStrOrNull(it[idx('ts_code')])
       const td = parseStrOrNull(it[idx('trade_date')])
-      if (!tc || !td) continue
+      if (!tc || !td) {
+        if (options) throw boundedError('FACT_INVALID')
+        continue
+      }
       allRows.push({
         tsCode: tc,
         tradeDate: td,
-        vol: parseIntOrNull(it[idx('vol')]),
-        price: parseNumOrNull(it[idx('price')]),
-        amount: parseNumOrNull(it[idx('amount')]),
-        preClose: parseNumOrNull(it[idx('pre_close')]),
-        turnoverRate: parseNumOrNull(it[idx('turnover_rate')]),
-        volumeRatio: parseNumOrNull(it[idx('volume_ratio')]),
-        floatShare: parseNumOrNull(it[idx('float_share')]),
-        fetchedAt: nowMs,
+        vol: parseFactNumber(it[idx('vol')], options, true),
+        price: parseFactNumber(it[idx('price')], options, false, false, true),
+        amount: parseFactNumber(it[idx('amount')], options),
+        preClose: parseFactNumber(it[idx('pre_close')], options, false, false, true),
+        turnoverRate: parseFactNumber(it[idx('turnover_rate')], options),
+        volumeRatio: parseFactNumber(it[idx('volume_ratio')], options),
+        floatShare: parseFactNumber(it[idx('float_share')], options),
+        fetchedAt: observedAt,
       })
     }
   }
@@ -1275,7 +1440,7 @@ export async function fetchStkAuction(
   if (tsCode) {
     const params: Record<string, string> = { ts_code: tsCode }
     if (tradeDate) params.trade_date = tradeDate
-    const json = await callTushareApi(token, 'stk_auction', params, fields)
+    const json = await callTushareApi(token, 'stk_auction', params, fields, options)
     if (json.data) parseItems(json.data.fields, json.data.items)
     return allRows
   }
@@ -1285,12 +1450,31 @@ export async function fetchStkAuction(
   //       不分页时深交所/创业板/北交所股票会被截断，导致竞价数据缺失。
   const PAGE_SIZE = 5000
   let offset = 0
+  let pages = 0
+  const seen = new Set<string>()
+  const maxPages = options ? Math.min(20, Math.max(1, Math.floor(options.maxPages ?? 4))) : Infinity
+  if (options && !Number.isFinite(maxPages)) throw boundedError('FACT_INVALID')
   while (true) {
+    if (options) {
+      checkQueryBoundary(options)
+      if (pages >= maxPages) throw boundedError('PAGINATION_INCOMPLETE')
+    }
     const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: String(offset) }
     if (tradeDate) params.trade_date = tradeDate
-    const json = await callTushareApi(token, 'stk_auction', params, fields)
+    const json = await callTushareApi(token, 'stk_auction', params, fields, options)
+    pages++
     if (!json.data || json.data.items.length === 0) break
+    const before = allRows.length
     parseItems(json.data.fields, json.data.items)
+    if (options) {
+      for (const row of allRows.slice(before)) {
+        const key = `${row.tsCode}/${row.tradeDate}`
+        if (seen.has(key)) throw boundedError('PAGINATION_INCOMPLETE')
+        seen.add(key)
+      }
+      if (allRows.length === before) throw boundedError('PAGINATION_INCOMPLETE')
+      checkQueryBoundary(options)
+    }
     if (json.data.items.length < PAGE_SIZE) break
     offset += PAGE_SIZE
   }

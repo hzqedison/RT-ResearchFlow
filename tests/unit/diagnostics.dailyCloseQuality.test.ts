@@ -46,7 +46,8 @@ const FRESHNESS_TABLES = [
 ] as const
 
 function createDiagnosticsDb(): Database.Database {
-  const db = new Database(':memory:')
+  const nativeBinding = process.env.RT_READINESS_TEST_NATIVE_BINDING
+  const db = new Database(':memory:', nativeBinding ? { nativeBinding } : undefined)
   for (const [table, dateColumn] of FRESHNESS_TABLES) {
     if (table === 'daily_close_cache') {
       db.exec(`
@@ -102,9 +103,11 @@ describe('diagnostics dailyCloseQuality', () => {
       ?.items.find((item) => item.key === 'freshness.dailyClose')
 
     expect(dailyCloseItem).toBeDefined()
-    expect(dailyCloseItem?.actions).toEqual([
+    expect(dailyCloseItem?.actions).toEqual(expect.arrayContaining([
       { key: 'syncHistoricalDaily', label: '同步全市场历史日线', kind: 'run' },
-    ])
+    ]))
+    expect(dailyCloseItem?.actions).toContainEqual({ key: 'syncTradeCalendar', label: '补齐交易日历', kind: 'run' })
+    expect(dailyCloseItem?.evidence).toMatchObject({ readiness: 'unknown', reasonCode: 'CALENDAR_UNAVAILABLE' })
     expect(dailyCloseItem?.message).toContain('/480')
     expect(snapshot.dailyCloseQuality).toEqual({
       targetTradeDays: 480,

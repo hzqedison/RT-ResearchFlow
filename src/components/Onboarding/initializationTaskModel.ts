@@ -90,6 +90,7 @@ export const INITIALIZATION_TASKS: InitializationTaskDefinition[] = [
 ]
 
 export const QUICK_START_HISTORY_DEFERRED_MESSAGE = '完整两年全市场日线属于增强能力，首次初始化暂不阻塞；可稍后在后台低频回补，并从本地检查点跨会话继续。'
+export const INITIALIZATION_SCOPE_MESSAGE = '快速初始化延后历史日线与题材；任何初始化任务列表均未包含竞价、涨跌停、筹码和趋势。流程完成不代表这些模块已齐备，请在诊断逐项核验。'
 
 export function getQuickStartDeferral(task: InitializationTaskDefinition, singleTask: boolean): string | null {
   if (singleTask || task.quickStart !== 'defer') return null
@@ -113,12 +114,19 @@ export function shouldSkipInitializationTask(snapshot: DiagnosticsHealthSnapshot
   if (!snapshot) return null
   const stockBasic = findDiagnosticItem(snapshot, ['freshness.stockBasic', 'stockBasic'])
   const dailyClose = findDiagnosticItem(snapshot, ['freshness.dailyClose', 'dailyClose'])
-  const concept = findDiagnosticItem(snapshot, ['freshness.kplConcept', 'freshness.thsConcept', 'freshness.dcConcept', 'kplConcept', 'thsConcept', 'dcConcept'])
+  const source = snapshot.selectedConceptSource
+  const concept = source ? findDiagnosticItem(snapshot, [`freshness.${source}Concept`, `${source}Concept`]) : undefined
   const decision = findDiagnosticItem(snapshot, ['freshness.decisionSignals', 'decisionSignals'])
 
   if (task.key === 'sync-stock-basic' && stockBasic?.status === 'ok') return '股票基础数据已可用, 跳过同步。'
   if (task.key === 'sync-historical-daily' && dailyClose?.status === 'ok') return '全市场历史日线底座已可用, 跳过同步。'
-  if (task.key === 'sync-concepts' && concept?.status === 'ok') return '题材成分数据已可用, 跳过同步。'
+  if (task.key === 'sync-concepts' && concept?.status === 'ok' && concept.displayStatus !== 'neutral'
+    && (concept.recordCount ?? 0) > 0 && concept.evidence?.readiness === 'ready'
+    && concept.evidence.selectedSource === source && concept.evidence.applicability === 'selected'
+    && concept.evidence.lastAttempt?.outcome === 'success'
+    && concept.evidence.lastAttempt.source === source
+    && (source === 'ths' ? concept.evidence.targetScope === 'complete-directory-members'
+      : !!concept.evidence.expectedTradeDate && concept.evidence.lastAttempt.targetDate === concept.evidence.expectedTradeDate)) return `当前 ${source?.toUpperCase()} 题材目标范围已核验, 跳过同步。`
   if (task.key === 'backfill-decision' && decision?.status === 'ok') return '今日看板已有可用状态, 跳过补种。'
   return null
 }

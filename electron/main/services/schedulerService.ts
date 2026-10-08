@@ -31,6 +31,10 @@ import {
 import { clearAllAndReplace as clearAndReplaceConceptMembers } from '../database/kplConceptMembersRepository'
 import { upsertThsConceptIndex, clearAllAndReplaceThsMembers } from '../database/thsConceptMembersRepository'
 import { upsertDcConceptMembers } from '../database/dcConceptMembersRepository'
+import { syncConceptFacts } from './conceptMembersReadinessService'
+import { readKnownCalendar } from './dataReadinessService'
+import { saveReadinessAttempt } from './diagnosticFactSyncService'
+import type { FactSyncReceipt } from '../../shared/dataReadiness'
 import { fetchThsIndex, fetchThsMembers, fetchDcConceptCons } from './tushareService'
 import {
   upsertTopList,
@@ -1234,12 +1238,12 @@ export function scheduleConceptMembersSync(scope = _scheduler.replaceScope('conc
   }, delayUntilBjTime(4, 0))
 }
 
-export async function runConceptMembersSyncJob(): Promise<void> {
+export async function runConceptMembersSyncJob(): Promise<FactSyncReceipt> {
   const db = getDb()
   // 读取当前选择的题材数据源（默认 kpl）
   const sourceRow = db.prepare('SELECT concept_source FROM app_settings WHERE id = 1').get() as { concept_source: string | null } | undefined
   const source = sourceRow?.concept_source === 'ths' ? 'ths' : sourceRow?.concept_source === 'dc' ? 'dc' : 'kpl'
-  await runConceptMembersSyncForSource(source)
+  return runConceptMembersSyncForSource(source)
 }
 
 /**
@@ -1248,110 +1252,52 @@ export async function runConceptMembersSyncJob(): Promise<void> {
  * - ths: fetchThsIndex → 遍历每个概念 fetchThsMembers → clearAllAndReplaceThsMembers（全量替换）
  * - dc:  fetchDcConceptCons(tradeDate) → upsertDcConceptMembers（按日累积，不清空历史）
  */
-export async function runConceptMembersSyncForSource(source: string): Promise<void> {
-  const token = getTushareTokenOrNull()
-  if (!token) return
+const conceptReadinessFlights = new WeakMap<object, Map<string, Promise<FactSyncReceipt>>>()
+
+export function runConceptMembersSyncForSource(source: string): Promise<FactSyncReceipt> {
   const db = getDb()
-  const today = getBjTodayYmd()
-
-  if (source === 'ths') {
-    await withCronRetry('ConceptMembersSync-THS', async () => {
-      const pushProgress = (current: number, total: number, message: string) => {
-        BrowserWindow.getAllWindows().forEach(w =>
-          w.webContents.send('shortTerm:conceptSyncProgress', { source: 'ths', current, total, message })
-        )
-      }
-
-      console.log('[ConceptMembersSync-THS] fetching ths_index...')
-      pushProgress(0, 0, '正在拉取同花顺概念目录…')
-      const indexItems = await fetchThsIndex(token)
-      if (indexItems.length === 0) {
-        console.warn('[ConceptMembersSync-THS] ths_index returned 0 items, skipping')
-        pushProgress(0, 0, '概念目录为空，请检查 Tushare 积分或网络')
-        return
-      }
-      // 写入概念目录
-      upsertThsConceptIndex(db, indexItems.map(r => ({ tsCode: r.tsCode, name: r.name, count: r.count })))
-      console.log(`[ConceptMembersSync-THS] index upserted ${indexItems.length} concepts, fetching members...`)
-      pushProgress(0, indexItems.length, `已获取 ${indexItems.length} 个概念，开始同步成分股…`)
-
-      // 逐个概念拉成员股（分批，每批间隔 3s 防限速）
-      const allMembers: Array<{ tsCode: string; conCode: string; conName: string | null }> = []
-      const BATCH_SIZE = 10
-      for (let i = 0; i < indexItems.length; i += BATCH_SIZE) {
-        const batch = indexItems.slice(i, i + BATCH_SIZE)
-        const results = await Promise.allSettled(
-          batch.map(idxItem =>
-            fetchThsMembers(token, idxItem.tsCode).then(members =>
-              // 将 API 返回的成分股名替换为概念名（idxItem.name），
-              // 因为 ths_member.name 是股票名，con_name 列应存概念名
-              members.map(m => ({ ...m, conName: idxItem.name }))
-            )
-          )
-        )
-        for (const result of results) {
-          if (result.status === 'fulfilled') {
-            allMembers.push(...result.value)
-          }
-        }
-        const done = Math.min(i + BATCH_SIZE, indexItems.length)
-        pushProgress(done, indexItems.length, `同步成分股 ${done}/${indexItems.length}，已收集 ${allMembers.length} 条记录…`)
-        if (i + BATCH_SIZE < indexItems.length) {
-          await new Promise(resolve => setTimeout(resolve, 3000))
-        }
-      }
-      if (allMembers.length === 0) {
-        console.warn('[ConceptMembersSync-THS] got 0 member rows, skipping replace')
-        pushProgress(0, indexItems.length, '成分股为空，请检查 Tushare 积分（ths_member 需 6000 积分）')
-        return
-      }
-      clearAllAndReplaceThsMembers(db, allMembers)
-      console.log(`[ConceptMembersSync-THS] ths_concept_members fully replaced with ${allMembers.length} rows`)
-      pushProgress(indexItems.length, indexItems.length, `✅ 同步完成：${indexItems.length} 个概念，${allMembers.length} 条成分股记录`)
-    })
-    return
-  }
-
-  if (source === 'dc') {
-    await withCronRetry('ConceptMembersSync-DC', async () => {
-      // DC 按最近有效交易日拉取今日快照
-      let tradeDate = today
-      for (let i = 0; i < 7; i++) {
-        const d = offsetBjDateYmd(today, -i)
-        const cnt = (db.prepare('SELECT COUNT(*) as c FROM limit_list_daily WHERE trade_date = ?').get(d) as { c: number }).c
-        if (cnt > 0) { tradeDate = d; break }
-      }
-      console.log(`[ConceptMembersSync-DC] fetching dc_concept_cons for tradeDate=${tradeDate}`)
-      const rows = await fetchDcConceptCons(token, tradeDate)
-      if (rows.length === 0) {
-        console.warn(`[ConceptMembersSync-DC] got 0 rows for ${tradeDate}, skipping`)
-        return
-      }
-      upsertDcConceptMembers(db, rows)
-      console.log(`[ConceptMembersSync-DC] dc_concept_members upserted ${rows.length} rows for ${tradeDate}`)
-    })
-    return
-  }
-
-  // 默认 KPL 路径
-  await withCronRetry('ConceptMembersSync', async () => {
-    // 获取最近有效交易日（kpl_concept_cons 必须传 trade_date，否则返回空）
-    let tradeDate = today
-    // 从 limit_list_daily 找最近有数据的交易日（最多往前 7 天）
-    for (let i = 0; i < 7; i++) {
-      const d = offsetBjDateYmd(today, -i)
-      const count = (db.prepare('SELECT COUNT(*) as c FROM limit_list_daily WHERE trade_date = ?').get(d) as { c: number }).c
-      if (count > 0) { tradeDate = d; break }
-    }
-    console.log(`[ConceptMembersSync] fetching kpl_concept_cons for tradeDate=${tradeDate}`)
-    const rows = await fetchKplConceptCons(token, tradeDate)
-    if (rows.length === 0) {
-      console.warn(`[ConceptMembersSync] got 0 rows for ${tradeDate}, skipping replace`)
-      return
-    }
-    clearAndReplaceConceptMembers(db, rows)
-    console.log(`[ConceptMembersSync] kpl_concept_members fully replaced with ${rows.length} rows`)
-  })
+  let jobs = conceptReadinessFlights.get(db)
+  if (!jobs) { jobs = new Map(); conceptReadinessFlights.set(db, jobs) }
+  const active = jobs.get(source)
+  if (active) return active
+  const job = syncConceptFacts(source, {
+    token: getTushareTokenOrNull,
+    calendar: readKnownCalendar(db),
+    kpl: fetchKplConceptCons,
+    dc: fetchDcConceptCons,
+    thsIndex: fetchThsIndex,
+    thsMembers: fetchThsMembers,
+    writeKpl: rows => {
+      const existing = db.prepare('SELECT con_code, ts_code, con_name, name, hot_num, "desc" FROM kpl_concept_members').all() as Array<{ con_code: string; ts_code: string; con_name: string | null; name: string | null; hot_num: number | null; desc: string | null }>
+      const old = new Map(existing.map(row => [`${row.con_code}/${row.ts_code}`, row]))
+      clearAndReplaceConceptMembers(db, rows.map(row => {
+        const prior = old.get(`${row.conCode}/${row.tsCode}`)
+        return { ...row, conName: row.conName ?? prior?.con_name ?? null, name: row.name ?? prior?.name ?? null, hotNum: row.hotNum ?? prior?.hot_num ?? null, desc: row.desc ?? prior?.desc ?? null }
+      }))
+    },
+    writeDc: rows => {
+      const existing = db.prepare('SELECT * FROM dc_concept_members WHERE trade_date = ?').all(rows[0].tradeDate) as Array<{ ts_code: string; theme_code: string; name: string | null; theme_name: string | null; industry_code: string | null; industry: string | null }>
+      const old = new Map(existing.map(row => [`${row.ts_code}/${row.theme_code}`, row]))
+      upsertDcConceptMembers(db, rows.map(row => {
+        const prior = old.get(`${row.tsCode}/${row.themeCode}`)
+        return { ...row, name: row.name ?? prior?.name ?? null, themeName: row.themeName ?? prior?.theme_name ?? null, industryCode: row.industryCode ?? prior?.industry_code ?? null, industry: row.industry ?? prior?.industry ?? null }
+      }))
+    },
+    writeThs: (index, members) => {
+      const oldIndex = db.prepare('SELECT ts_code, name, count FROM ths_concept_index').all() as Array<{ ts_code: string; name: string | null; count: number | null }>
+      const oldMembers = db.prepare('SELECT ts_code, con_code, con_name FROM ths_concept_members').all() as Array<{ ts_code: string; con_code: string; con_name: string | null }>
+      const indexMap = new Map(oldIndex.map(row => [row.ts_code, row]))
+      const membersMap = new Map(oldMembers.map(row => [`${row.ts_code}/${row.con_code}`, row.con_name]))
+      db.transaction(() => {
+        upsertThsConceptIndex(db, index.map(row => ({ ...row, name: row.name ?? indexMap.get(row.tsCode)?.name ?? null, count: row.count ?? indexMap.get(row.tsCode)?.count ?? null })))
+        clearAllAndReplaceThsMembers(db, members.map(row => ({ ...row, conName: row.conName ?? membersMap.get(`${row.tsCode}/${row.conCode}`) ?? null })))
+      })()
+    },
+    progress: (current, total, message) => BrowserWindow.getAllWindows().forEach(window => window.webContents.send('shortTerm:conceptSyncProgress', { source, current, total, message })),
+    pause: () => new Promise(resolve => setTimeout(resolve, 3000)),
+  }).then(receipt => saveReadinessAttempt(db, `concept/${source}`, receipt)).finally(() => jobs!.delete(source))
+  jobs.set(source, job)
+  return job
 }
 
 /**

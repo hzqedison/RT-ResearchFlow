@@ -7,7 +7,8 @@ import { buildOfficialSseTradingCalendar } from '../../electron/shared/officialS
 const NOW = Date.parse('2026-07-24T02:00:00.000Z')
 
 function createDb(): Database.Database {
-  const db = new Database(':memory:')
+  const nativeBinding = process.env.RT_READINESS_TEST_NATIVE_BINDING
+  const db = new Database(':memory:', nativeBinding ? { nativeBinding } : undefined)
   runMigrations(db, DATABASE_MIGRATIONS)
   return db
 }
@@ -83,7 +84,9 @@ describe('dataQualityService', () => {
       expect(snapshot.status).toBe('blocked')
       expect(snapshot.persistedRunId).toBeNull()
       expect(db.prepare('SELECT COUNT(*) AS count FROM data_quality_runs').get()).toEqual({ count: 0 })
-      expect(snapshot.datasets.find((item) => item.key === 'financials')).toMatchObject({ status: 'reliable', summary: '当前没有待检查的产业研究公司' })
+      expect(snapshot.datasets.find((item) => item.key === 'financials')).toMatchObject({ status: 'degraded', displayStatus: 'neutral', summary: '当前没有待检查的产业研究公司' })
+      expect(snapshot.summary.neutral).toBe(1)
+      expect(snapshot.summary.evaluatedCount).toBe(snapshot.summary.reliable + snapshot.summary.degraded + snapshot.summary.blocked)
     } finally {
       db.close()
     }
@@ -96,7 +99,7 @@ describe('dataQualityService', () => {
       const current = getDataQualitySnapshot(db, NOW)
       expect(current.datasets.find((item) => item.key === 'tradeCalendar')?.status).toBe('reliable')
       expect(current.datasets.find((item) => item.key === 'dailyMarket')?.status).not.toBe('blocked')
-      expect(current.datasets.find((item) => item.key === 'auction')?.status).toBe('reliable')
+      expect(current.datasets.find((item) => item.key === 'auction')).toMatchObject({ status: 'degraded', evidence: { reasonCode: 'COVERAGE_UNKNOWN' } })
       expect(current.datasets.find((item) => item.key === 'benchmarks')?.status).toBe('reliable')
       expect(current.datasets.find((item) => item.key === 'financials')?.status).toBe('reliable')
       expect(db.prepare('SELECT COUNT(*) AS count FROM data_quality_runs').get()).toEqual({ count: 0 })
