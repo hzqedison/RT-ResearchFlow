@@ -1,0 +1,127 @@
+name: Published native upgrade acceptance (1.0 to 1.1)
+
+on:
+  push:
+    branches: [codex/acceptance-1.0-to-1.1]
+    paths:
+      - .github/workflows/native-upgrade-acceptance.yml
+      - .github/scripts/fetch-upgrade-installers.cjs
+      - tests/fixtures/releases/native-upgrade-1.0-1.1.json
+      - tools/native-acceptance/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-upgrade-acceptance-1.0-to-1.1
+  cancel-in-progress: false
+
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+  DEBUG: ''
+  PWDEBUG: ''
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      manifest_sha256: ${{ steps.inputs.outputs.manifest_sha256 }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: '20'
+      - name: Validate frozen published inputs (no native download)
+        id: inputs
+        run: node tools/native-acceptance/evidence.mjs prepare
+
+  native:
+    needs: prepare
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: windows
+            arch: x64
+          - runner: macos-15
+            platform: macOS
+            arch: arm64
+          - runner: macos-15-intel
+            platform: macOS
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: '20'
+          architecture: ${{ matrix.arch }}
+      - uses: pnpm/action-setup@v4.1.0
+        with:
+          version: 10.14.0
+          run_install: false
+          package_json_file: tools/native-acceptance/package.json
+      - name: Install only the standalone harness (no product scripts or browsers)
+        working-directory: tools/native-acceptance
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace
+      - name: Create owned hosted-native case
+        id: initialize
+        run: node tools/native-acceptance/evidence.mjs init ${{ matrix.platform }} ${{ matrix.arch }}
+      - name: Fetch both immutable published installers with hash and size verification
+        timeout-minutes: 11
+        run: node tools/native-acceptance/evidence.mjs fetch
+      - name: Four independent launches across real native upgrade and Keychain persistence
+        timeout-minutes: 12
+        working-directory: tools/native-acceptance
+        run: pnpm exec playwright test
+      - name: Always restore owned network and temporary Keychain state
+        if: ${{ always() && steps.initialize.outcome == 'success' }}
+        timeout-minutes: 2
+        run: node tools/native-acceptance/evidence.mjs cleanup
+      - name: Stage only scanned whitelisted evidence
+        if: ${{ always() && steps.initialize.outcome == 'success' }}
+        run: node tools/native-acceptance/evidence.mjs publish
+      - name: Upload sanitized evidence, never profiles or test-runner attachments
+        if: ${{ always() && steps.initialize.outcome == 'success' }}
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: native-acceptance-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ env.NA_PUBLIC_EVIDENCE }}/input-manifest.json
+            ${{ env.NA_PUBLIC_EVIDENCE }}/acceptance-result.json
+            ${{ env.NA_PUBLIC_EVIDENCE }}/network-isolation.json
+            ${{ env.NA_PUBLIC_EVIDENCE }}/installer-events.json
+
+  collect:
+    if: ${{ always() }}
+    needs: [prepare, native]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: '20'
+      - uses: actions/download-artifact@v4.3.0
+        with:
+          pattern: native-acceptance-*-${{ github.run_id }}-*
+          path: ${{ runner.temp }}/native-acceptance-collection
+      - name: Require all three native results and full evidence gates
+        env:
+          NA_NATIVE_RESULT: ${{ needs.native.result }}
+        run: node tools/native-acceptance/evidence.mjs collect "${{ runner.temp }}/native-acceptance-collection"

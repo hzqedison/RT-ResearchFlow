@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "repository": "hzqedison/RT-ResearchFlow",
+  "releases": [
+    {
+      "version": "1.0.0",
+      "tag": "v1.0.0",
+      "sourceSha": "41f8429149f646c7dec7f1610082702e7d9cce48",
+      "assets": {
+        "windows": {
+          "x64": {
+            "basename": "RT-ResearchFlow-Setup-1.0.0-x64.exe",
+            "sha256": "f5ea701458902dbcdeea08b3aabbcfca23b2c2c6a16ed8b88de1b31811033a4b",
+            "size": 166547210
+          }
+        },
+        "macOS": {
+          "arm64": {
+            "basename": "RT-ResearchFlow-macOS-1.0.0-arm64.dmg",
+            "sha256": "547d959d5de843bb8fb07bbe47037d388598de381a930d74119dc5caf2359383",
+            "size": 201578904
+          },
+          "x64": {
+            "basename": "RT-ResearchFlow-macOS-1.0.0-x64.dmg",
+            "sha256": "dc8cee3d6952d3226b3216c149ba3be0cfe66e57111c4bb69edba71f6cae002f",
+            "size": 209343420
+          }
+        }
+      }
+    },
+    {
+      "version": "1.1.0",
+      "tag": "v1.1.0",
+      "sourceSha": "ec1fe73e5f3c80edb1f3e7b0a989a03cf66b18ad",
+      "assets": {
+        "windows": {
+          "x64": {
+            "basename": "RT-ResearchFlow-Setup-1.1.0-x64.exe",
+            "sha256": "3689c579c902b006df422b91c5e723d63f89fcd1e3e16f85df7132942add1fbe",
+            "size": 166498081
+          }
+        },
+        "macOS": {
+          "arm64": {
+            "basename": "RT-ResearchFlow-macOS-1.1.0-arm64.dmg",
+            "sha256": "42970ebc1d9365765deddc94306beb39816ca3a4a16b88b62331a004d51f6d8e",
+            "size": 201656920
+          },
+          "x64": {
+            "basename": "RT-ResearchFlow-macOS-1.1.0-x64.dmg",
+            "sha256": "604782a67ebb79e2df5665ab8293573996d34ba37711b2f27e4dde2ea969ac96",
+            "size": 209345834
+          }
+        }
+      }
+    }
+  ]
+}
