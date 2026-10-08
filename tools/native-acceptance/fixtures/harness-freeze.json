@@ -8,9 +8,14 @@
       "sha256": "8cb2214fdb9a972de2433cebbc7e4a6a67f20b69c5496f7a6a52f3c114645a06"
     },
     {
+      "path": ".github/workflows/mac-launcher-diagnostic.yml",
+      "size": 3613,
+      "sha256": "be2b35a7fc92819d38705eb15cf24004fa07ea4e97403a853da06ef25ebe4332"
+    },
+    {
       "path": ".github/workflows/native-upgrade-acceptance.yml",
       "size": 5248,
-      "sha256": "e793ff8c657710d5a2a21e2574545d9f3685d45d3e32dd53d425fb7987df9072"
+      "sha256": "e18567eff0ea04838b698a44e938b2306ba6343955d95157f389667ddfcb4b0a"
     },
     {
       "path": "tests/fixtures/releases/native-upgrade-1.0-1.1.json",
@@ -19,13 +24,13 @@
     },
     {
       "path": "tools/native-acceptance/README.md",
-      "size": 11875,
-      "sha256": "0ba333ee15dad72bb06d55e42c13f83293c96233b5a77bfbd9d1b24a12cee574"
+      "size": 17313,
+      "sha256": "a66ad6eb1e41e65699e684a3e2630bd45039a57c7c8d730c71042bfc1f9cf682"
     },
     {
       "path": "tools/native-acceptance/evidence.mjs",
-      "size": 47013,
-      "sha256": "00e079a3a7bdc6e07b657aaf6be124e4c549f9a8738de832b89d4098428cdae0"
+      "size": 81054,
+      "sha256": "ffac22cc994ce13e06d723033c9660050b0a494bffb69c87304fb7c0f4918018"
     },
     {
       "path": "tools/native-acceptance/fixtures/version-contract.json",
@@ -34,8 +39,8 @@
     },
     {
       "path": "tools/native-acceptance/harness.ts",
-      "size": 34476,
-      "sha256": "28b95e005e6abaa219def399f460dbce7a6575f0a7a97d5b97e0db9e524cc8dc"
+      "size": 34490,
+      "sha256": "63879080a2b7d942af9ac98101ebfa18a1f758f9dd27cbf967e5582e28a19350"
     },
     {
       "path": "tools/native-acceptance/native-upgrade.spec.ts",
@@ -44,8 +49,8 @@
     },
     {
       "path": "tools/native-acceptance/offline.test.mjs",
-      "size": 45956,
-      "sha256": "22600ff4397bf30f4f486375cd1bd8168b593dc45500ee343b284a3a7adeab47"
+      "size": 86132,
+      "sha256": "6e5088f3dbfe9f9443da59b8f818a1e6fbefbf3fad23787a5ddf619ef3af8818"
     },
     {
       "path": "tools/native-acceptance/package.json",
@@ -54,8 +59,8 @@
     },
     {
       "path": "tools/native-acceptance/platform/macos.mjs",
-      "size": 9894,
-      "sha256": "dc371cf619740c3700454e85a21634478db316b9ba7cdfb220f90d505c4b2a0b"
+      "size": 12065,
+      "sha256": "c2a1fa2f730a5ff47a6377a1eb6b68e414cf9d8e5e46f921c27a37c282122479"
     },
     {
       "path": "tools/native-acceptance/platform/macos.sh",
@@ -83,5 +88,5 @@
       "sha256": "671af518c48fde83548d51fc3a27bf2d85d9fd3ff326b1ff04a08dafaa067945"
     }
   ],
-  "combinedSha256": "398039814a6ad00dd665a4256a26f2d37754df03b4fb674c6662c67de5ffa6f8"
+  "combinedSha256": "1867bccb52d4e3814013099fc02c8b27b17d20cfc23d88cd97fb2a8f9d5dcd1e"
 }

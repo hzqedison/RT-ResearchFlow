@@ -76,7 +76,7 @@ jobs:
       - name: Create owned hosted-native case (private progress, no placeholder artifact)
         id: initialize
         run: node tools/native-acceptance/evidence.mjs init ${{ matrix.platform }} ${{ matrix.arch }}
-      - name: Verify all 16 raw files against freeze and this exact source commit
+      - name: Verify all 17 raw files against freeze and this exact source commit
         timeout-minutes: 3
         env:
           GITHUB_TOKEN: ${{ github.token }}

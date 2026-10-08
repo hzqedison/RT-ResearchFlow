@@ -411,7 +411,7 @@ export class NativeUpgrade {
         const failure = recordFailure(error, this.stage, 'EVIDENCE_CHECKPOINT_FAILED')
         this.result.status = failure.status; this.result.reasonCode = failure.reasonCode; this.result.complete = false
       }
-      try { await cleanup(); this.result.cleanup = true; this.network.cleanupSucceeded = true; this.network.disabledAt = new Date().toISOString() }
+      try { await cleanup('test-finally'); this.result.cleanup = true; this.network.cleanupSucceeded = true; this.network.disabledAt = new Date().toISOString() }
       catch (error) {
         const failure = recordFailure(error, 'cleanup', 'OWNED_CLEANUP_FAILED')
         this.result.cleanup = false; this.result.complete = false; this.result.status = failure.status; this.result.reasonCode = failure.reasonCode

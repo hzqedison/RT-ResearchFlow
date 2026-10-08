@@ -32,7 +32,7 @@ URL overrides, or unsigned receipt is accepted.
 
 ## Frozen source bytes and commit identity
 
-`fixtures/harness-freeze.json` lists exactly the 16 acceptance payload files,
+`fixtures/harness-freeze.json` lists exactly the 17 acceptance payload files,
 their byte lengths and SHA-256 hashes. Its combination is SHA-256 of the compact
 JSON array of `{path,size,sha256}` entries in fixed path order. The freeze file
 itself is deliberately excluded. It contains no own commit ID or own digest.
@@ -40,7 +40,7 @@ After changing any payload file, regenerate it with the local `freeze` operation
 only as an explicit new freeze, then let Astra review the resulting bytes.
 
 The harness source identity is the workflow's exact `github.sha`, not either
-product commit. Prepare and each native job read the 16 original blobs and the
+product commit. Prepare and each native job read the 17 original blobs and the
 freeze file from GitHub's read-only contents API at that exact SHA, validate Git
 blob integrity, and compare raw bytes with both checkout and freeze. The runtime
 receipt records that SHA, the independent freeze-file SHA-256 and combination.
@@ -180,3 +180,85 @@ The UI double enforces button/checkbox operation types and registration order;
 it is not a browser or native UI acceptance result. Native execution and
 final release acceptance remain Astra's responsibility. A machine PASS is not
 the final signoff.
+
+## T1 diagnostic-only entry and authorization
+
+The frozen set now includes both workflows (17 payload files; freeze excludes
+itself). mac-launcher-diagnostic.yml accepts only a push to the exact branch
+codex/diagnose-mac-launcher-1.0. There is no dispatch entry. The runtime repeats
+repository/ref/event/deleted-ref/attempt=1/hosted-Mac/architecture/Node20/owner
+checks. Source and freeze bytes are read from the SAME exact commit before T1.
+An exclusive RUNNER_TEMP run/SHA/architecture marker and a case marker precede
+spawn. These are per-run guards, NOT cross-run authorization or exactly-once.
+
+Before any ref operation the parent/Astra must review candidate AND default
+workflow trigger chains, prove no open PR from this head to main, bind READY to
+the exact candidate and raw freeze, and consume one atomic create/lease-update
+authorization. Register the resulting run handle and only follow it. Do not
+retry, amend-push, dispatch or delete/recreate a ref to obtain another attempt.
+This source delivery performs none of those remote operations.
+
+Entry: init-t1 macOS <arm64|x64>, verify, t1-run, t1-cleanup, publish. Prepare
+uses only the read-only frozen-source check. There is no dependency install,
+DMG download, product, Playwright, signing change, Keychain setup, credentials,
+network probe, release action, product collector or automatic A/B/C/D follow-on.
+The two fixed Mac runners each execute one T1. Success is TOOL_CHAIN_PASS only;
+product and Windows are NOT_EXECUTED, and Mac product acceptance stays BLOCKED.
+
+Both original-product setup and system-true T1 use the same pure renderer.
+The unchanged LF profile with final newline is pinned to SHA256
+f7dfa3333acc36436a1dcb4ad350a8823f403439c7c49622ede267dd49f89e0a.
+Only the enum terminal target changes; shebang, exec, sandbox -f, --, quoting and
+quoted dollar-at remain identical. The receipt binds raw profile/wrapper hashes
+and a comparison-only template hash. Execution bytes are never normalized.
+T1 checks the three fixed system files and executes its own wrapper directly,
+with shell:false, empty arguments, closed stdin, safeEnvironment and the frozen
+harness directory as cwd. Shell/loader injection inputs block, rather than being
+silently removed and called an exact reproduction. It is explicitly NOT a
+reproduction of Playwright inspector flags, stdio, Electron, signing/quarantine,
+Keychain, network effectiveness or the product process tree.
+
+The observation limit is 5 seconds plus a 2-second termination grace. Only the
+held ChildProcess may be terminated; kill errors are safe secondary diagnostics,
+and an unobserved exit remains incomplete. Stdout is counted only; stderr is
+incrementally decoded in memory, capped at 8 KiB, 1 KiB per message and four
+classifications. No raw output or output hash is persisted. Recognition requires
+an anchored fixed tool message; profile locations must name this exact profile
+and fit its six lines. Tokens come only from its finite vocabulary. Unknown,
+malformed, conflicting, secret-bearing or truncated text stays unknown; exit65
+alone never proves an SBPL error. Even a recognized later reproduction does not
+retroactively manufacture stderr for the earlier failed product run.
+
+## Cleanup journal and incomplete boundaries
+
+A caller-entered event is synchronously and exclusively persisted before any
+await or platform side effect. The actual caller role is test-finally or
+workflow-cleanup. Caller/helper events have independent sequences and immutable
+files, not a shared cross-process array. Helper spawn intent, actual spawn,
+helper entry, each fixed resource operation, helper finish and caller receipt
+are separate observations. Each attempt retains its own ID; missing completion
+is null/incomplete, including helper success with no caller receipt.
+
+A case-owned active lease serializes Mac resource cleanup. Identity records use
+PID plus a hash of ps uid/start/comm, not mtime or a guessed executable. A live,
+reused, unconfirmed or unrecorded process blocks recovery. Recovery requires
+clean bounded OS absence observations for BOTH recorded caller and helper; an
+exclusive recovery gate prevents competing stale-lock takeover. An interrupted
+recovery gate is blocked, never age-stolen. Resource operations are limited to
+the fixed list below. An unfinished operation or an unconfirmed resource-command
+exit also blocks recovery even when the caller/helper are gone; no child absence
+is inferred from its parent's exit. The helper stops further resource changes
+when its held command's close was not observed. The operations are
+owned-process cleanup, mount detach and the three existing Keychain restore /
+delete steps. T1 performs no helper or Keychain operation: those are not-needed;
+only the observed owned-tool close can satisfy its process completion receipt.
+
+Journal events remain private in the case. Archive/publish fold them into the
+existing four JSON basenames only. Network cleanupHistory/cleanupProjection name
+the source attempt, caller role, observation time and completeness; they do not
+rewrite controls, inherited or probeComplete. Prior unknown attempts and the
+original primary error remain visible even after a later successful cleanup.
+
+All added development checks use the supplied isolated Node20 on Windows with
+K-drive temporary fixtures and injected process/OS doubles. They are not Mac
+execution, not final acceptance and not proof of the historical exit65 cause.

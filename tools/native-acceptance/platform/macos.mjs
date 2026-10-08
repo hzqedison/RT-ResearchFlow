@@ -1,11 +1,34 @@
 import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { hash, enterCleanupHelper, cleanupOperations } from '../evidence.mjs'
 import { safeDiagnostic } from '../evidence.mjs'
 import path from 'node:path'
 import { command, controlledRoot, requireCondition as need, AcceptanceError, hashFile } from '../evidence.mjs'
 
-const [action, suppliedRoot, installer, version] = process.argv.slice(2)
+export const ORIGINAL_PROFILE_SHA256 = 'f7dfa3333acc36436a1dcb4ad350a8823f403439c7c49622ede267dd49f89e0a'
+export function renderMacMaterials(root, target) {
+  need(path.isAbsolute(root) && !/[\r\n\0]/.test(root) && ['original-product', 'system-true'].includes(target), 'BLOCKED_INPUT', 'MAC_MATERIAL_TARGET_INVALID')
+  const profile = '(version 1)\n(allow default)\n(deny network-outbound)\n(allow network-outbound (remote ip "127.0.0.1:*"))\n(allow network-outbound (remote ip "[::1]:*"))\n(allow network-outbound (remote unix-socket))\n'
+  const quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
+  const executable = target === 'system-true' ? '/usr/bin/true' : path.join(root, 'install/RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow')
+  const profilePath = path.join(root, 'network.sb')
+  const wrapper = '#!/bin/bash\nexec /usr/bin/sandbox-exec -f ' + quote(profilePath) + ' -- ' + quote(executable) + ' "$@"\n'
+  const template = wrapper.replace(quote(profilePath), "'<PROFILE>'").replace(quote(executable), "'<TARGET>'")
+  return { profile, wrapper, template }
+}
+export function validateMacMaterials(root, target, profile, wrapper) {
+  const expected = renderMacMaterials(root, target)
+  need(Buffer.from(profile).equals(Buffer.from(expected.profile)) && hash(profile) === ORIGINAL_PROFILE_SHA256
+    && Buffer.from(wrapper).equals(Buffer.from(expected.wrapper)), 'BLOCKED_INPUT', 'MAC_MATERIAL_BYTES_CHANGED')
+  const other = renderMacMaterials(root, target === 'system-true' ? 'original-product' : 'system-true')
+  need(expected.template === other.template, 'BLOCKED_INPUT', 'MAC_WRAPPER_TEMPLATE_CHANGED')
+  return { profileSha256: hash(profile), wrapperSha256: hash(wrapper), templateSha256: hash(expected.template), templateMatches: true }
+}
+
+export async function macMain(argv = process.argv.slice(2)) {
+const [action, suppliedRoot, installer, version] = argv
 const { root, owner } = controlledRoot()
-need(suppliedRoot === root && owner.platform === 'macOS', 'BLOCKED_ENVIRONMENT', 'MAC_OWNER_INVALID')
+need(suppliedRoot === root && owner.platform === 'macOS' && !owner.mode, 'BLOCKED_ENVIRONMENT', 'MAC_OWNER_INVALID')
 const bundle = path.join(root, 'install', 'RT-ResearchFlow.app')
 const executable = path.join(bundle, 'Contents/MacOS/RT-ResearchFlow')
 const keychain = path.join(root, 'acceptance.keychain-db')
@@ -63,11 +86,10 @@ async function main() {
     await run('/usr/bin/security', ['default-keychain', '-d', 'user', '-s', keychain])
     need(quotedPaths(await run('/usr/bin/security', ['default-keychain', '-d', 'user']))[0] === keychain,
       'BLOCKED_ENVIRONMENT', 'TEMP_KEYCHAIN_NOT_DEFAULT')
-    const policy = '(version 1)\n(allow default)\n(deny network-outbound)\n(allow network-outbound (remote ip "127.0.0.1:*"))\n(allow network-outbound (remote ip "[::1]:*"))\n(allow network-outbound (remote unix-socket))\n'
-    fs.writeFileSync(path.join(root, 'network.sb'), policy, { flag: 'wx', mode: 0o600 })
-    const shellQuote = value => "'" + value.replaceAll("'", "'\\''") + "'"
-    fs.writeFileSync(path.join(root, 'launch-app.sh'), '#!/bin/bash\nexec /usr/bin/sandbox-exec -f '
-      + shellQuote(path.join(root, 'network.sb')) + ' -- ' + shellQuote(executable) + ' "$@"\n', { flag: 'wx', mode: 0o700 })
+    const materials = renderMacMaterials(root, 'original-product')
+    validateMacMaterials(root, 'original-product', materials.profile, materials.wrapper)
+    fs.writeFileSync(path.join(root, 'network.sb'), materials.profile, { flag: 'wx', mode: 0o600 })
+    fs.writeFileSync(path.join(root, 'launch-app.sh'), materials.wrapper, { flag: 'wx', mode: 0o700 })
     return { ok: true, uid: String(state.uid), policy: 'inherited-sandbox-loopback-only' }
   }
   if (action === 'install') {
@@ -110,30 +132,37 @@ async function main() {
   }
   if (action === 'processes') return { ok: true, processes: await processes() }
   if (action === 'cleanup') {
-    let failed = false
-    for (const item of await processes()) {
-      if (!item.exe.startsWith(root + '/')) { failed = true; continue }
-      // Re-read PID/executable before signalling. No killall, no user-wide process kill.
-      const current = (await processes()).find(other => other.pid === item.pid && other.exe === item.exe)
-      if (current) { try { process.kill(item.pid, 'SIGKILL') } catch (error) { if (error.code !== 'ESRCH') failed = true } }
-    }
-    if (state.mountPending) {
-      try { await run('/usr/bin/hdiutil', ['detach', mount], { timeout: 20000 }); state.mountPending = false } catch { failed = true }
-    }
-    if (state.default && state.search) {
-      try { await run('/usr/bin/security', ['default-keychain', '-d', 'user', '-s', state.default]) } catch { failed = true }
-      try { await run('/usr/bin/security', ['list-keychains', '-d', 'user', '-s', ...state.search]) } catch { failed = true }
-      if (state.keychainCreated && fs.existsSync(keychain)) {
-        try { await run('/usr/bin/security', ['delete-keychain', keychain]); state.keychainCreated = false } catch { failed = true }
-      }
-    }
-    save()
-    need(!failed && (await processes()).length === 0, 'BLOCKED_ENVIRONMENT', 'MAC_CLEANUP_INCOMPLETE')
-    return { ok: true, cleanupSucceeded: true }
+    const journal = await enterCleanupHelper(installer, version, { root, owner })
+    return cleanupOperations(journal, [
+      { operation: 'owned-process-cleanup', needed: true, run: async () => {
+        for (const item of await processes()) {
+          need(item.exe.startsWith(root + '/'), 'BLOCKED_ENVIRONMENT', 'MAC_UNOWNED_CLEANUP_PROCESS')
+          const current = (await processes()).find(other => other.pid === item.pid && other.exe === item.exe)
+          if (current) try { process.kill(item.pid, 'SIGKILL') } catch (error) {
+            if (error.code !== 'ESRCH') { error.syscall = 'kill'; throw error }
+          }
+        }
+        need((await processes()).length === 0, 'BLOCKED_ENVIRONMENT', 'MAC_CLEANUP_PROCESSES_REMAIN')
+      } },
+      { operation: 'mount-detach', needed: !!state.mountPending, run: async () => {
+        await run('/usr/bin/hdiutil', ['detach', mount], { timeout: 20000 }); state.mountPending = false; save()
+      } },
+      { operation: 'keychain-default-restore', needed: !!(state.default && state.search), run: async () => {
+        await run('/usr/bin/security', ['default-keychain', '-d', 'user', '-s', state.default])
+      } },
+      { operation: 'keychain-search-restore', needed: !!(state.default && state.search), run: async () => {
+        await run('/usr/bin/security', ['list-keychains', '-d', 'user', '-s', ...state.search])
+      } },
+      { operation: 'keychain-delete', needed: !!(state.default && state.search && state.keychainCreated && fs.existsSync(keychain)), run: async () => {
+        await run('/usr/bin/security', ['delete-keychain', keychain]); state.keychainCreated = false; save()
+      } },
+    ])
   }
   throw new AcceptanceError('BLOCKED_INPUT', 'UNKNOWN_MAC_ACTION')
 }
-main().then(value => process.stdout.write(JSON.stringify(value))).catch(error => {
+return main()
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) macMain().then(value => process.stdout.write(JSON.stringify(value))).catch(error => {
   process.stdout.write(JSON.stringify({ ok: false, diagnostic: safeDiagnostic(error, 'unknown', 'MAC_PLATFORM_FAILURE'), kind: error.kind || 'BLOCKED_ENVIRONMENT', code: error.code && /^[A-Z0-9_]+$/.test(error.code) ? error.code : 'MAC_CONTROL_FAILED' }))
   process.exitCode = 1
 })

@@ -7,6 +7,9 @@ import vm from 'node:vm'
 import { spawnSync } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import { EventEmitter } from 'node:events'
+import { Readable } from 'node:stream'
+import { fileURLToPath } from 'node:url'
+import { renderMacMaterials, validateMacMaterials, ORIGINAL_PROFILE_SHA256 } from './platform/macos.mjs'
 import * as evidence from './evidence.mjs'
 import { scanEvidence, hash, relative, safeEnvironment, assertHosted, validateManifest, minimalResult, contract } from './evidence.mjs'
 const require = createRequire(import.meta.url)
@@ -111,7 +114,7 @@ function offlineHarness({ programs = ['C:\\offline-case\\install\\RT-ResearchFlo
       checkpoint: (stage, phase) => { journal.stage = stage; journal.checkpoints.push({ stage, phase: phase || 'A' }); return journal },
       requireFrozenExecution: () => {
         if (freezeFailure) throw freezeFailure
-        return { harnessSha: owner.harnessSha, freezeSha256: 'd'.repeat(64), combinedSha256: 'c'.repeat(64), fileCount: 16 }
+        return { harnessSha: owner.harnessSha, freezeSha256: 'd'.repeat(64), combinedSha256: 'c'.repeat(64), fileCount: evidence.FROZEN_PATHS.length }
       },
       recordFailure: (error, stage, code) => {
         evidence.applyFailure(journal, error, stage, code)
@@ -453,15 +456,15 @@ function frozenFixture() {
   return { sourceSha, local, freeze, freezeBytes, committed, requests, readLocal, readCommit }
 }
 
-test('freeze verifies exactly 16 raw files and same-commit freeze bytes without self-referential hashing', async () => {
+test('freeze verifies exactly 17 raw files and same-commit freeze bytes without self-referential hashing', async () => {
   const fixture = frozenFixture()
   const receipt = await evidence.verifyFrozenBytes(fixture.freezeBytes, fixture.sourceSha, fixture.readLocal, fixture.readCommit)
-  assert.equal(receipt.fileCount, 16); assert.equal(receipt.harnessSha, fixture.sourceSha)
+  assert.equal(receipt.fileCount, 17); assert.equal(receipt.harnessSha, fixture.sourceSha)
   assert.equal(receipt.combinedSha256, fixture.freeze.combinedSha256)
   assert.equal(receipt.freezeSha256, hash(fixture.freezeBytes))
   assert.equal(fixture.freeze.files.some(item => item.path === evidence.FREEZE_RELATIVE), false)
   assert.equal(fixture.freezeBytes.toString().includes(fixture.sourceSha), false)
-  assert.equal(fixture.requests.length, 17)
+  assert.equal(fixture.requests.length, 18)
   assert.doesNotThrow(() => scanEvidence(receipt))
 })
 
@@ -534,7 +537,7 @@ function runCollection(operation, platforms, mutate = () => {}) {
         assertions: names.map(name => ({ name, passed: true })) }
       mutate(result)
       const inputs = { ...identity, manifestSha256: hash(fs.readFileSync(new URL('../../tests/fixtures/releases/native-upgrade-1.0-1.1.json', import.meta.url))),
-        frozenSource: { harnessSha: sha, fileCount: 16, freezeSha256: hash(freezeBytes), combinedSha256: freeze.combinedSha256 } }
+        frozenSource: { harnessSha: sha, fileCount: evidence.FROZEN_PATHS.length, freezeSha256: hash(freezeBytes), combinedSha256: freeze.combinedSha256 } }
       const network = { ...identity, inherited: true, descendantsCovered: true, cleanupSucceeded: true,
         credentialRequestObserved: false, controls: Array.from({ length: 12 }, () => ({ loopback: true, externalDenied: true })) }
       const installers = { ...identity, events: ['1.0.0', '1.1.0'].map(version => ({ version, exitCode: 0 })) }
@@ -737,3 +740,563 @@ test('safe diagnostics retain known syscall and numeric errno, rejecting arbitra
   for (const field of ['syscall', 'errnoNumber', 'targetRole']) assert.equal(Object.hasOwn(unknown, field), false)
   assert.throws(() => scanEvidence({ ...projected, description: 'Bearer hidden-token' }))
 })
+
+const diagnosticRoot = path.resolve(process.cwd(), '.synthetic-owned-case')
+test('shared material renderer preserves original profile bytes and exact wrapper except the enum target', () => {
+  const original = renderMacMaterials(diagnosticRoot, 'original-product'), probe = renderMacMaterials(diagnosticRoot, 'system-true')
+  assert.equal(hash(probe.profile), 'f7dfa3333acc36436a1dcb4ad350a8823f403439c7c49622ede267dd49f89e0a')
+  assert.equal(ORIGINAL_PROFILE_SHA256, hash(original.profile))
+  assert.equal(original.template, probe.template)
+  assert.equal(probe.template, '#!/bin/bash\nexec /usr/bin/sandbox-exec -f \'<PROFILE>\' -- \'<TARGET>\' "$@"\n')
+  assert.equal(probe.wrapper.includes(" -- '/usr/bin/true' \"$@\"\n"), true)
+  assert.equal(validateMacMaterials(diagnosticRoot, 'system-true', probe.profile, probe.wrapper).templateMatches, true)
+  for (const profile of [probe.profile.slice(0, -1), probe.profile.replace('127.0.0.1', '127.0.0.2'), probe.profile.replaceAll('\n', '\r\n')]) {
+    assert.throws(() => validateMacMaterials(diagnosticRoot, 'system-true', profile, probe.wrapper), /MAC_MATERIAL_BYTES_CHANGED/)
+  }
+  for (const wrapper of [original.wrapper, probe.wrapper.replace(' -- ', ' '), probe.wrapper.replace('"$@"', '$@'), probe.wrapper.replace(' -f ', ' --file ')]) {
+    assert.throws(() => validateMacMaterials(diagnosticRoot, 'system-true', probe.profile, wrapper), /MAC_MATERIAL_BYTES_CHANGED/)
+  }
+  assert.throws(() => renderMacMaterials(diagnosticRoot, '/bin/sh'), /MAC_MATERIAL_TARGET_INVALID/)
+  const quoted = renderMacMaterials(path.join(diagnosticRoot, "a'b"), 'system-true')
+  assert.ok(quoted.wrapper.includes("a'\\''b"))
+})
+
+test('T1 trigger and environment guards reject alternate entry, repeat attempts, deletion and loader injection', () => {
+  const environment = { CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted',
+    GITHUB_REPOSITORY: 'hzqedison/RT-ResearchFlow', GITHUB_REF: evidence.T1_BRANCH, GITHUB_EVENT_NAME: 'push',
+    GITHUB_RUN_ATTEMPT: '1', GITHUB_SHA: 'a'.repeat(40), GITHUB_RUN_ID: '1', NA_T1_DELETED: 'false' }
+  evidence.assertT1Trigger(environment)
+  for (const mutation of [{ GITHUB_RUN_ATTEMPT: '2' }, { GITHUB_REF: 'refs/heads/main' }, { GITHUB_EVENT_NAME: 'workflow_dispatch' },
+    { RUNNER_ENVIRONMENT: 'self-hosted' }, { GITHUB_REPOSITORY: 'other/repository' }, { NA_T1_DELETED: 'true' }]) {
+    assert.throws(() => evidence.assertT1Trigger({ ...environment, ...mutation }), /T1_TRIGGER_NOT_AUTHORIZED/)
+  }
+  for (const name of ['BASH_ENV', 'ENV', 'SHELLOPTS', 'DYLD_INSERT_LIBRARIES', 'LD_PRELOAD', 'NODE_OPTIONS', 'BASH_FUNC_hidden%%']) {
+    assert.throws(() => evidence.validateToolEnvironment({ [name]: 'private-input' }), /TOOL_ENVIRONMENT_INJECTION/)
+  }
+  assert.equal(evidence.validateToolEnvironment({ PATH: 'synthetic', HOME: 'synthetic' }).environmentSafe, true)
+  // Real Node entry dispatch must stop on Windows before case creation or any Mac helper.
+  const child = spawnSync(process.execPath, [fileURLToPath(new URL('./evidence.mjs', import.meta.url)), 'init-t1', 'macOS', 'x64'], {
+    encoding: 'utf8', timeout: 10000, env: { ...process.env, ...environment },
+  })
+  assert.equal(child.status, 1); assert.match(child.stdout + child.stderr, /NATIVE_PLATFORM_REQUIRED/)
+})
+
+function syntheticProcess(behavior, { killThrows = false } = {}) {
+  const events = [], child = new EventEmitter(), calls = []
+  child.pid = 8123; child.exitCode = null; child.signalCode = null
+  for (const name of ['stdout', 'stderr', 'stdin']) child[name] = Object.assign(new EventEmitter(), { destroy() {} })
+  child.stdin.end = input => { calls.push(['stdin', input]) }
+  child.unref = () => calls.push(['unref'])
+  child.kill = signal => {
+    calls.push(['kill', signal])
+    if (killThrows) throw Object.assign(new Error('NA_KEYCHAIN_PASSWORD:never expose'), { code: 'EPERM', errno: -1, syscall: 'kill' })
+    child.signalCode = signal; child.emit('exit', null, signal); child.emit('close', null, signal); return true
+  }
+  const io = { setTimeout, clearTimeout, spawn(executable, args, options) {
+    calls.push(['spawn', executable, args, options])
+    queueMicrotask(() => { child.emit('spawn'); behavior(child) })
+    return child
+  } }
+  return { io, calls, child, events }
+}
+const t1Options = onEvent => ({ capture: 't1', timeout: 5000, graceMs: 2000, processRole: 'launcher-process',
+  profilePath: path.join(diagnosticRoot, 'network.sb'), wrapperPath: path.join(diagnosticRoot, 'launch-true.sh'), onEvent })
+test('T1 actual bounded spawn wiring uses no shell/arguments, closes stdin and observes only its one child', async () => {
+  const fake = syntheticProcess(child => { child.exitCode = 0; child.emit('exit', 0, null); child.emit('close', 0, null) })
+  const options = t1Options(event => fake.events.push(event))
+  const result = await evidence.boundedCommand(options.wrapperPath, [], options, fake.io)
+  assert.equal(fake.calls.filter(call => call[0] === 'spawn').length, 1)
+  const spawnCall = fake.calls.find(call => call[0] === 'spawn')
+  assert.equal(spawnCall[1], options.wrapperPath); assert.deepEqual(spawnCall[2], [])
+  assert.equal(spawnCall[3].shell, false); assert.deepEqual(spawnCall[3].stdio, ['pipe', 'pipe', 'pipe'])
+  assert.deepEqual(fake.calls.find(call => call[0] === 'stdin'), ['stdin', ''])
+  assert.deepEqual(fake.events.map(event => event.observation), ['spawn-requested', 'spawn-observed', 'exit-observed', 'close-observed'])
+  assert.equal(evidence.toolChainOutcome(result), 'TOOL_CHAIN_PASS')
+  assert.equal(result.stdout, ''); assert.equal(result.closeObserved, true)
+})
+
+test('T1 split stderr classification maps only an exact profile location and fixed token; exit65 alone remains unknown', async () => {
+  const options = t1Options(() => {})
+  const message = 'sandbox-exec: ' + options.profilePath + ":4:3: invalid IP address '127.0.0.1:*'\n"
+  const fake = syntheticProcess(child => {
+    const bytes = Buffer.from(message)
+    for (let i = 0; i < bytes.length; i += 3) child.stderr.emit('data', bytes.subarray(i, i + 3))
+    child.emit('exit', 65, null); child.emit('close', 65, null)
+  })
+  const result = await evidence.boundedCommand(options.wrapperPath, [], options, fake.io)
+  assert.equal(result.toolOutput.records[0].classification, 'SBPL_ADDRESS_ERROR')
+  assert.equal(result.toolOutput.records[0].targetRole, 'sandbox-profile')
+  assert.equal(result.toolOutput.records[0].line, 4); assert.equal(result.toolOutput.records[0].column, 3)
+  assert.equal(result.toolOutput.records[0].token, '127.0.0.1:*')
+  scanEvidence(result.toolOutput)
+  const empty = syntheticProcess(child => { child.emit('exit', 65, null); child.emit('close', 65, null) })
+  const unknown = await evidence.boundedCommand(options.wrapperPath, [], options, empty.io)
+  assert.equal(unknown.toolOutput.records[0].classification, 'UNCLASSIFIED_TOOL_EXIT')
+  assert.equal(evidence.toolChainOutcome(unknown), 'BLOCKED')
+})
+
+for (const terminal of [{ name: 'exit65', code: 65, signal: null }, { name: 'signal', code: null, signal: 'SIGTERM' }]) {
+  test('T1 classified stderr and observed ' + terminal.name + ' survive timeout without close', async () => {
+    const options = { ...t1Options(() => {}), timeout: 5, graceMs: 5 }
+    const fake = syntheticProcess(child => {
+      child.stderr.emit('data', Buffer.from('sandbox-exec: ' + options.profilePath + ":4:3: invalid IP address '127.0.0.1:*'\n"))
+      child.exitCode = terminal.code; child.signalCode = terminal.signal
+      child.emit('exit', terminal.code, terminal.signal)
+    })
+    await assert.rejects(evidence.boundedCommand(options.wrapperPath, [], options, fake.io), error => {
+      assert.equal(error.code, 'NATIVE_COMMAND_TIMEOUT'); assert.equal(error.kind, 'BLOCKED_ENVIRONMENT')
+      const result = error.processOutcome
+      assert.equal(result.code, terminal.code); assert.equal(result.signal, terminal.signal)
+      assert.equal(result.timeout, true); assert.equal(result.closeObserved, false)
+      assert.equal(result.toolOutput.outputComplete, false)
+      assert.deepEqual(result.toolOutput.records, [
+        { classification: 'SBPL_ADDRESS_ERROR', producerRole: 'sandbox-exec', observedRole: 'launcher-process',
+          targetRole: 'sandbox-profile', line: 4, column: 3, token: '127.0.0.1:*' },
+        { classification: 'TOOL_TIMEOUT', producerRole: 'unknown', observedRole: 'launcher-process' },
+      ])
+      assert.equal(evidence.toolChainOutcome(result, error), 'BLOCKED')
+      assert.equal(fake.calls.some(call => call[0] === 'kill'), false)
+      const state = minimalResult({ platform: 'macOS' }, 'BLOCKED_ENVIRONMENT', 'RUN_IN_PROGRESS')
+      evidence.applyFailure(state, error, 'tool-diagnostic', 'T1_COMMAND_FAILED')
+      assert.equal(state.reasonCode, 'NATIVE_COMMAND_TIMEOUT'); assert.equal(state.status, 'BLOCKED_ENVIRONMENT')
+      scanEvidence({ records: result.toolOutput.records, diagnostics: state.diagnostics }, [options.profilePath, options.wrapperPath])
+      return true
+    })
+  })
+}
+
+for (const failure of ['timeout', 'spawn-error']) {
+  test('T1 saturated four-fact evidence is never displaced by ' + failure, async () => {
+    const options = { ...t1Options(() => {}), timeout: 5, graceMs: 5 }
+    const expected = [1, 2, 3, 4].map(column => ({ classification: 'SBPL_ADDRESS_ERROR', producerRole: 'sandbox-exec',
+      observedRole: 'launcher-process', targetRole: 'sandbox-profile', line: 4, column, token: '127.0.0.1:*' }))
+    const fake = syntheticProcess(child => {
+      child.stderr.emit('data', Buffer.from(expected.map(record => 'sandbox-exec: ' + options.profilePath
+        + ':4:' + record.column + ": invalid IP address '127.0.0.1:*'\n").join('')))
+      child.exitCode = 65; child.emit('exit', 65, null)
+      if (failure === 'spawn-error') child.emit('error', Object.assign(new Error('NOT-A-REAL-CREDENTIAL:hidden'), {
+        code: 'EPERM', syscall: 'spawn ' + options.wrapperPath,
+      }))
+    })
+    await assert.rejects(evidence.boundedCommand(options.wrapperPath, [], options, fake.io), error => {
+      const code = failure === 'timeout' ? 'NATIVE_COMMAND_TIMEOUT' : 'NATIVE_COMMAND_UNAVAILABLE'
+      assert.equal(error.code, code)
+      const result = error.processOutcome
+      assert.equal(result.code, 65); assert.equal(result.signal, null); assert.equal(result.closeObserved, false)
+      assert.equal(result.timeout, failure === 'timeout'); assert.equal(result.toolOutput.outputComplete, false)
+      assert.deepEqual(result.toolOutput.records, expected)
+      assert.equal(result.toolOutput.records.length, 4); assert.equal(result.toolOutput.records[3].column, 4)
+      assert.equal(evidence.toolChainOutcome(result, error), 'BLOCKED')
+      const primary = evidence.safeDiagnostic(error, 'tool-diagnostic', error.code)
+      assert.equal(primary.reasonCode, code)
+      scanEvidence({ records: result.toolOutput.records, diagnostics: [primary] }, [options.profilePath, options.wrapperPath, 'hidden'])
+      return true
+    })
+  })
+}
+
+test('T1 no-stderr timeout remains incomplete even when termination subsequently closes the child', async () => {
+  const fake = syntheticProcess(() => {})
+  await assert.rejects(evidence.boundedCommand('synthetic-wrapper', [], {
+    ...t1Options(() => {}), timeout: 5, graceMs: 5,
+  }, fake.io), error => {
+    assert.equal(error.code, 'NATIVE_COMMAND_TIMEOUT')
+    const result = error.processOutcome
+    assert.equal(result.stderrBytes, 0); assert.equal(result.timeout, true)
+    assert.equal(result.closeObserved, true); assert.equal(result.code, null); assert.equal(result.signal, 'SIGKILL')
+    assert.equal(result.toolOutput.outputComplete, false)
+    assert.deepEqual(result.toolOutput.records, [{ classification: 'TOOL_TIMEOUT', producerRole: 'unknown', observedRole: 'launcher-process' }])
+    assert.equal(evidence.toolChainOutcome(result, error), 'BLOCKED')
+    scanEvidence(result.toolOutput)
+    return true
+  })
+})
+
+for (const mode of ['synchronous', 'after-stderr']) {
+  test('T1 ' + mode + ' spawn error retains only safe facts and never implies complete observation', async () => {
+    const options = { ...t1Options(() => {}), timeout: 5, graceMs: 5 }
+    const nativeError = Object.assign(new Error('NOT-A-REAL-CREDENTIAL:hidden ' + options.wrapperPath), {
+      code: 'ENOENT', syscall: 'spawn ' + options.wrapperPath,
+    })
+    const fake = syntheticProcess(child => {
+      child.stderr.emit('data', Buffer.from('sandbox-exec: ' + options.profilePath + ":4:3: invalid IP address '127.0.0.1:*'\n"))
+      child.emit('error', nativeError)
+    })
+    let spawns = 0
+    const io = mode === 'synchronous' ? { ...fake.io, spawn() { spawns++; throw nativeError } } : fake.io
+    await assert.rejects(evidence.boundedCommand(options.wrapperPath, [], options, io), error => {
+      assert.equal(error.code, 'NATIVE_COMMAND_UNAVAILABLE'); assert.equal(error.kind, 'BLOCKED_ENVIRONMENT')
+      const result = error.processOutcome
+      assert.equal(result.code, null); assert.equal(result.signal, null)
+      assert.equal(result.timeout, false); assert.equal(result.closeObserved, false)
+      assert.equal(result.toolOutput.outputComplete, false)
+      assert.deepEqual(result.toolOutput.records.map(record => record.classification), mode === 'synchronous'
+        ? ['TOOL_SPAWN_ERROR'] : ['SBPL_ADDRESS_ERROR', 'TOOL_SPAWN_ERROR'])
+      assert.equal(evidence.toolChainOutcome(result, error), 'BLOCKED')
+      const primary = evidence.safeDiagnostic(error, 'tool-diagnostic', error.code)
+      assert.equal(primary.errno, 'ENOENT'); assert.equal(primary.syscall, 'spawn')
+      scanEvidence({ records: result.toolOutput.records, diagnostics: [primary] }, [options.profilePath, options.wrapperPath, 'hidden'])
+      return true
+    })
+    assert.equal(mode === 'synchronous' ? spawns : fake.calls.filter(call => call[0] === 'spawn').length, 1)
+  })
+}
+
+test('T1 stderr counterexamples never leak text or infer compilation from errno/token/exit phrases', () => {
+  const profile = path.join(diagnosticRoot, 'network.sb'), wrapper = path.join(diagnosticRoot, 'launch-true.sh')
+  const valid = 'sandbox-exec: ' + profile + ':4:3: syntax error'
+  for (const raw of ['EPERM 65 remote ip', 'fake ' + valid, valid + ' /private/extra', valid + ' NOT-A-REAL-CREDENTIAL:secret',
+    '\x1b[31m' + valid, valid.replace(':4:3:', ':4:'), valid.replace(':4:3:', ':7:3:'), valid.replace(':4:3:', ':4:999:'),
+    valid.replace(profile, profile + '-other'), 'x'.repeat(1025), '\u79d8\u5bc6',
+    valid + '\nsandbox-exec: sandbox_apply: Operation not permitted']) {
+    const projection = evidence.classifyToolStderr(raw, profile, wrapper)
+    assert.equal(projection.outputComplete, false)
+    assert.equal(projection.records[0].classification, 'UNCLASSIFIED_TOOL_EXIT')
+    scanEvidence(projection, ['secret', '/private/extra'])
+  }
+})
+
+test('T1 malformed UTF8 and bounded output overflow block; raw bytes are never returned', async () => {
+  for (const variant of ['malformed', 'overflow', 'stdout']) {
+    const fake = syntheticProcess(child => {
+      if (variant === 'malformed') {
+        child.stderr.emit('data', Buffer.from([0xc3])); child.stderr.emit('data', Buffer.from([0x28]))
+      } else if (variant === 'overflow') child.stderr.emit('data', Buffer.alloc(8193, 65))
+      else child.stdout.emit('data', Buffer.from('NOT-A-REAL-CREDENTIAL:private'))
+      child.emit('exit', 0, null); child.emit('close', 0, null)
+    })
+    let result, error
+    try { result = await evidence.boundedCommand('synthetic-wrapper', [], t1Options(() => {}), fake.io) }
+    catch (failure) { error = failure; result = failure.processOutcome }
+    assert.equal(evidence.toolChainOutcome(result, error), 'BLOCKED')
+    assert.equal(result.stdout, '')
+    assert.equal(JSON.stringify(result).includes('NOT-A-REAL-CREDENTIAL:'), false)
+    if (variant === 'overflow') assert.equal(error.code, 'NATIVE_OUTPUT_LIMIT')
+  }
+})
+
+test('timeout kill throwing EPERM returns bounded incomplete evidence and retains timeout as primary', async () => {
+  const fake = syntheticProcess(() => {}, { killThrows: true })
+  const started = Date.now()
+  let error
+  try { await evidence.boundedCommand('synthetic-wrapper', [], { ...t1Options(event => fake.events.push(event)), timeout: 5, graceMs: 5 }, fake.io) }
+  catch (failure) { error = failure }
+  assert.ok(Date.now() - started < 1000)
+  assert.equal(error.code, 'NATIVE_COMMAND_TIMEOUT')
+  assert.equal(error.processOutcome.closeObserved, false)
+  assert.equal(error.secondaryDiagnostics[0].errno, 'EPERM'); assert.equal(error.secondaryDiagnostics[0].syscall, 'kill')
+  assert.equal(fake.calls.filter(call => call[0] === 'kill').length, 1)
+  const state = minimalResult({ platform: 'macOS' }, 'BLOCKED_ENVIRONMENT', 'RUN_IN_PROGRESS')
+  evidence.applyFailure(state, error, 'tool-diagnostic', 'T1_COMMAND_FAILED')
+  assert.equal(state.reasonCode, 'NATIVE_COMMAND_TIMEOUT')
+  assert.equal(state.diagnostics[1].role, 'secondary'); assert.equal(state.diagnostics[1].errno, 'EPERM')
+  scanEvidence(state.diagnostics)
+})
+
+function journalFixture() {
+  const base = fs.realpathSync(process.cwd()), root = fs.mkdtempSync(path.join(base, '.offline-journal-'))
+  const owner = { root, caseId: 'journal-offline', harnessSha: 'a'.repeat(40), runId: '1', runAttempt: '1', platform: 'macOS', arch: 'x64' }
+  return { root, owner, close() {
+    assert.equal(path.dirname(fs.realpathSync(root)), base); assert.ok(path.basename(root).startsWith('.offline-journal-'))
+    fs.rmSync(root, { recursive: true })
+  } }
+}
+const presentIdentity = async pid => ({ pid, status: 'present', processIdentity: 'b'.repeat(64) })
+const resourceNames = ['owned-process-cleanup', 'mount-detach', 'keychain-default-restore', 'keychain-search-restore', 'keychain-delete']
+
+test('journal publishes exclusive events; caller entry precedes identity await and incomplete attempts cannot overwrite each other', async () => {
+  const fixture = journalFixture()
+  try {
+    const first = evidence.beginCleanup('test-finally', fixture)
+    let events = evidence.readCleanupEvents(fixture.root, fixture.owner)
+    assert.equal(events.length, 1); assert.equal(events[0].observation, 'caller-entered')
+    await assert.rejects(evidence.acquireCleanupLease(first, async () => { throw new Error('offline interruption') }))
+    const second = evidence.beginCleanup('workflow-cleanup', fixture)
+    events = evidence.readCleanupEvents(fixture.root, fixture.owner)
+    assert.equal(evidence.foldCleanupEvents(events).attempts.length, 2)
+    assert.equal(evidence.foldCleanupEvents(events).attempts.every(item => item.cleanupSucceeded === null), true)
+    assert.throws(() => evidence.appendCleanupEvent({ ...first, sequence: 0 }, 'caller-entered'), error => error.code === 'EEXIST')
+    assert.notEqual(first.attemptId, second.attemptId)
+  } finally { fixture.close() }
+})
+
+test('helper-entry, in-operation and helper-finished-without-caller boundaries remain separately observable', async () => {
+  const fixture = journalFixture()
+  try {
+    const caller = evidence.beginCleanup('test-finally', fixture)
+    await evidence.acquireCleanupLease(caller, presentIdentity)
+    await assert.rejects(evidence.enterCleanupHelper(caller.attemptId, caller.callerRole, fixture, async () => { throw new Error('interrupted after helper entry') }))
+    let folded = evidence.foldCleanupEvents(evidence.readCleanupEvents(fixture.root, fixture.owner))
+    assert.equal(folded.attempts[0].events.some(item => item.observation === 'helper-entered'), true)
+    assert.equal(folded.attempts[0].helperReceipt, null); assert.equal(folded.attempts[0].cleanupSucceeded, null)
+    // Continue the same synthetic helper writer after its first immutable event.
+    const helper = { ...caller, writerRole: 'helper', sequence: 1 }
+    let unblock
+    const operation = evidence.cleanupOperations(helper, resourceNames.map((name, index) => ({ operation: name, needed: index === 0,
+      run: () => new Promise(resolve => { unblock = resolve }) })))
+    folded = evidence.foldCleanupEvents(evidence.readCleanupEvents(fixture.root, fixture.owner))
+    assert.equal(folded.attempts[0].events.at(-1).observation, 'operation-started')
+    assert.equal(folded.attempts[0].complete, false)
+    unblock(); await operation
+    folded = evidence.foldCleanupEvents(evidence.readCleanupEvents(fixture.root, fixture.owner))
+    assert.equal(folded.attempts[0].helperReceipt.cleanupSucceeded, true)
+    assert.equal(folded.attempts[0].callerReceipt, null); assert.equal(folded.attempts[0].cleanupSucceeded, null)
+  } finally { fixture.close() }
+})
+
+test('live or identity-unknown previous cleanup blocks another Keychain helper; confirmed absence permits a new lease', async () => {
+  const fixture = journalFixture()
+  try {
+    const first = evidence.beginCleanup('test-finally', fixture)
+    await evidence.acquireCleanupLease(first, presentIdentity)
+    evidence.appendCleanupEvent(first, 'helper-spawn-requested')
+    const next = evidence.beginCleanup('workflow-cleanup', fixture)
+    await assert.rejects(evidence.acquireCleanupLease(next, presentIdentity), /CLEANUP_PREVIOUS_IDENTITY_UNKNOWN/)
+    const helper = await evidence.enterCleanupHelper(first.attemptId, first.callerRole, fixture, presentIdentity)
+    const third = evidence.beginCleanup('workflow-cleanup', fixture)
+    await assert.rejects(evidence.acquireCleanupLease(third, presentIdentity), /CLEANUP_PREVIOUS_PROCESS_ALIVE/)
+    const fourth = evidence.beginCleanup('workflow-cleanup', fixture)
+    let queries = 0
+    await evidence.acquireCleanupLease(fourth, async pid => ++queries === 1 ? presentIdentity(pid) : { pid, status: 'absent' })
+    assert.equal(queries, 3)
+    assert.equal(JSON.parse(fs.readFileSync(path.join(fixture.root, 'cleanup-journal/active.json'), 'utf8')).attemptId, fourth.attemptId)
+    assert.ok(helper.attemptId === first.attemptId)
+    assert.equal(evidence.foldCleanupEvents(evidence.readCleanupEvents(fixture.root, fixture.owner)).attempts.length, 4)
+  } finally { fixture.close() }
+})
+
+test('later cleanup success projects its source without rewriting previous unknown, primary error or network controls', () => {
+  const fixture = journalFixture()
+  try {
+    const first = evidence.beginCleanup('test-finally', fixture), next = evidence.beginCleanup('workflow-cleanup', fixture)
+    evidence.appendCleanupEvent(next, 'caller-observed-result', { cleanupSucceeded: true, status: 'succeeded' })
+    const folded = evidence.foldCleanupEvents(evidence.readCleanupEvents(fixture.root, fixture.owner))
+    assert.equal(folded.attempts.find(item => item.attemptId === first.attemptId).cleanupSucceeded, null)
+    const network = { controls: [{ transport: 'node', loopback: false, externalDenied: false }], inherited: false, probeComplete: false }
+    const projected = evidence.networkCleanupProjection(network, folded)
+    assert.deepEqual(projected.controls, network.controls); assert.equal(projected.inherited, false); assert.equal(projected.probeComplete, false)
+    assert.equal(projected.cleanupHistory.length, 2)
+    assert.equal(projected.cleanupProjection.attemptId, next.attemptId)
+    assert.equal(projected.cleanupProjection.callerRole, 'workflow-cleanup')
+    assert.equal(projected.cleanupProjection.complete, true); assert.ok(projected.cleanupProjection.observedAt)
+    const state = minimalResult({ platform: 'macOS' }, 'BLOCKED_ENVIRONMENT', 'RUN_IN_PROGRESS')
+    evidence.applyFailure(state, Object.assign(new Error('EPERM'), { code: 'EPERM', syscall: 'kill' }), 'app-launch', 'ORIGINAL_FAILURE')
+    const result = evidence.mergeRunState({ status: 'PASS', complete: true }, { ...state, cleanup: true, cleanupEvidence: folded })
+    assert.equal(result.reasonCode, 'ORIGINAL_FAILURE'); assert.equal(result.complete, false)
+    scanEvidence(projected)
+  } finally { fixture.close() }
+})
+
+test('diagnostic-only evidence cannot satisfy either product collector even if its result is mislabeled PASS', () => {
+  for (const operation of ['collect', 'collect-mac']) {
+    const platforms = operation === 'collect' ? [['windows', 'x64'], ['macOS', 'arm64'], ['macOS', 'x64']] : [['macOS', 'arm64'], ['macOS', 'x64']]
+    const result = runCollection(operation, platforms, value => { value.mode = 'mac-launcher-T1' })
+    assert.equal(result.status, 1); assert.match(result.output, /DIAGNOSTIC_ARTIFACT_NOT_ACCEPTANCE/)
+  }
+})
+
+test('actual Mac helper cleanup argument wiring records operations without executing shell, Keychain or native APIs', async () => {
+  const fixture = journalFixture(), calls = [], writes = []
+  try {
+    const caller = evidence.beginCleanup('test-finally', fixture)
+    await evidence.acquireCleanupLease(caller, presentIdentity)
+    const sourceUrl = new URL('./platform/macos.mjs', import.meta.url)
+    const compiled = ts.transpileModule(fs.readFileSync(sourceUrl, 'utf8').replaceAll('import.meta.url', JSON.stringify(sourceUrl.href)), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, esModuleInterop: true, allowJs: true },
+      fileName: 'macos-offline.ts',
+    }).outputText
+    const module = { exports: {} }
+    const state = { default: '/synthetic/original.keychain-db', search: ['/synthetic/original.keychain-db'], uid: 1000, keychainCreated: true, mountPending: true }
+    vm.runInNewContext(compiled, {
+      module, exports: module.exports, Buffer,
+      process: { argv: [], env: {}, getuid: () => 1000, kill: () => assert.fail('No real process may be signalled') },
+      require(name) {
+        if (name === 'node:path') return path
+        if (name === 'node:url') return require(name)
+        if (name === 'node:fs') return {
+          existsSync: file => [path.join(fixture.root, 'mac-state.json'), path.join(fixture.root, 'acceptance.keychain-db')].includes(file),
+          readFileSync: file => { assert.equal(file, path.join(fixture.root, 'mac-state.json')); return JSON.stringify(state) },
+          writeFileSync: (file, value) => { assert.equal(file, path.join(fixture.root, 'mac-state.json')); writes.push(JSON.parse(value)) },
+        }
+        if (name === '../evidence.mjs') return { ...evidence, controlledRoot: () => fixture,
+          enterCleanupHelper: (id, role, owned) => evidence.enterCleanupHelper(id, role, owned, presentIdentity),
+          command: async (file, args) => {
+            calls.push([file, structuredClone(args)])
+            assert.ok(['/bin/ps', '/usr/bin/hdiutil', '/usr/bin/security'].includes(file))
+            return { code: 0, stdout: '', diagnostic: {}, signal: null }
+          },
+        }
+        throw new Error('OFFLINE_UNEXPECTED_MAC_IMPORT')
+      },
+    }, { timeout: 2000 })
+    const receipt = await module.exports.macMain(['cleanup', fixture.root, caller.attemptId, caller.callerRole])
+    assert.equal(receipt.attemptId, caller.attemptId); assert.equal(receipt.cleanupSucceeded, true)
+    assert.deepEqual(calls.filter(call => call[0] === '/usr/bin/security').map(call => call[1][0]), ['default-keychain', 'list-keychains', 'delete-keychain'])
+    const folded = evidence.foldCleanupEvents(evidence.readCleanupEvents(fixture.root, fixture.owner))
+    assert.deepEqual(folded.attempts[0].events.filter(event => event.observation === 'operation-ended').map(event => event.operation), resourceNames)
+    assert.equal(folded.attempts[0].helperReceipt.cleanupSucceeded, true)
+    assert.equal(folded.attempts[0].callerReceipt, null)
+    assert.equal(writes.at(-1).keychainCreated, false)
+    fixture.owner.mode = 'mac-launcher-T1'
+    await assert.rejects(module.exports.macMain(['setup', fixture.root]), /MAC_OWNER_INVALID/)
+  } finally { fixture.close() }
+})
+
+test('process absence requires a clean, closed ps receipt, not PID-only or stderr-bearing exit1', async () => {
+  const absent = await evidence.macProcessIdentity(1234, async () => ({ code: 1, stdout: '', stderrBytes: 0, closeObserved: true }))
+  assert.equal(absent.status, 'absent')
+  await assert.rejects(evidence.macProcessIdentity(1234, async () => ({ code: 1, stdout: '', stderrBytes: 17, closeObserved: true })), /CLEANUP_PROCESS_IDENTITY_UNAVAILABLE/)
+  await assert.rejects(evidence.macProcessIdentity(1234, async () => ({ code: 1, stdout: '', stderrBytes: 0, closeObserved: false })), /CLEANUP_PROCESS_IDENTITY_UNAVAILABLE/)
+  const present = await evidence.macProcessIdentity(1234, async () => ({ code: 0, stdout: '1234 501 Thu Oct  8 12:00:00 2026 /synthetic/node\n', stderrBytes: 0, closeObserved: true }))
+  assert.equal(present.status, 'present'); assert.match(present.processIdentity, /^[a-f0-9]{64}$/)
+  scanEvidence(present)
+})
+
+test('unconfirmed resource-command exit stops further resource changes and blocks lease recovery even if caller/helper are absent', async () => {
+  const fixture = journalFixture()
+  try {
+    const caller = evidence.beginCleanup('test-finally', fixture)
+    await evidence.acquireCleanupLease(caller, presentIdentity)
+    evidence.appendCleanupEvent(caller, 'helper-spawn-requested')
+    const helper = await evidence.enterCleanupHelper(caller.attemptId, caller.callerRole, fixture, presentIdentity)
+    const error = new evidence.AcceptanceError('BLOCKED_ENVIRONMENT', 'NATIVE_COMMAND_TIMEOUT')
+    error.processOutcome = { closeObserved: false }
+    let laterOperations = 0
+    await assert.rejects(evidence.cleanupOperations(helper, resourceNames.map((operation, index) => ({ operation, needed: true,
+      run: async () => { if (index === 0) throw error; laterOperations++ },
+    }))), value => value === error)
+    assert.equal(laterOperations, 0)
+    const folded = evidence.foldCleanupEvents(evidence.readCleanupEvents(fixture.root, fixture.owner))
+    assert.equal(folded.attempts[0].helperReceipt.cleanupSucceeded, null)
+    const next = evidence.beginCleanup('workflow-cleanup', fixture)
+    let queries = 0
+    await assert.rejects(evidence.acquireCleanupLease(next, async pid => ++queries === 1 ? presentIdentity(pid) : { pid, status: 'absent' }), /CLEANUP_RESOURCE_IDENTITY_UNKNOWN/)
+  } finally { fixture.close() }
+})
+
+test('actual publish folds a caller-only interrupted journal into the existing result before copying its four-file allowlist', () => {
+  const base = fs.realpathSync(process.cwd()), root = fs.mkdtempSync(path.join(base, 'rt-native-acceptance-offline-'))
+  try {
+    const owner = { root, caseId: 'publish-offline', harnessSha: 'a'.repeat(40), runId: '1', runAttempt: '1', platform: 'macOS', arch: 'x64' }
+    fs.writeFileSync(path.join(root, 'owner.json'), JSON.stringify(owner)); fs.mkdirSync(path.join(root, 'evidence'))
+    const sourceUrl = new URL('./evidence.mjs', import.meta.url)
+    const compiled = ts.transpileModule(fs.readFileSync(sourceUrl, 'utf8').replaceAll('import.meta.url', JSON.stringify(sourceUrl.href)), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, esModuleInterop: true }, fileName: 'evidence-offline.ts',
+    }).outputText
+    const module = { exports: {} }
+    vm.runInNewContext(compiled, { module, exports: module.exports, Buffer, URL, TextDecoder, structuredClone, setTimeout, clearTimeout,
+      process: { argv: [], pid: process.pid, platform: 'darwin', arch: 'x64',
+        env: { CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', NA_CASE_ROOT: root,
+          RUNNER_TEMP: base, GITHUB_SHA: owner.harnessSha, GITHUB_RUN_ID: '1', GITHUB_RUN_ATTEMPT: '1' } },
+      require(name) {
+        if (name === 'node:child_process') return { spawn: () => assert.fail('No native process in publication test'), ChildProcess: class {} }
+        assert.ok(name.startsWith('node:')); return require(name)
+      },
+    }, { timeout: 3000 })
+    const loaded = module.exports
+    loaded.recordFailure(Object.assign(new Error('EPERM'), { code: 'EPERM', syscall: 'kill' }), 'app-launch', 'ORIGINAL_LAUNCH_FAILURE')
+    const attempt = loaded.beginCleanup('workflow-cleanup') // deliberately no helper or finally
+    loaded.publishEvidence()
+    const published = JSON.parse(fs.readFileSync(path.join(root, 'public-evidence/acceptance-result.json'), 'utf8'))
+    assert.equal(published.reasonCode, 'ORIGINAL_LAUNCH_FAILURE')
+    assert.equal(published.cleanupEvidence.attempts.length, 1)
+    assert.equal(published.cleanupEvidence.attempts[0].attemptId, attempt.attemptId)
+    assert.equal(published.cleanupEvidence.attempts[0].cleanupSucceeded, null)
+    assert.deepEqual(fs.readdirSync(path.join(root, 'public-evidence')), ['acceptance-result.json'])
+  } finally {
+    assert.equal(path.dirname(fs.realpathSync(root)), base); assert.ok(path.basename(root).startsWith('rt-native-acceptance-offline-'))
+    fs.rmSync(root, { recursive: true })
+  }
+})
+
+for (const outcome of ['zero', 'unknown-exit65', 'timeout-kill-error', 'classified-exit65-no-close']) {
+  test('actual T1 entry/renderer/spawn/cleanup/publish wiring: ' + outcome + ', with no product or native system calls', async () => {
+    const parent = fs.realpathSync(process.cwd()), base = fs.mkdtempSync(path.join(parent, '.offline-t1-'))
+    const root = fs.mkdtempSync(path.join(base, 'rt-native-acceptance-')), output = [], timers = []
+    const owner = { root, caseId: 't1-offline', harnessSha: 'a'.repeat(40), runId: '1', runAttempt: '1', platform: 'macOS', arch: 'x64', mode: 'mac-launcher-T1' }
+    try {
+      fs.mkdirSync(path.join(root, 'evidence')); fs.writeFileSync(path.join(root, 'owner.json'), JSON.stringify(owner))
+      const freezeBytes = fs.readFileSync(new URL('./fixtures/harness-freeze.json', import.meta.url)), freeze = JSON.parse(freezeBytes)
+      fs.writeFileSync(path.join(root, 'freeze-receipt.json'), JSON.stringify({ harnessSha: owner.harnessSha, caseId: owner.caseId,
+        runId: owner.runId, runAttempt: 1, freezeSha256: hash(freezeBytes), combinedSha256: freeze.combinedSha256, fileCount: evidence.FROZEN_PATHS.length }))
+      const fake = syntheticProcess(child => {
+        if (outcome === 'timeout-kill-error') return
+        if (outcome === 'classified-exit65-no-close') {
+          child.stderr.emit('data', Buffer.from('sandbox-exec: ' + path.join(root, 'network.sb') + ":4:3: invalid IP address '127.0.0.1:*'\n"))
+          child.exitCode = 65; child.emit('exit', 65, null); return
+        }
+        if (outcome === 'unknown-exit65') child.stderr.emit('data', Buffer.from('EPERM 65 NOT-A-REAL-CREDENTIAL:hidden'))
+        const code = outcome === 'zero' ? 0 : 65
+        child.exitCode = code; child.emit('exit', code, null); child.emit('close', code, null)
+      }, { killThrows: outcome === 'timeout-kill-error' })
+      const systemFiles = new Set(['/bin/bash', '/usr/bin/sandbox-exec', '/usr/bin/true']), createdModes = new Map()
+      const sourceUrl = new URL('./evidence.mjs', import.meta.url)
+      const compiled = ts.transpileModule(fs.readFileSync(sourceUrl, 'utf8').replaceAll('import.meta.url', JSON.stringify(sourceUrl.href)), {
+        compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, esModuleInterop: true }, fileName: 't1-entry-offline.ts',
+      }).outputText
+      const module = { exports: {} }
+      const runtime = { argv: [], pid: process.pid, platform: 'darwin', arch: 'x64', versions: { node: '20.20.2' },
+        stdout: { write: text => output.push(text) },
+        env: { CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', NA_CASE_ROOT: root, RUNNER_TEMP: base,
+          GITHUB_SHA: owner.harnessSha, GITHUB_RUN_ID: '1', GITHUB_RUN_ATTEMPT: '1', GITHUB_REF: evidence.T1_BRANCH,
+          GITHUB_EVENT_NAME: 'push', GITHUB_REPOSITORY: 'hzqedison/RT-ResearchFlow', NA_T1_DELETED: 'false' } }
+      vm.runInNewContext(compiled, { module, exports: module.exports, Buffer, URL, TextDecoder, structuredClone, process: runtime,
+        setTimeout: (fn, ms) => { timers.push(ms); return setTimeout(fn, Math.min(ms, 5)) }, clearTimeout,
+        require(name) {
+          if (name === './platform/macos.mjs') return { renderMacMaterials, validateMacMaterials }
+          if (name === 'node:child_process') return { spawn: (file, args, options) => {
+            assert.equal(file, path.join(root, 'launch-true.sh')); assert.deepEqual(structuredClone(args), [])
+            return fake.io.spawn(file, args, options)
+          }, ChildProcess: class {} }
+          if (name === 'node:fs') return { ...fs,
+            lstatSync: file => {
+              if (systemFiles.has(file)) return { isFile: () => true, isSymbolicLink: () => false, mode: 0o100755 }
+              const stat = fs.lstatSync(file)
+              // Windows does not expose POSIX execute bits. Model only the mode
+              // actually requested by the renderer writer; do not relax its gate.
+              if (createdModes.has(file)) stat.mode = (stat.mode & ~0o777) | createdModes.get(file)
+              return stat
+            },
+            writeFileSync: (file, value, options) => {
+              if ([path.join(root, 'network.sb'), path.join(root, 'launch-true.sh')].includes(file)) createdModes.set(file, options.mode)
+              return fs.writeFileSync(file, value, options)
+            },
+            accessSync: (file, mode) => { assert.ok(systemFiles.has(file)); assert.equal(mode, fs.constants.X_OK) },
+            createReadStream: file => { assert.ok(systemFiles.has(file)); return Readable.from([Buffer.from('offline-system-tool-fixture')]) },
+          }
+          assert.ok(name.startsWith('node:')); return require(name)
+        },
+      }, { timeout: 3000 })
+      const loaded = module.exports
+      await loaded.runT1(); loaded.cleanupT1(); loaded.publishEvidence()
+      const result = JSON.parse(fs.readFileSync(path.join(root, 'public-evidence/acceptance-result.json'), 'utf8'))
+      assert.equal(fake.calls.filter(call => call[0] === 'spawn').length, 1, JSON.stringify(result.diagnostics))
+      assert.equal(result.toolDiagnostic.diagnosticStatus, outcome === 'zero' ? 'TOOL_CHAIN_PASS' : 'BLOCKED')
+      assert.equal(result.complete, false); assert.notEqual(result.status, 'PASS')
+      assert.match(result.toolDiagnostic.scope, /product NOT_EXECUTED; Windows NOT_EXECUTED/)
+      assert.equal(result.toolDiagnostic.profileSha256, ORIGINAL_PROFILE_SHA256)
+      assert.equal(result.toolDiagnostic.tools.length, 3)
+      assert.equal(result.cleanupEvidence.attempts[0].events.some(event => event.observation === 'helper-spawn-requested'), false)
+      assert.equal(result.cleanupEvidence.attempts[0].events.filter(event => event.operation?.startsWith('keychain')).every(event => event.status === 'not-needed'), true)
+      const incomplete = ['timeout-kill-error', 'classified-exit65-no-close'].includes(outcome)
+      assert.equal(result.cleanupEvidence.attempts[0].cleanupSucceeded, incomplete ? null : true)
+      assert.deepEqual(fs.readdirSync(path.join(root, 'public-evidence')).sort(), [...evidence.FILES].sort())
+      assert.equal(output.join('').includes('NOT-A-REAL-CREDENTIAL:'), false)
+      assert.equal(timers[0], 5000)
+      if (incomplete) assert.ok(timers.includes(2000))
+      if (outcome === 'classified-exit65-no-close') {
+        assert.equal(result.reasonCode, 'NATIVE_COMMAND_TIMEOUT')
+        assert.equal(result.toolDiagnostic.exitCode, 65); assert.equal(result.toolDiagnostic.signal, null)
+        assert.equal(result.toolDiagnostic.timeout, true); assert.equal(result.toolDiagnostic.closeObserved, false)
+        assert.equal(result.toolDiagnostic.outputComplete, false)
+        assert.deepEqual(result.toolDiagnostic.records.map(record => record.classification), ['SBPL_ADDRESS_ERROR', 'TOOL_TIMEOUT'])
+        scanEvidence(result, [root, path.join(root, 'network.sb')])
+      }
+      await assert.rejects(loaded.runT1(), error => error.code === 'EEXIST')
+      assert.equal(fake.calls.filter(call => call[0] === 'spawn').length, 1)
+    } finally {
+      assert.equal(path.dirname(fs.realpathSync(base)), parent); assert.ok(path.basename(base).startsWith('.offline-t1-'))
+      fs.rmSync(base, { recursive: true })
+    }
+  })
+}

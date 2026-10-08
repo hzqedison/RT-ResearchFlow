@@ -15,6 +15,7 @@ export const KINDS = ['BLOCKED_INPUT', 'BLOCKED_ENVIRONMENT', 'FAIL_INSTALL', 'F
 const shaPattern = /^[a-f0-9]{64}$/
 const commitPattern = /^[a-f0-9]{40}$/
 export const FROZEN_PATHS = [
+  '.github/workflows/mac-launcher-diagnostic.yml',
   '.github/scripts/fetch-upgrade-installers.cjs', '.github/workflows/native-upgrade-acceptance.yml',
   'tests/fixtures/releases/native-upgrade-1.0-1.1.json', 'tools/native-acceptance/README.md',
   'tools/native-acceptance/evidence.mjs', 'tools/native-acceptance/fixtures/version-contract.json',
@@ -27,7 +28,7 @@ export const FROZEN_PATHS = [
 export const FREEZE_RELATIVE = 'tools/native-acceptance/fixtures/harness-freeze.json'
 const STAGES = new Set(['case-init', 'freeze-verification', 'download', 'runner-start', 'discovery-or-worker-start',
   'test-start', 'module-load', 'constructor', 'execute', 'platform-setup', 'platform-install', 'app-launch',
-  'network-probe', 'fixture-seed', 'state-read', 'normal-exit', 'cleanup', 'archive', 'publish', 'runner-end', 'unknown'])
+  'network-probe', 'fixture-seed', 'state-read', 'normal-exit', 'cleanup', 'archive', 'publish', 'runner-end', 'unknown', 'tool-preflight', 'tool-diagnostic'])
 const ERROR_CLASSES = new Set(['Error', 'TypeError', 'SyntaxError', 'ReferenceError', 'RangeError', 'TimeoutError', 'AssertionError', 'AggregateError'])
 const ERRNOS = new Set(['EACCES', 'EPERM', 'ENOENT', 'EEXIST', 'EISDIR', 'ENOTDIR', 'ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET',
   'ENOSPC', 'EADDRINUSE', 'EINVAL', 'EIO', 'ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'ERR_REQUIRE_ESM',
@@ -45,7 +46,12 @@ export function hash(value) { return createHash('sha256').update(value).digest('
 for (const key of ['stage', 'checkpoints', 'diagnostics', 'errorClass', 'errno', 'signal', 'description', 'role', 'line', 'column',
   'cleanupEvidence', 'attempts', 'time', 'frozenSource', 'freezeSha256', 'combinedSha256', 'fileCount', 'files',
   'syscall', 'errnoNumber', 'processRole', 'targetRole', 'launchDiagnostics', 'processEvents', 'exists', 'executable',
-  'mode', 'regularFile', 'codesign', 'debugConnection', 'identityVerified', 'observation', 'probeComplete']) safeKeys.add(key)
+  'mode', 'regularFile', 'codesign', 'debugConnection', 'identityVerified', 'observation', 'probeComplete',
+  'attemptId', 'callerRole', 'callerPid', 'writerRole', 'sequence', 'operation', 'processIdentity', 'closeObserved',
+  'helperReceipt', 'callerReceipt', 'observedAt', 'cleanupProjection', 'cleanupHistory', 'producerRole', 'observedRole',
+  'classification', 'token', 'bufferTruncated', 'timeout', 'stdoutBytes', 'stderrBytes', 'profileSha256', 'wrapperSha256',
+  'templateSha256', 'templateMatches', 'tools', 'preconditions', 'environmentPolicy', 'environmentSafe', 'cwdPolicy',
+  'diagnosticStatus', 'toolDiagnostic', 'outputComplete', 'requestedSignal']) safeKeys.add(key)
 
 // Never return the message, stack, arguments, arbitrary error properties, or an
 // arbitrary error name. Even Playwright errors can contain complete IPC inputs.
@@ -98,6 +104,12 @@ export function applyFailure(result, error, stage, fixedCode) {
     result.reasonCode = diagnostic.reasonCode
   }
   result.diagnostics = [...previous, diagnostic].slice(0, 20)
+  for (const secondary of error?.secondaryDiagnostics || []) {
+    if (result.diagnostics.length >= 20) break
+    result.diagnostics.push({ ...safeDiagnostic({ name: secondary.errorClass, code: secondary.errno,
+      errno: secondary.errnoNumber, syscall: secondary.syscall, signal: secondary.signal,
+      processRole: secondary.processRole }, stage, 'OWNED_PROCESS_TERMINATION_FAILED'), role: 'secondary' })
+  }
   result.complete = false
   return result
 }
@@ -105,6 +117,8 @@ function caseState() {
   const { root, owner } = controlledRoot()
   const file = path.join(root, 'run-state.json')
   const value = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : minimalResult(owner, 'BLOCKED_ENVIRONMENT', 'RUN_IN_PROGRESS')
+  const folded = foldCleanupEvents(readCleanupEvents(root, owner))
+  if (folded.attempts.length) { value.cleanupEvidence = folded; value.cleanup = folded.attempts.at(-1).cleanupSucceeded === true }
   return { root, owner, file, value }
 }
 function saveState(state) {
@@ -210,7 +224,7 @@ export function requireFrozenExecution() {
   const bytes = localFrozenBytes(FREEZE_RELATIVE), freeze = JSON.parse(bytes.toString('utf8')), files = validateFreeze(freeze)
   requireCondition(receipt.harnessSha === owner.harnessSha && receipt.caseId === owner.caseId && receipt.runId === owner.runId
     && receipt.runAttempt === Number(owner.runAttempt) && receipt.freezeSha256 === hash(bytes)
-    && receipt.combinedSha256 === freeze.combinedSha256 && receipt.fileCount === 16,
+    && receipt.combinedSha256 === freeze.combinedSha256 && receipt.fileCount === FROZEN_PATHS.length,
   'BLOCKED_INPUT', 'FROZEN_EXECUTION_RECEIPT_MISMATCH')
   for (const item of files) {
     const local = localFrozenBytes(item.path)
@@ -253,35 +267,159 @@ export function safeEnvironment(extra = {}) {
     .filter(([, value]) => typeof value === 'string'))
 }
 export async function command(executable, args, options = {}) {
-  const timeout = options.timeout || 30000
-  return await new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { cwd: options.cwd || toolsRoot, env: safeEnvironment(options.env),
-      windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
-    let stdout = '', stderr = '', stderrBytes = 0, timedOut = false
-    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL') }, timeout)
+  return boundedCommand(executable, args, options)
+}
+// Both native commands and T1 terminate through this promise, including a
+// synchronous kill failure. The extra grace is bounded; no numeric-PID kill.
+export async function boundedCommand(executable, args, options = {}, io = { spawn, setTimeout, clearTimeout }) {
+  return new Promise((resolve, reject) => {
+    let child, primary, timer, grace, done = false, observerBroken = false, stopping = false
+    let stdout = '', stderr = '', stdoutBytes = 0, stderrBytes = 0, malformed = false, truncated = false
+    let exitCode = null, signal = null, closeObserved = false
+    const secondaryDiagnostics = [], decoder = new TextDecoder('utf-8', { fatal: true })
+    const t1 = options.capture === 't1', limit = t1 ? 8192 : 512 * 1024
+    const role = options.processRole || 'platform-helper'
+    const fail = (code, error) => {
+      if (!primary) {
+        primary = new AcceptanceError(options.kind || 'BLOCKED_ENVIRONMENT', code)
+        if (error) primary.nativeError = { name: error.name, code: error.code, errno: error.errno, syscall: error.syscall, processRole: role }
+      }
+    }
+    const event = (observation, fields = {}) => {
+      if (observerBroken || !options.onEvent) return
+      try { options.onEvent({ observation, processRole: role, time: new Date().toISOString(),
+        ...(Number.isInteger(child?.pid) && child.pid > 0 ? { pid: child.pid } : {}), ...fields }) }
+      catch (error) { observerBroken = true; fail('PROCESS_EVIDENCE_WRITE_FAILED', error) }
+    }
+    const finish = () => {
+      if (done) return
+      done = true; io.clearTimeout(timer); io.clearTimeout(grace)
+      try { stderr += decoder.decode() } catch { malformed = true }
+      const result = { code: exitCode, signal, pid: child?.pid || null, closeObserved,
+        stdout: t1 ? '' : stdout, stdoutBytes, stderrBytes, bufferTruncated: truncated,
+        timeout: primary?.code === 'NATIVE_COMMAND_TIMEOUT',
+        diagnostic: safeDiagnostic({ message: t1 ? '' : stderr, exitCode, signal, processRole: role }, 'unknown', 'NATIVE_PROCESS_RESULT') }
+      if (t1) {
+        result.toolOutput = classifyToolStderr(stderr, options.profilePath, options.wrapperPath,
+          { malformed, truncated, stdoutBytes, stderrBytes })
+        if (primary?.code === 'NATIVE_COMMAND_TIMEOUT' || primary?.code === 'NATIVE_COMMAND_UNAVAILABLE') {
+          // An incomplete observation does not invalidate already classified facts.
+          // Keep all four facts when full; primary and timeout still describe control failure.
+          result.toolOutput.outputComplete = false
+          if (result.toolOutput.records.length < 4) result.toolOutput.records.push({
+            classification: primary.code === 'NATIVE_COMMAND_TIMEOUT' ? 'TOOL_TIMEOUT' : 'TOOL_SPAWN_ERROR',
+            producerRole: 'unknown', observedRole: 'launcher-process' })
+        } else if ((exitCode !== 0 || signal) && !result.toolOutput.records.length) {
+          result.toolOutput.records = [{ classification: 'UNCLASSIFIED_TOOL_EXIT', producerRole: 'unknown', observedRole: 'launcher-process' }]
+          result.toolOutput.outputComplete = false
+        }
+      }
+      // This is a safe projection, not the child object, output, argv or env.
+      if (primary) {
+        primary.processOutcome = result; primary.secondaryDiagnostics = secondaryDiagnostics
+        reject(primary)
+      } else resolve(result)
+      if (!closeObserved) {
+        child?.stdout?.destroy(); child?.stderr?.destroy(); child?.stdin?.destroy(); child?.unref?.()
+      }
+    }
+    const stop = code => {
+      fail(code)
+      if (stopping || done) return
+      stopping = true; io.clearTimeout(timer)
+      if (child && child.exitCode == null && child.signalCode == null) {
+        event('kill-requested', { requestedSignal: 'SIGKILL' })
+        try { child.kill('SIGKILL') }
+        catch (error) {
+          const diagnostic = safeDiagnostic({ name: error.name, code: error.code, errno: error.errno,
+            syscall: error.syscall || 'kill', processRole: role }, 'unknown', 'OWNED_PROCESS_TERMINATION_FAILED')
+          secondaryDiagnostics.push(diagnostic); event('kill-error', { diagnostics: [diagnostic] })
+        }
+      }
+      grace = io.setTimeout(finish, options.graceMs ?? 2000)
+    }
+    event('spawn-requested')
+    if (primary) { finish(); return }
+    timer = io.setTimeout(() => stop('NATIVE_COMMAND_TIMEOUT'), options.timeout || 30000)
+    try {
+      child = io.spawn(executable, args, { cwd: options.cwd || toolsRoot, env: options.environment || safeEnvironment(options.env),
+        shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+    } catch (error) {
+      fail('NATIVE_COMMAND_UNAVAILABLE', error)
+      event('spawn-error', { diagnostics: [safeDiagnostic(error, 'unknown', 'TOOL_SPAWN_ERROR')] }); finish(); return
+    }
+    child.once('spawn', () => { event('spawn-observed'); if (primary) stop(primary.code) })
+    child.once('error', error => {
+      fail('NATIVE_COMMAND_UNAVAILABLE', error)
+      event('spawn-error', { diagnostics: [safeDiagnostic(error, 'unknown', 'TOOL_SPAWN_ERROR')] })
+      if (!stopping) { stopping = true; io.clearTimeout(timer); grace = io.setTimeout(finish, options.graceMs ?? 2000) }
+    })
     child.stdout.on('data', chunk => {
-      if (stdout.length + chunk.length > 512 * 1024) { timedOut = true; child.kill('SIGKILL') }
-      else stdout += chunk.toString('utf8')
+      stdoutBytes += chunk.length
+      if (stdoutBytes > limit) { truncated = true; stop('NATIVE_OUTPUT_LIMIT'); return }
+      if (!t1) stdout += chunk.toString('utf8')
     })
-    child.stderr.on('data', chunk => { stderrBytes += chunk.length; if (stderr.length < 32768) stderr += chunk.toString('utf8').slice(0, 32768 - stderr.length) })
-    child.on('error', error => {
-      clearTimeout(timer)
-      const failure = new AcceptanceError('BLOCKED_ENVIRONMENT', 'NATIVE_COMMAND_UNAVAILABLE')
-      failure.nativeError = { name: error.name, code: error.code, errno: error.errno, syscall: error.syscall }
-      reject(failure)
+    child.stderr.on('data', chunk => {
+      stderrBytes += chunk.length
+      if (stderrBytes > (t1 ? 8192 : 32768)) { truncated = true; stop('NATIVE_OUTPUT_LIMIT'); return }
+      if (!malformed) try { stderr += decoder.decode(chunk, { stream: true }) } catch { malformed = true }
     })
-    child.on('close', (code, signal) => {
-      clearTimeout(timer)
-      const diagnostic = safeDiagnostic({ message: stderr, exitCode: code, signal }, 'unknown', 'NATIVE_PROCESS_RESULT')
-      if (timedOut) {
-        const failure = new AcceptanceError(options.kind || 'BLOCKED_ENVIRONMENT', 'NATIVE_COMMAND_TIMEOUT')
-        failure.nativeError = { name: 'TimeoutError', code: diagnostic.errno, exitCode: code, signal }
-        reject(failure)
-      } else resolve({ code, stdout, stderrBytes, pid: child.pid, signal, diagnostic })
+    child.once('exit', (code, endedSignal) => {
+      exitCode = Number.isInteger(code) ? code : null; signal = SIGNALS.has(endedSignal) ? endedSignal : null
+      event('exit-observed', { exitCode, signal }); if (primary && !stopping) stop(primary.code)
+    })
+    child.once('close', (code, endedSignal) => {
+      closeObserved = true; exitCode = Number.isInteger(code) ? code : null; signal = SIGNALS.has(endedSignal) ? endedSignal : null
+      event('close-observed', { exitCode, signal }); finish()
     })
     child.stdin.on('error', () => {})
     child.stdin.end(options.input || '')
   })
+}
+
+const PROFILE_LINES = ['(version 1)', '(allow default)', '(deny network-outbound)',
+  '(allow network-outbound (remote ip "127.0.0.1:*"))', '(allow network-outbound (remote ip "[::1]:*"))',
+  '(allow network-outbound (remote unix-socket))']
+const PROFILE_TOKENS = new Set(['version', 'allow', 'deny', 'default', 'network-outbound', 'remote', 'ip', 'unix-socket', '127.0.0.1:*', '[::1]:*'])
+export function classifyToolStderr(stderr, profilePath, wrapperPath, bounds = {}) {
+  const unknown = () => ({ outputComplete: false, records: [{ classification: 'UNCLASSIFIED_TOOL_EXIT', producerRole: 'unknown', observedRole: 'launcher-process' }] })
+  if (bounds.malformed || bounds.truncated || Buffer.byteLength(stderr) > 8192 || /[^\x09\x0a\x20-\x7e]/.test(stderr)) return unknown()
+  if (!stderr) return { outputComplete: true, records: [] }
+  const lines = stderr.endsWith('\n') ? stderr.slice(0, -1).split('\n') : stderr.split('\n')
+  if (lines.length > 4 || lines.some(line => !line || Buffer.byteLength(line) > 1024)) return unknown()
+  const escape = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const records = []
+  for (const line of lines) {
+    let record
+    const compiler = line.match(new RegExp('^sandbox-exec: ' + escape(profilePath) + ':(\\d+):(\\d+): (syntax error|unbound variable|invalid IP address)(?: \'([^\']+)\')?$'))
+    if (compiler) {
+      const row = Number(compiler[1]), column = Number(compiler[2]), token = compiler[4]
+      if (row < 1 || row > 6 || column < 1 || column > PROFILE_LINES[row - 1].length) return unknown()
+      record = { classification: { 'syntax error': 'SBPL_PARSE_ERROR', 'unbound variable': 'SBPL_SYMBOL_ERROR', 'invalid IP address': 'SBPL_ADDRESS_ERROR' }[compiler[3]],
+        producerRole: 'sandbox-exec', observedRole: 'launcher-process', targetRole: 'sandbox-profile', line: row, column }
+      if (token) record.token = PROFILE_TOKENS.has(token) && PROFILE_LINES[row - 1].includes(token) ? token : 'unknown'
+    } else if (line === 'sandbox-exec: sandbox_apply: Operation not permitted' || line === 'sandbox-exec: sandbox_apply: Permission denied') {
+      record = { classification: 'SANDBOX_APPLY_ERROR', producerRole: 'sandbox-exec', observedRole: 'launcher-process', errno: line.endsWith('Operation not permitted') ? 'EPERM' : 'EACCES' }
+    } else if (/^sandbox-exec: execvp\(\): (No such file or directory|Permission denied|Operation not permitted)$/.test(line)) {
+      record = { classification: 'TARGET_EXEC_ERROR', producerRole: 'sandbox-exec', observedRole: 'launcher-process',
+        errno: line.endsWith('No such file or directory') ? 'ENOENT' : line.endsWith('Permission denied') ? 'EACCES' : 'EPERM' }
+    } else if (line === 'sandbox-exec: ' + profilePath + ': No such file or directory') {
+      record = { classification: 'PROFILE_READ_ERROR', producerRole: 'sandbox-exec', observedRole: 'launcher-process', targetRole: 'sandbox-profile', errno: 'ENOENT' }
+    } else if (line === wrapperPath + ': line 2: syntax error near unexpected token `exec\'') {
+      record = { classification: 'SHELL_SYNTAX_ERROR', producerRole: 'shell', observedRole: 'launcher-process' }
+    } else if (line === 'usage: sandbox-exec [options] command [arguments ...]') {
+      record = { classification: 'TOOL_USAGE_ERROR', producerRole: 'sandbox-exec', observedRole: 'launcher-process' }
+    } else return unknown()
+    records.push(record)
+  }
+  if (new Set(records.map(item => item.classification)).size > 1) return unknown()
+  return { outputComplete: true, records }
+}
+
+export function validateToolEnvironment(environment) {
+  const forbidden = /^(?:BASH_ENV|ENV|SHELLOPTS|BASHOPTS|CDPATH|GLOBIGNORE|PROMPT_COMMAND|NODE_OPTIONS|NODE_PATH|ELECTRON_RUN_AS_NODE|LD_.*|DYLD_.*|BASH_FUNC_.*)$/
+  requireCondition(!Object.entries(environment).some(([name, value]) => forbidden.test(name) && value), 'BLOCKED_ENVIRONMENT', 'TOOL_ENVIRONMENT_INJECTION')
+  return { environmentPolicy: 'safeEnvironment-v1-no-shell-or-loader-injection', environmentSafe: true, cwdPolicy: 'frozen-harness-tools-root' }
 }
 export async function platformCommand(action, args = [], options = {}) {
   const { root, owner } = controlledRoot()
@@ -366,6 +504,11 @@ export function writeEvidence(file, value, secrets = []) {
   const { root } = controlledRoot()
   const stateFile = path.join(root, 'run-state.json')
   if (file === 'acceptance-result.json' && fs.existsSync(stateFile)) value = mergeRunState(value, JSON.parse(fs.readFileSync(stateFile, 'utf8')))
+  const folded = foldOwnedCleanup()
+  if (folded.attempts.length) {
+    if (file === 'acceptance-result.json') value = { ...value, cleanupEvidence: folded, cleanup: folded.attempts.at(-1).cleanupSucceeded === true }
+    if (file === 'network-isolation.json') value = networkCleanupProjection(value, folded)
+  }
   scanEvidence(value, secrets)
   atomicJson(path.join(root, 'evidence', file), value, secrets)
   if (file === 'acceptance-result.json') atomicJson(stateFile, value, secrets)
@@ -463,30 +606,233 @@ export function minimalResult(owner, kind, code) {
     status: kind, reasonCode: code, phases: [], assertions: [], cleanup: false, complete: false,
     scope: 'machine-evidence-only; Astra signoff required', sanitizedInMemory: true }
 }
-export async function cleanup() {
-  const { root } = controlledRoot()
-  // Platform cleanup only targets case-owned paths/processes/rules; it never uninstalls a product.
-  checkpoint('cleanup')
-  const start = new Date().toISOString()
-  let error
-  try { await platformCommand('cleanup', [], { timeout: 60000 }) } catch (failure) { error = failure }
-  const state = caseState()
-  state.value.cleanup = !error
-  state.value.cleanupEvidence = { attempts: [...(state.value.cleanupEvidence?.attempts || []), {
-    stage: 'cleanup', startedAt: start, endedAt: new Date().toISOString(), cleanupSucceeded: !error,
-  }] }
-  saveState(state)
-  if (error) { recordFailure(error, 'cleanup', 'OWNED_CLEANUP_FAILED'); throw error }
-  const file = path.join(root, 'evidence/acceptance-result.json')
-  if (fs.existsSync(file)) {
-    const result = JSON.parse(fs.readFileSync(file, 'utf8'))
-    result.cleanup = true
-    writeEvidence('acceptance-result.json', result)
+const CLEANUP_ROLES = new Set(['test-finally', 'workflow-cleanup'])
+const CLEANUP_OPERATIONS = ['owned-process-cleanup', 'mount-detach', 'keychain-default-restore', 'keychain-search-restore', 'keychain-delete']
+const CLEANUP_EVENTS = new Set(['caller-entered', 'caller-identity', 'helper-spawn-requested', 'helper-spawned', 'spawn-error',
+  'helper-entered', 'helper-identity', 'operation-started', 'operation-ended', 'helper-finished', 'helper-exit-observed',
+  'helper-close-observed', 'caller-observed-result', 'caller-returned-incomplete', 'termination-error'])
+const uuidPattern = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/
+function journalDirectory(root) {
+  const directory = path.join(root, 'cleanup-journal')
+  try { fs.mkdirSync(directory, { mode: 0o700 }) } catch (error) { if (error.code !== 'EEXIST') throw error }
+  requireCondition(fs.lstatSync(directory).isDirectory() && !fs.lstatSync(directory).isSymbolicLink(), 'BLOCKED_ENVIRONMENT', 'CLEANUP_JOURNAL_NOT_OWNED')
+  return directory
+}
+export function exclusiveJson(file, value) {
+  scanEvidence(value)
+  const temporary = file + '.' + randomUUID() + '.partial'
+  let fd, owned = false
+  try {
+    fd = fs.openSync(temporary, 'wx', 0o600); owned = true
+    fs.writeFileSync(fd, JSON.stringify(value)); fs.fsyncSync(fd); fs.closeSync(fd); fd = undefined
+    // link is an atomic, no-replace publication of the complete event.
+    fs.linkSync(temporary, file)
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd)
+    if (owned) fs.unlinkSync(temporary)
   }
+}
+export function appendCleanupEvent(context, observation, fields = {}) {
+  requireCondition(CLEANUP_EVENTS.has(observation) && uuidPattern.test(context.attemptId)
+    && CLEANUP_ROLES.has(context.callerRole) && ['caller', 'helper'].includes(context.writerRole), 'BLOCKED_INPUT', 'CLEANUP_EVENT_INVALID')
+  if (fields.operation) requireCondition(CLEANUP_OPERATIONS.includes(fields.operation), 'BLOCKED_INPUT', 'CLEANUP_OPERATION_INVALID')
+  const event = { schemaVersion: 1, kind: 'cleanup-event', attemptId: context.attemptId, callerRole: context.callerRole,
+    writerRole: context.writerRole, sequence: context.sequence++, observation, time: new Date().toISOString(),
+    caseId: context.owner.caseId, harnessSha: context.owner.harnessSha, runId: context.owner.runId,
+    runAttempt: Number(context.owner.runAttempt), ...fields }
+  exclusiveJson(path.join(journalDirectory(context.root), context.attemptId + '.' + context.writerRole + '.' + event.sequence + '.json'), event)
+  return event
+}
+export function beginCleanup(callerRole, owned = controlledRoot()) {
+  requireCondition(CLEANUP_ROLES.has(callerRole), 'BLOCKED_INPUT', 'CLEANUP_CALLER_ROLE_REQUIRED')
+  const context = { ...owned, callerRole, attemptId: randomUUID(), writerRole: 'caller', sequence: 0 }
+  // No await or platform operation precedes this durable intent.
+  appendCleanupEvent(context, 'caller-entered', { callerPid: process.pid, status: 'started', cleanupSucceeded: null })
+  return context
+}
+export function readCleanupEvents(root, owner) {
+  const directory = path.join(root, 'cleanup-journal')
+  if (!fs.existsSync(directory)) return []
+  requireCondition(fs.lstatSync(directory).isDirectory() && !fs.lstatSync(directory).isSymbolicLink(), 'BLOCKED_ENVIRONMENT', 'CLEANUP_JOURNAL_NOT_OWNED')
+  const events = []
+  for (const name of fs.readdirSync(directory)) {
+    if (!/^[a-f0-9-]{36}\.(?:caller|helper)\.\d+\.json$/.test(name)) continue
+    const file = path.join(directory, name)
+    requireCondition(fs.lstatSync(file).isFile() && !fs.lstatSync(file).isSymbolicLink() && fs.statSync(file).size <= 8192, 'BLOCKED_INPUT', 'CLEANUP_EVENT_BYTES_INVALID')
+    const event = JSON.parse(fs.readFileSync(file, 'utf8')); scanEvidence(event)
+    requireCondition(event.caseId === owner.caseId && event.harnessSha === owner.harnessSha && event.runId === owner.runId
+      && event.runAttempt === Number(owner.runAttempt) && CLEANUP_EVENTS.has(event.observation)
+      && name === event.attemptId + '.' + event.writerRole + '.' + event.sequence + '.json', 'BLOCKED_INPUT', 'CLEANUP_EVENT_IDENTITY_INVALID')
+    events.push(event)
+  }
+  return events.sort((a, b) => a.time.localeCompare(b.time) || a.writerRole.localeCompare(b.writerRole) || a.sequence - b.sequence)
+}
+export function foldCleanupEvents(events) {
+  const attempts = []
+  for (const entry of events.filter(event => event.observation === 'caller-entered')) {
+    const records = events.filter(event => event.attemptId === entry.attemptId)
+    const helper = records.find(event => event.observation === 'helper-finished')
+    const caller = records.find(event => event.observation === 'caller-observed-result')
+    const failure = records.find(event => event.observation === 'caller-returned-incomplete')
+    attempts.push({ attemptId: entry.attemptId, callerRole: entry.callerRole, callerPid: entry.callerPid, startedAt: entry.time,
+      status: caller ? (caller.cleanupSucceeded ? 'succeeded' : 'failed') : 'incomplete',
+      cleanupSucceeded: caller ? caller.cleanupSucceeded : null, complete: !!caller,
+      helperReceipt: helper ? { cleanupSucceeded: helper.cleanupSucceeded, observedAt: helper.time } : null,
+      callerReceipt: caller ? { cleanupSucceeded: caller.cleanupSucceeded, observedAt: caller.time } : null,
+      ...(caller || failure ? { endedAt: (caller || failure).time } : {}), events: records })
+  }
+  return { attempts }
+}
+export async function macProcessIdentity(pid, invoke = command) {
+  requireCondition(Number.isInteger(pid) && pid > 0, 'BLOCKED_ENVIRONMENT', 'CLEANUP_PID_INVALID')
+  const result = await invoke('/bin/ps', ['-p', String(pid), '-o', 'pid=,uid=,lstart=,comm='], { timeout: 2000, env: { LC_ALL: 'C' } })
+  if (result.code === 1 && result.stdout.trim() === '' && result.stderrBytes === 0 && result.closeObserved === true) return { pid, status: 'absent' }
+  const match = result.stdout.trim().match(/^(\d+)\s+(\d+)\s+([A-Z][a-z]{2}\s+[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+([^\r\n]+)$/)
+  requireCondition(result.code === 0 && result.stderrBytes === 0 && result.closeObserved === true && match && Number(match[1]) === pid, 'BLOCKED_ENVIRONMENT', 'CLEANUP_PROCESS_IDENTITY_UNAVAILABLE')
+  return { pid, processIdentity: hash(JSON.stringify([pid, match[2], match[3], match[4]])), status: 'present' }
+}
+export async function acquireCleanupLease(context, identity = macProcessIdentity) {
+  const directory = journalDirectory(context.root), lock = path.join(directory, 'active.json'), recovery = path.join(directory, 'recovery.json')
+  const caller = await identity(process.pid)
+  requireCondition(caller.status === 'present' && shaPattern.test(caller.processIdentity), 'BLOCKED_ENVIRONMENT', 'CLEANUP_CALLER_IDENTITY_UNAVAILABLE')
+  appendCleanupEvent(context, 'caller-identity', { pid: caller.pid, processIdentity: caller.processIdentity })
+  const claim = () => exclusiveJson(lock, { attemptId: context.attemptId })
+  requireCondition(!fs.existsSync(recovery), 'BLOCKED_ENVIRONMENT', 'CLEANUP_LEASE_RECOVERY_INCOMPLETE')
+  try { claim(); return } catch (error) { if (error.code !== 'EEXIST') throw error }
+  // A separate exclusive recovery gate prevents two new callers from removing
+  // each other's lock. An interrupted recovery is blocked, never stolen by age.
+  exclusiveJson(recovery, { attemptId: context.attemptId })
+  try {
+    requireCondition(fs.lstatSync(lock).isFile() && !fs.lstatSync(lock).isSymbolicLink(), 'BLOCKED_ENVIRONMENT', 'CLEANUP_LOCK_INVALID')
+    const previous = JSON.parse(fs.readFileSync(lock, 'utf8'))
+    const events = readCleanupEvents(context.root, context.owner).filter(item => item.attemptId === previous.attemptId)
+    requireCondition(!cleanupResourcesUncertain(events), 'BLOCKED_ENVIRONMENT', 'CLEANUP_RESOURCE_IDENTITY_UNKNOWN')
+    const callerIdentity = events.find(item => item.observation === 'caller-identity')
+    const helperRequested = events.some(item => item.observation === 'helper-spawn-requested')
+    const helperIdentity = events.find(item => item.observation === 'helper-identity')
+    requireCondition(callerIdentity && (!helperRequested || helperIdentity), 'BLOCKED_ENVIRONMENT', 'CLEANUP_PREVIOUS_IDENTITY_UNKNOWN')
+    for (const known of [callerIdentity, helperIdentity].filter(Boolean)) {
+      const current = await identity(known.pid)
+      // A reused PID or changed identity is uncertainty, not proof of old exit.
+      requireCondition(current.status === 'absent', 'BLOCKED_ENVIRONMENT', current.processIdentity === known.processIdentity ? 'CLEANUP_PREVIOUS_PROCESS_ALIVE' : 'CLEANUP_PREVIOUS_IDENTITY_UNKNOWN')
+    }
+    requireCondition(JSON.parse(fs.readFileSync(lock, 'utf8')).attemptId === previous.attemptId, 'BLOCKED_ENVIRONMENT', 'CLEANUP_LOCK_CHANGED')
+    fs.unlinkSync(lock); claim()
+  } finally { fs.unlinkSync(recovery) }
+}
+function releaseCleanupLease(context) {
+  const lock = path.join(context.root, 'cleanup-journal/active.json')
+  requireCondition(JSON.parse(fs.readFileSync(lock, 'utf8')).attemptId === context.attemptId, 'BLOCKED_ENVIRONMENT', 'CLEANUP_LOCK_CHANGED')
+  fs.unlinkSync(lock)
+}
+export async function enterCleanupHelper(attemptId, callerRole, owned = controlledRoot(), identity = macProcessIdentity) {
+  const entries = readCleanupEvents(owned.root, owned.owner)
+  requireCondition(uuidPattern.test(attemptId) && CLEANUP_ROLES.has(callerRole)
+    && entries.some(item => item.attemptId === attemptId && item.observation === 'caller-entered' && item.callerRole === callerRole)
+    && JSON.parse(fs.readFileSync(path.join(owned.root, 'cleanup-journal/active.json'), 'utf8')).attemptId === attemptId,
+  'BLOCKED_ENVIRONMENT', 'CLEANUP_HELPER_NOT_AUTHORIZED')
+  const context = { ...owned, attemptId, callerRole, writerRole: 'helper', sequence: 0 }
+  appendCleanupEvent(context, 'helper-entered', { pid: process.pid, status: 'started' })
+  const current = await identity(process.pid)
+  requireCondition(current.status === 'present' && shaPattern.test(current.processIdentity), 'BLOCKED_ENVIRONMENT', 'CLEANUP_HELPER_IDENTITY_UNAVAILABLE')
+  appendCleanupEvent(context, 'helper-identity', { pid: current.pid, processIdentity: current.processIdentity })
+  return context
+}
+export async function cleanupOperations(context, operations) {
+  requireCondition(operations.length === CLEANUP_OPERATIONS.length && operations.every((item, index) => item.operation === CLEANUP_OPERATIONS[index]), 'BLOCKED_INPUT', 'CLEANUP_OPERATION_SET_INVALID')
+  let primary
+  for (const operation of operations) {
+    if (!operation.needed) {
+      appendCleanupEvent(context, 'operation-ended', { operation: operation.operation, status: 'not-needed' }); continue
+    }
+    appendCleanupEvent(context, 'operation-started', { operation: operation.operation, status: 'started' })
+    try {
+      await operation.run()
+      appendCleanupEvent(context, 'operation-ended', { operation: operation.operation, status: 'succeeded' })
+    } catch (error) {
+      primary ||= error
+      const uncertain = error.processOutcome?.closeObserved === false
+      appendCleanupEvent(context, 'operation-ended', { operation: operation.operation, status: uncertain ? 'incomplete' : 'failed',
+        diagnostics: [safeDiagnostic(error, 'cleanup', 'CLEANUP_RESOURCE_FAILED'), ...(error.secondaryDiagnostics || []).map(item =>
+          safeDiagnostic({ name: item.errorClass, code: item.errno, errno: item.errnoNumber, syscall: item.syscall }, 'cleanup', 'OWNED_PROCESS_TERMINATION_FAILED'))] })
+      if (uncertain) {
+        appendCleanupEvent(context, 'helper-finished', { status: 'incomplete', cleanupSucceeded: null })
+        throw primary
+      }
+    }
+  }
+  appendCleanupEvent(context, 'helper-finished', { status: primary ? 'failed' : 'succeeded', cleanupSucceeded: !primary })
+  if (primary) throw primary
+  return { ok: true, attemptId: context.attemptId, cleanupSucceeded: true }
+}
+function cleanupResourcesUncertain(events) {
+  return events.some(item => item.observation === 'operation-ended' && item.status === 'incomplete')
+    || events.some(item => item.observation === 'operation-started'
+      && !events.some(end => end.observation === 'operation-ended' && end.operation === item.operation))
+}
+function foldOwnedCleanup() {
+  const { root, owner } = controlledRoot()
+  return foldCleanupEvents(readCleanupEvents(root, owner))
+}
+function projectCleanup(root, owner) {
+  const folded = foldCleanupEvents(readCleanupEvents(root, owner)), latest = folded.attempts.at(-1)
+  if (!latest) return folded
+  const file = path.join(root, 'evidence/network-isolation.json')
+  if (fs.existsSync(file)) {
+    atomicJson(file, networkCleanupProjection(JSON.parse(fs.readFileSync(file, 'utf8')), folded))
+  }
+  return folded
+}
+export function networkCleanupProjection(network, folded) {
+  const observedAt = new Date().toISOString()
+  const history = folded.attempts.map(attempt => ({ attemptId: attempt.attemptId, callerRole: attempt.callerRole,
+    observedAt, complete: attempt.complete, cleanupSucceeded: attempt.cleanupSucceeded }))
+  if (!history.length) return network
+  const latest = folded.attempts.at(-1)
+  return { ...network, cleanupHistory: history, cleanupProjection: history.at(-1), cleanupSucceeded: latest.cleanupSucceeded,
+    ...(latest.cleanupSucceeded === true ? { disabledAt: latest.callerReceipt.observedAt } : {}) }
+}
+export async function cleanup(callerRole) {
+  const owned = controlledRoot(), { root, owner } = owned
+  const context = beginCleanup(callerRole, owned)
+  checkpoint('cleanup')
+  let primary, lease = false, closed = false
+  try {
+    if (owner.platform === 'macOS') { await acquireCleanupLease(context); lease = true }
+    const onEvent = event => {
+      const names = { 'spawn-requested': 'helper-spawn-requested', 'spawn-observed': 'helper-spawned', 'spawn-error': 'spawn-error',
+        'exit-observed': 'helper-exit-observed', 'close-observed': 'helper-close-observed', 'kill-error': 'termination-error' }
+      if (names[event.observation]) {
+        const { observation, ...fields } = event
+        appendCleanupEvent(context, names[observation], fields)
+        if (observation === 'close-observed') closed = true
+      }
+    }
+    const args = owner.platform === 'macOS' ? [context.attemptId, callerRole] : []
+    const result = await platformCommand('cleanup', args, { timeout: 60000, onEvent })
+    if (owner.platform === 'macOS') requireCondition(result.attemptId === context.attemptId, 'BLOCKED_ENVIRONMENT', 'CLEANUP_RECEIPT_MISMATCH')
+    appendCleanupEvent(context, 'caller-observed-result', { status: 'succeeded', cleanupSucceeded: true })
+  } catch (error) {
+    primary = error
+    const helper = readCleanupEvents(root, owner).find(item => item.attemptId === context.attemptId && item.observation === 'helper-finished')
+    const confirmed = closed && helper && typeof helper.cleanupSucceeded === 'boolean'
+    appendCleanupEvent(context, confirmed ? 'caller-observed-result' : 'caller-returned-incomplete', {
+      status: confirmed ? 'failed' : 'incomplete', cleanupSucceeded: confirmed ? false : null,
+      diagnostics: [safeDiagnostic(error, 'cleanup', 'OWNED_CLEANUP_FAILED')] })
+  } finally {
+    if (lease && closed && !cleanupResourcesUncertain(readCleanupEvents(root, owner).filter(item => item.attemptId === context.attemptId))) releaseCleanupLease(context)
+    const folded = projectCleanup(root, owner), state = caseState()
+    state.value.cleanupEvidence = folded; state.value.cleanup = folded.attempts.at(-1)?.cleanupSucceeded === true
+    saveState(state)
+    if (primary) recordFailure(primary, 'cleanup', 'OWNED_CLEANUP_FAILED')
+    else writeEvidence('acceptance-result.json', state.value)
+  }
+  if (primary) throw primary
 }
 export function publishEvidence() {
   const { root, owner } = controlledRoot()
-  ensureTerminalOutcome('publish')
+  projectCleanup(root, owner)
+  writeEvidence('acceptance-result.json', ensureTerminalOutcome('publish'))
   const destination = path.join(root, 'public-evidence')
   // Publication owns a fresh directory; never clean up someone else's previous output.
   fs.mkdirSync(destination, { mode: 0o700 })
@@ -523,6 +869,7 @@ export function publishEvidence() {
 }
 export function ensureTerminalOutcome(stage) {
   const state = caseState().value
+  if (state.mode === 'mac-launcher-T1' && ['TOOL_CHAIN_PASS', 'BLOCKED', 'FAILED'].includes(state.toolDiagnostic?.diagnosticStatus)) return state
   if (!state.diagnostics?.length && !(state.status === 'PASS' && state.complete === true)) {
     return recordFailure(new Error('No terminal evidence'), stage, 'RUNNER_NO_TERMINAL_EVIDENCE')
   }
@@ -575,12 +922,122 @@ async function runRunner() {
   }
 }
 
+export const T1_BRANCH = 'refs/heads/codex/diagnose-mac-launcher-1.0'
+export function assertT1Trigger(environment = process.env) {
+  requireCondition(environment.CI === 'true' && environment.GITHUB_ACTIONS === 'true'
+    && environment.RUNNER_ENVIRONMENT === 'github-hosted' && environment.GITHUB_REPOSITORY === 'hzqedison/RT-ResearchFlow'
+    && environment.GITHUB_REF === T1_BRANCH && environment.GITHUB_EVENT_NAME === 'push' && environment.NA_T1_DELETED === 'false'
+    && environment.GITHUB_RUN_ATTEMPT === '1' && commitPattern.test(environment.GITHUB_SHA || '')
+    && /^\d+$/.test(environment.GITHUB_RUN_ID || ''), 'BLOCKED_ENVIRONMENT', 'T1_TRIGGER_NOT_AUTHORIZED')
+}
+function t1Root() {
+  assertT1Trigger()
+  const owned = controlledRoot()
+  requireCondition(owned.owner.platform === 'macOS' && owned.owner.mode === 'mac-launcher-T1'
+    && process.versions.node.startsWith('20.'), 'BLOCKED_ENVIRONMENT', 'T1_NATIVE_NODE20_CASE_REQUIRED')
+  return owned
+}
+export function toolChainOutcome(result, error) {
+  if (error || result?.timeout || result?.bufferTruncated || !result?.closeObserved) return 'BLOCKED'
+  if (result.code === 0 && result.signal === null && result.stdoutBytes === 0 && result.stderrBytes === 0
+    && result.toolOutput?.outputComplete) return 'TOOL_CHAIN_PASS'
+  return result.toolOutput?.outputComplete && result.toolOutput.records.length ? 'FAILED' : 'BLOCKED'
+}
+export async function runT1() {
+  const { root, owner } = t1Root()
+  const frozenSource = requireFrozenExecution()
+  exclusiveJson(path.join(fs.realpathSync(process.env.RUNNER_TEMP), 'rt-mac-launcher-T1-' + owner.runId + '-' + owner.harnessSha + '-' + owner.arch + '.json'),
+    { caseId: owner.caseId, runId: owner.runId, runAttempt: 1, harnessSha: owner.harnessSha, arch: owner.arch })
+  exclusiveJson(path.join(root, 't1-once.json'), { caseId: owner.caseId, runId: owner.runId, runAttempt: 1, harnessSha: owner.harnessSha })
+  const envelope = (kind, fields) => ({ schemaVersion: 1, kind, harnessSha: owner.harnessSha, caseId: owner.caseId,
+    runId: owner.runId, runAttempt: 1, platform: owner.platform, arch: owner.arch, mode: 'mac-launcher-T1', ...fields, sanitizedInMemory: true })
+  const diagnostic = { diagnosticStatus: 'BLOCKED', events: [], tools: [], preconditions: {}, records: [],
+    bufferTruncated: false, timeout: false, closeObserved: false,
+    scope: 'T1-tool-only; product NOT_EXECUTED; Windows NOT_EXECUTED; system-true; empty arguments; no inspector, network proof or Keychain' }
+  const result = { ...minimalResult(owner, 'BLOCKED_ENVIRONMENT', 'T1_IN_PROGRESS'), mode: 'mac-launcher-T1', toolDiagnostic: diagnostic }
+  const persist = () => writeEvidence('acceptance-result.json', result)
+  checkpoint('tool-preflight'); persist()
+  let failure
+  try {
+    diagnostic.preconditions = validateToolEnvironment(process.env); persist()
+    const { renderMacMaterials, validateMacMaterials } = await import('./platform/macos.mjs')
+    const materials = renderMacMaterials(root, 'system-true')
+    validateMacMaterials(root, 'system-true', materials.profile, materials.wrapper)
+    const profilePath = path.join(root, 'network.sb'), wrapperPath = path.join(root, 'launch-true.sh')
+    fs.writeFileSync(profilePath, materials.profile, { flag: 'wx', mode: 0o600 })
+    fs.writeFileSync(wrapperPath, materials.wrapper, { flag: 'wx', mode: 0o700 })
+    for (const [file, mode] of [[profilePath, 0o600], [wrapperPath, 0o700]]) {
+      const stat = fs.lstatSync(file)
+      requireCondition(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o777) === mode, 'BLOCKED_INPUT', 'T1_MATERIAL_FILE_INVALID')
+    }
+    const materialReceipt = validateMacMaterials(root, 'system-true', fs.readFileSync(profilePath), fs.readFileSync(wrapperPath))
+    Object.assign(diagnostic, materialReceipt); persist()
+    writeEvidence('input-manifest.json', envelope('input-manifest', { frozenSource, ...materialReceipt, installers: [] }))
+    writeEvidence('installer-events.json', envelope('installer-events', { events: [], scope: 'T1-does-not-download-or-install' }))
+    writeEvidence('network-isolation.json', envelope('network-isolation', { controls: [], records: [], inherited: false,
+      descendantsCovered: false, probeComplete: false, cleanupSucceeded: null, scope: 'T1-does-not-probe-network; true-is-not-network-proof' }))
+    for (const [targetRole, file] of [['shell', '/bin/bash'], ['sandbox-exec', '/usr/bin/sandbox-exec'], ['system-true', '/usr/bin/true']]) {
+      const record = { targetRole, exists: null, regularFile: null, executable: null, mode: null, sha256: null, diagnostics: [] }
+      diagnostic.tools.push(record)
+      try {
+        const stat = fs.lstatSync(file); record.exists = true; record.regularFile = stat.isFile() && !stat.isSymbolicLink(); record.mode = stat.mode & 0o777
+        requireCondition(record.regularFile, 'BLOCKED_ENVIRONMENT', 'T1_SYSTEM_TOOL_NOT_REGULAR')
+        fs.accessSync(file, fs.constants.X_OK); record.executable = true; record.sha256 = await hashFile(file)
+      } catch (error) {
+        if (error.code === 'ENOENT') record.exists = false
+        record.diagnostics.push(safeDiagnostic(error, 'tool-preflight', 'T1_SYSTEM_TOOL_UNAVAILABLE')); persist(); throw error
+      }
+      persist()
+    }
+    checkpoint('tool-diagnostic'); persist()
+    let observed, commandFailure
+    try {
+      observed = await boundedCommand(wrapperPath, [], { capture: 't1', profilePath, wrapperPath, timeout: 5000, graceMs: 2000,
+        processRole: 'launcher-process', cwd: toolsRoot, environment: safeEnvironment(),
+        onEvent: event => { diagnostic.events.push(event); persist() } })
+    } catch (error) { commandFailure = error; observed = error.processOutcome; failure = error }
+    if (observed) Object.assign(diagnostic, { exitCode: observed.code, signal: observed.signal, closeObserved: observed.closeObserved,
+      stdoutBytes: observed.stdoutBytes, stderrBytes: observed.stderrBytes, timeout: observed.timeout, bufferTruncated: observed.bufferTruncated,
+      outputComplete: observed.toolOutput.outputComplete, records: observed.toolOutput.records })
+    diagnostic.diagnosticStatus = toolChainOutcome(observed, commandFailure)
+    if (commandFailure) recordFailure(commandFailure, 'tool-diagnostic', 'T1_COMMAND_FAILED')
+    result.reasonCode = diagnostic.diagnosticStatus === 'TOOL_CHAIN_PASS' ? 'DIAGNOSTIC_ONLY_NO_PRODUCT_ACCEPTANCE' : 'T1_DIAGNOSTIC_BLOCKED'
+    persist()
+  } catch (error) {
+    failure = error; diagnostic.diagnosticStatus = 'BLOCKED'
+    recordFailure(error, currentStage(), 'T1_PREFLIGHT_FAILED'); persist()
+  }
+  // No continuation into install/setup/Playwright exists, including the success path.
+  process.stdout.write(JSON.stringify({ mode: 'mac-launcher-T1', diagnosticStatus: diagnostic.diagnosticStatus, complete: false }) + '\n')
+  if (failure || diagnostic.diagnosticStatus !== 'TOOL_CHAIN_PASS') process.exitCode = 1
+}
+export function cleanupT1() {
+  const { root, owner } = t1Root(), context = beginCleanup('workflow-cleanup', { root, owner })
+  const file = path.join(root, 'evidence/acceptance-result.json')
+  const result = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : minimalResult(owner, 'BLOCKED_ENVIRONMENT', 'T1_NO_EXECUTION_RECEIPT')
+  const events = result.toolDiagnostic?.events || []
+  const requested = events.some(event => event.observation === 'spawn-requested')
+  const closed = events.some(event => event.observation === 'close-observed')
+  for (const operation of CLEANUP_OPERATIONS) appendCleanupEvent(context, 'operation-ended', { operation,
+    status: operation === 'owned-process-cleanup' && requested ? (closed ? 'succeeded' : 'incomplete') : 'not-needed' })
+  appendCleanupEvent(context, requested && !closed ? 'caller-returned-incomplete' : 'caller-observed-result', {
+    status: requested && !closed ? 'incomplete' : 'succeeded', cleanupSucceeded: requested && !closed ? null : true })
+  projectCleanup(root, owner); writeEvidence('acceptance-result.json', result)
+  if (requested && !closed) {
+    recordFailure(new AcceptanceError('BLOCKED_ENVIRONMENT', 'T1_OWNED_PROCESS_EXIT_UNCONFIRMED'), 'cleanup', 'T1_OWNED_PROCESS_EXIT_UNCONFIRMED')
+    process.exitCode = 1
+  }
+}
+
 async function cli() {
   const [operation, first, second] = process.argv.slice(2)
+  if (operation === 't1-guard') { assertT1Trigger(); return }
+  if (operation === 't1-run') return runT1()
+  if (operation === 't1-cleanup') return cleanupT1()
   if (operation === 'freeze') {
     const freeze = createFreeze(localFrozenBytes)
     fs.writeFileSync(path.join(repoRoot, FREEZE_RELATIVE), JSON.stringify(freeze, null, 2) + '\n', { flag: 'wx' })
-    process.stdout.write('Frozen 16-file combination: ' + freeze.combinedSha256 + '\n')
+    process.stdout.write('Frozen ' + FROZEN_PATHS.length + '-file combination: ' + freeze.combinedSha256 + '\n')
     return
   }
   if (operation === 'prepare') {
@@ -592,7 +1049,8 @@ async function cli() {
     process.stdout.write('Frozen input contract: ' + manifest.releases.map(item => item.version).join(' -> ') + '\n')
     return
   }
-  if (operation === 'init') {
+  if (operation === 'init' || operation === 'init-t1') {
+    if (operation === 'init-t1') { assertT1Trigger(); requireCondition(first === 'macOS', 'BLOCKED_INPUT', 'T1_MAC_REQUIRED') }
     assertHosted(first, second)
     requireCondition(path.isAbsolute(process.env.RUNNER_TEMP || '') && commitPattern.test(process.env.GITHUB_SHA || ''),
       'BLOCKED_ENVIRONMENT', 'RUNNER_IDENTITY_MISSING')
@@ -601,7 +1059,8 @@ async function cli() {
     'BLOCKED_ENVIRONMENT', 'RUNNER_IDENTITY_INVALID')
     const root = fs.mkdtempSync(path.join(fs.realpathSync(process.env.RUNNER_TEMP), 'rt-native-acceptance-'))
     const owner = { root, caseId: randomUUID(), platform: first, arch: second, runId: process.env.GITHUB_RUN_ID,
-      runAttempt: process.env.GITHUB_RUN_ATTEMPT, harnessSha: process.env.GITHUB_SHA }
+      runAttempt: process.env.GITHUB_RUN_ATTEMPT, harnessSha: process.env.GITHUB_SHA,
+      ...(operation === 'init-t1' ? { mode: 'mac-launcher-T1' } : {}) }
     fs.writeFileSync(path.join(root, 'owner.json'), JSON.stringify(owner), { flag: 'wx', mode: 0o600 })
     fs.mkdirSync(path.join(root, 'evidence'), { mode: 0o700 })
     process.env.NA_CASE_ROOT = root
@@ -639,7 +1098,7 @@ async function cli() {
     return
   }
   if (operation === 'run') return runRunner()
-  if (operation === 'cleanup') return cleanup()
+  if (operation === 'cleanup') return cleanup('workflow-cleanup')
   if (operation === 'publish') return publishEvidence()
   if (operation === 'collect' || operation === 'collect-mac') {
     const macOnly = operation === 'collect-mac'
@@ -648,6 +1107,7 @@ async function cli() {
       const file = path.join(first, directory, 'acceptance-result.json')
       if (!fs.existsSync(file)) continue
       const result = JSON.parse(fs.readFileSync(file, 'utf8')); scanEvidence(result)
+      requireCondition(!result.mode, 'BLOCKED_INPUT', 'DIAGNOSTIC_ARTIFACT_NOT_ACCEPTANCE')
       requireCondition(result.harnessSha === process.env.GITHUB_SHA && result.runId === process.env.GITHUB_RUN_ID
         && Number.isInteger(result.runAttempt) && result.runAttempt <= Number(process.env.GITHUB_RUN_ATTEMPT),
       'BLOCKED_INPUT', 'COLLECT_IDENTITY_MISMATCH')
@@ -679,7 +1139,7 @@ async function cli() {
             requireCondition(value.manifestSha256 === hash(fs.readFileSync(manifestPath)), 'BLOCKED_INPUT', 'COLLECT_ASSET_MANIFEST_MISMATCH')
             const freezeBytes = localFrozenBytes(FREEZE_RELATIVE), freeze = JSON.parse(freezeBytes.toString('utf8'))
             validateFreeze(freeze)
-            requireCondition(value.frozenSource?.harnessSha === result.harnessSha && value.frozenSource?.fileCount === 16
+            requireCondition(value.frozenSource?.harnessSha === result.harnessSha && value.frozenSource?.fileCount === FROZEN_PATHS.length
               && value.frozenSource?.freezeSha256 === hash(freezeBytes) && value.frozenSource?.combinedSha256 === freeze.combinedSha256,
             'BLOCKED_INPUT', 'COLLECT_FROZEN_SOURCE_MISMATCH')
           }
