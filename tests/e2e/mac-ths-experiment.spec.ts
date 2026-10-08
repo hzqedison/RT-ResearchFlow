@@ -52,10 +52,16 @@ async function openPanel(application: ElectronApplication) {
                   /SQLITE_CANTOPEN/i.test(details) ? 'SQLITE_CANTOPEN' :
                   /EACCES/i.test(details) ? 'EACCES' :
                   /EBUSY/i.test(details) ? 'EBUSY' : 'UNCLASSIFIED'
-                const location = details.match(/out\/main\/index\.js:(\d+):(\d+)/)
-                return { errorClass, category,
-                  bundleLine: location ? Number(location[1]) : null,
-                  bundleColumn: location ? Number(location[2]) : null }
+                const duplicateHandler = /Attempted to register a second handler for/i.test(details)
+                const channelMatch = details.match(/Attempted to register a second handler for ['"`]?([A-Za-z][A-Za-z0-9:_-]{0,79})/i)
+                const allowedChannels = ['renderer:ready', 'window:minimize', 'window:toggleMaximize',
+                  'window:close', 'window:isMaximized', 'app:relaunch']
+                const duplicateChannel = duplicateHandler
+                  ? allowedChannels.includes(channelMatch?.[1] ?? '') ? channelMatch![1] : 'OTHER'
+                  : null
+                const bundleFrames = [...details.matchAll(/out\/main\/index\.js:(\d+):(\d+)/g)]
+                  .slice(0, 3).map(match => ({ line: Number(match[1]), column: Number(match[2]) }))
+                return { errorClass, category, duplicateHandler, duplicateChannel, bundleFrames }
               })(),
               entryCount: document.querySelectorAll('[data-testid="quant-onboarding-open"]').length,
             }))
