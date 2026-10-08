@@ -220,7 +220,7 @@ jobs:
       # Each installer is produced once. There is no build in the assemble job.
       - name: Build Windows EXE without launching the installer output
         if: matrix.platform == 'windows'
-        run: pnpm exec electron-builder --win --x64 --config electron-builder.js --config.nsis.runAfterFinish=false --publish never
+        run: pnpm exec electron-builder --win --x64 --config electron-builder.js --config.electronDist=node_modules/electron/dist --config.nsis.runAfterFinish=false --publish never
       - name: Build native Mac DMG with the existing packaging script
         if: matrix.platform == 'macos'
         run: node macos/build.mjs
