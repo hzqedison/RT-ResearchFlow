@@ -14,6 +14,25 @@ export const FILES = ['input-manifest.json', 'acceptance-result.json', 'network-
 export const KINDS = ['BLOCKED_INPUT', 'BLOCKED_ENVIRONMENT', 'FAIL_INSTALL', 'FAIL_DATA', 'FAIL_CREDENTIAL', 'FAIL_LIFECYCLE', 'PASS']
 const shaPattern = /^[a-f0-9]{64}$/
 const commitPattern = /^[a-f0-9]{40}$/
+export const FROZEN_PATHS = [
+  '.github/scripts/fetch-upgrade-installers.cjs', '.github/workflows/native-upgrade-acceptance.yml',
+  'tests/fixtures/releases/native-upgrade-1.0-1.1.json', 'tools/native-acceptance/README.md',
+  'tools/native-acceptance/evidence.mjs', 'tools/native-acceptance/fixtures/version-contract.json',
+  'tools/native-acceptance/harness.ts', 'tools/native-acceptance/native-upgrade.spec.ts',
+  'tools/native-acceptance/offline.test.mjs', 'tools/native-acceptance/package.json',
+  'tools/native-acceptance/platform/macos.mjs', 'tools/native-acceptance/platform/macos.sh',
+  'tools/native-acceptance/platform/windows.ps1', 'tools/native-acceptance/playwright.config.ts',
+  'tools/native-acceptance/pnpm-lock.yaml', 'tools/native-acceptance/snapshot.cjs',
+].sort()
+export const FREEZE_RELATIVE = 'tools/native-acceptance/fixtures/harness-freeze.json'
+const STAGES = new Set(['case-init', 'freeze-verification', 'download', 'runner-start', 'discovery-or-worker-start',
+  'test-start', 'module-load', 'constructor', 'execute', 'platform-setup', 'platform-install', 'app-launch',
+  'network-probe', 'fixture-seed', 'state-read', 'normal-exit', 'cleanup', 'archive', 'publish', 'runner-end', 'unknown'])
+const ERROR_CLASSES = new Set(['Error', 'TypeError', 'SyntaxError', 'ReferenceError', 'RangeError', 'TimeoutError', 'AssertionError', 'AggregateError'])
+const ERRNOS = new Set(['EACCES', 'EPERM', 'ENOENT', 'EEXIST', 'EISDIR', 'ENOTDIR', 'ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET',
+  'ENOSPC', 'EADDRINUSE', 'EINVAL', 'EIO', 'ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'ERR_REQUIRE_ESM',
+  'ERR_INVALID_ARG_TYPE', 'ERR_UNKNOWN_FILE_EXTENSION', 'ERR_DLOPEN_FAILED'])
+const SIGNALS = new Set(['SIGTERM', 'SIGKILL', 'SIGABRT', 'SIGSEGV', 'SIGINT', 'SIGBUS'])
 const safeKeys = new Set(('schemaVersion kind harnessSha contractSha256 manifestSha256 caseId runId runAttempt platform arch status reasonCode startedAt endedAt phases assertions cleanup complete sanitization scope products version tag sourceSha basename sha256 size path installers phase launchId pid uidHash exitCode exited launchTime exitTime packaged runtimeName packageName appId appUserModelId exeRelative exePathHash appRelative appPathHash userDataRelative userDataPathHash sessionDataRelative sessionDataPathHash markerMatches sqliteReadonly sqliteModuleInsidePackage settingsSha256 aiSha256 providerSha256 sourceSha256 sourceId migrations cipherSha256 cipherBytes encryptionAvailable decryptMatches rejectsPrevious otherKeysEmpty apiNoPlaintext dbFiles fileClass absent plaintextAbsent name passed installed registrationSha256 installRelative policy policySha256 enabledAt disabledAt controls transport loopback externalDenied denialCode denialEvidence inherited descendantsCovered blockedAttempts credentialRequestObserved requestCount observationCount verification cleanupSucceeded finalized beforeSha256 afterSha256 durationMs events moduleName moduleVersion exceptionCode faultOffset sanitizedInMemory fixtureScan passwordScan forbiddenFieldsScan records').split(' '))
 
 export class AcceptanceError extends Error {
@@ -21,6 +40,171 @@ export class AcceptanceError extends Error {
 }
 export function requireCondition(value, kind, code) { if (!value) throw new AcceptanceError(kind, code) }
 export function hash(value) { return createHash('sha256').update(value).digest('hex') }
+for (const key of ['stage', 'checkpoints', 'diagnostics', 'errorClass', 'errno', 'signal', 'description', 'role', 'line', 'column',
+  'cleanupEvidence', 'attempts', 'time', 'frozenSource', 'freezeSha256', 'combinedSha256', 'fileCount', 'files']) safeKeys.add(key)
+
+// Never return the message, stack, arguments, arbitrary error properties, or an
+// arbitrary error name. Even Playwright errors can contain complete IPC inputs.
+export function safeDiagnostic(error, stage, code) {
+  error = error?.nativeError || error
+  const raw = typeof error?.message === 'string' ? error.message.slice(0, 16384) : ''
+  const stack = typeof error?.stack === 'string' ? error.stack.slice(0, 32768) : ''
+  const errorClass = ERROR_CLASSES.has(error?.name) ? error.name
+    : [...ERROR_CLASSES].find(name => raw.startsWith(name + ':')) || 'Error'
+  const errno = ERRNOS.has(error?.code) ? error.code
+    : [...ERRNOS].find(value => new RegExp('\\b' + value + '\\b').test(raw)) || null
+  const diagnostic = { stage: STAGES.has(stage) ? stage : 'unknown', reasonCode: /^[A-Z0-9_]{1,96}$/.test(code) ? code : 'UNCLASSIFIED_FAILURE',
+    errorClass, errno, description: errno ? 'Operation failed with a recognized system or module error.'
+      : errorClass === 'SyntaxError' ? 'Module parsing failed; raw source and parameters are suppressed.'
+        : errorClass === 'TimeoutError' ? 'A bounded operation timed out; raw call arguments are suppressed.'
+          : 'An exception was observed; raw message, stack and arguments are suppressed.' }
+  if (Number.isInteger(error?.exitCode) && error.exitCode >= -2147483648 && error.exitCode <= 2147483647) diagnostic.exitCode = error.exitCode
+  if (SIGNALS.has(error?.signal)) diagnostic.signal = error.signal
+  const location = error?.location
+  const candidates = [typeof location?.file === 'string' ? location.file.replaceAll('\\', '/') : '', stack.replaceAll('\\', '/'), raw.replaceAll('\\', '/')]
+  for (const file of FROZEN_PATHS) {
+    const escaped = file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const match = candidates.slice(1).map(value => value.match(new RegExp(escaped + ':(\\d{1,6})(?::(\\d{1,6}))?'))).find(Boolean)
+    if (match || candidates[0] === file || candidates[0].endsWith('/' + file)) {
+      diagnostic.path = file
+      const line = match ? Number(match[1]) : location?.line
+      const column = match ? Number(match[2] || 1) : location?.column
+      if (Number.isInteger(line) && line > 0 && line <= 999999) diagnostic.line = line
+      if (Number.isInteger(column) && column > 0 && column <= 999999) diagnostic.column = column
+      break
+    }
+  }
+  return diagnostic
+}
+export function applyFailure(result, error, stage, fixedCode) {
+  const code = error instanceof AcceptanceError && /^[A-Z0-9_]{1,96}$/.test(error.code) ? error.code : fixedCode
+  const diagnostic = safeDiagnostic(error, stage, code)
+  const previous = result.diagnostics || []
+  diagnostic.role = previous.length ? 'secondary' : 'primary'
+  if (!previous.length) {
+    result.status = error instanceof AcceptanceError && KINDS.includes(error.kind) && error.kind !== 'PASS' ? error.kind
+      : stage === 'freeze-verification' || stage === 'download' ? 'BLOCKED_INPUT' : 'BLOCKED_ENVIRONMENT'
+    result.reasonCode = diagnostic.reasonCode
+  }
+  result.diagnostics = [...previous, diagnostic].slice(0, 20)
+  result.complete = false
+  return result
+}
+function caseState() {
+  const { root, owner } = controlledRoot()
+  const file = path.join(root, 'run-state.json')
+  const value = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : minimalResult(owner, 'BLOCKED_ENVIRONMENT', 'RUN_IN_PROGRESS')
+  return { root, owner, file, value }
+}
+function saveState(state) {
+  scanEvidence(state.value)
+  fs.writeFileSync(state.file, JSON.stringify(state.value), { mode: 0o600 })
+  return state.value
+}
+export function checkpoint(stage, phase) {
+  requireCondition(STAGES.has(stage), 'BLOCKED_INPUT', 'UNKNOWN_CHECKPOINT_STAGE')
+  const state = caseState()
+  state.value.stage = stage
+  state.value.checkpoints = [...(state.value.checkpoints || []), { stage, time: new Date().toISOString(),
+    ...(['A', 'B', 'C', 'D'].includes(phase) ? { phase } : {}) }].slice(-128)
+  return saveState(state)
+}
+export function currentStage() { return caseState().value.stage || 'unknown' }
+export function recordFailure(error, stage, code) {
+  const state = caseState()
+  applyFailure(state.value, error, stage, code)
+  saveState(state)
+  writeEvidence('acceptance-result.json', state.value)
+  return state.value
+}
+export function mergeRunState(value, state) {
+  const merged = { ...value, stage: state.stage || value.stage || 'unknown', checkpoints: state.checkpoints || [],
+    diagnostics: state.diagnostics || [], cleanupEvidence: state.cleanupEvidence || { attempts: [] } }
+  if (state.diagnostics?.length) Object.assign(merged, { status: state.status, reasonCode: state.reasonCode, complete: false })
+  if (state.cleanupEvidence?.attempts?.length) merged.cleanup = state.cleanup === true
+  return merged
+}
+export function createFreeze(readBytes) {
+  const files = FROZEN_PATHS.map(file => { const bytes = readBytes(file); return { path: file, size: bytes.length, sha256: hash(bytes) } })
+  return { schemaVersion: 1, commitBinding: 'workflow-checkout-commit', files, combinedSha256: hash(JSON.stringify(files)) }
+}
+export function validateFreeze(freeze) {
+  requireCondition(freeze?.schemaVersion === 1 && freeze.commitBinding === 'workflow-checkout-commit'
+    && freeze.files?.length === FROZEN_PATHS.length, 'BLOCKED_INPUT', 'FREEZE_FORMAT_INVALID')
+  const files = freeze.files.map((item, index) => {
+    requireCondition(item.path === FROZEN_PATHS[index] && shaPattern.test(item.sha256) && Number.isSafeInteger(item.size) && item.size > 0,
+      'BLOCKED_INPUT', 'FREEZE_FILE_SET_INVALID')
+    return { path: item.path, size: item.size, sha256: item.sha256 }
+  })
+  requireCondition(hash(JSON.stringify(files)) === freeze.combinedSha256, 'BLOCKED_INPUT', 'FREEZE_COMBINED_MISMATCH')
+  return files
+}
+export async function verifyFrozenBytes(freezeBytes, sourceSha, readLocal, readCommit) {
+  requireCondition(commitPattern.test(sourceSha), 'BLOCKED_INPUT', 'FROZEN_COMMIT_INVALID')
+  let freeze
+  try { freeze = JSON.parse(freezeBytes.toString('utf8')) } catch { throw new AcceptanceError('BLOCKED_INPUT', 'FREEZE_JSON_INVALID') }
+  const files = validateFreeze(freeze)
+  // Verify local bytes first. Missing/changed files cannot reach network, install, or app launch.
+  for (const item of files) {
+    let bytes
+    try { bytes = await readLocal(item.path) } catch { throw new AcceptanceError('BLOCKED_INPUT', 'FROZEN_FILE_MISSING') }
+    requireCondition(Buffer.isBuffer(bytes) && bytes.length === item.size && hash(bytes) === item.sha256,
+      'BLOCKED_INPUT', 'FROZEN_WORKTREE_BYTES_MISMATCH')
+  }
+  // The freeze is excluded from its own file list. Its independent runtime digest
+  // is bound to the same checkout commit, without embedding that commit in itself.
+  requireCondition(hash(await readCommit(FREEZE_RELATIVE, sourceSha)) === hash(freezeBytes), 'BLOCKED_INPUT', 'FREEZE_COMMIT_BYTES_MISMATCH')
+  for (const item of files) {
+    const bytes = await readCommit(item.path, sourceSha)
+    requireCondition(Buffer.isBuffer(bytes) && bytes.length === item.size && hash(bytes) === item.sha256,
+      'BLOCKED_INPUT', 'FROZEN_COMMIT_BYTES_MISMATCH')
+  }
+  return { harnessSha: sourceSha, freezeSha256: hash(freezeBytes), combinedSha256: freeze.combinedSha256,
+    fileCount: files.length, files, verification: 'raw-worktree-and-fixed-commit-blobs-match; freeze-excludes-itself' }
+}
+function localFrozenBytes(file) {
+  const absolute = path.join(repoRoot, file)
+  requireCondition(fs.realpathSync(absolute) === absolute && fs.lstatSync(absolute).isFile(), 'BLOCKED_INPUT', 'FROZEN_FILE_NOT_REGULAR')
+  return fs.readFileSync(absolute)
+}
+async function verifyCheckout() {
+  const deadline = Date.now() + 120000
+  const readCommit = async (file, sha) => {
+    requireCondition(Date.now() < deadline, 'BLOCKED_INPUT', 'COMMIT_READ_TIMEOUT')
+    const response = await fetch('https://api.github.com/repos/hzqedison/RT-ResearchFlow/contents/' + file + '?ref=' + sha, {
+      headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28',
+        ...(process.env.GITHUB_TOKEN ? { Authorization: 'Bearer ' + process.env.GITHUB_TOKEN } : {}) },
+      redirect: 'error', signal: AbortSignal.timeout(Math.min(10000, deadline - Date.now())),
+    })
+    requireCondition(response.ok, 'BLOCKED_INPUT', 'COMMIT_BLOB_READ_FAILED')
+    let length = 0; const chunks = []
+    for await (const chunk of response.body) { length += chunk.length; requireCondition(length <= 2 * 1024 * 1024, 'BLOCKED_INPUT', 'COMMIT_RESPONSE_TOO_LARGE'); chunks.push(chunk) }
+    const item = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+    requireCondition(item.type === 'file' && item.path === file && item.encoding === 'base64' && typeof item.content === 'string',
+      'BLOCKED_INPUT', 'COMMIT_BLOB_FORMAT_INVALID')
+    const bytes = Buffer.from(item.content, 'base64')
+    requireCondition(bytes.length === item.size && createHash('sha1').update(Buffer.from('blob ' + bytes.length + '\0')).update(bytes).digest('hex') === item.sha,
+      'BLOCKED_INPUT', 'COMMIT_GIT_BLOB_MISMATCH')
+    return bytes
+  }
+  return verifyFrozenBytes(localFrozenBytes(FREEZE_RELATIVE), process.env.GITHUB_SHA || '', localFrozenBytes, readCommit)
+}
+export function requireFrozenExecution() {
+  const { root, owner } = controlledRoot()
+  let receipt
+  try { receipt = JSON.parse(fs.readFileSync(path.join(root, 'freeze-receipt.json'), 'utf8')) }
+  catch { throw new AcceptanceError('BLOCKED_INPUT', 'FROZEN_EXECUTION_RECEIPT_MISSING') }
+  const bytes = localFrozenBytes(FREEZE_RELATIVE), freeze = JSON.parse(bytes.toString('utf8')), files = validateFreeze(freeze)
+  requireCondition(receipt.harnessSha === owner.harnessSha && receipt.caseId === owner.caseId && receipt.runId === owner.runId
+    && receipt.runAttempt === Number(owner.runAttempt) && receipt.freezeSha256 === hash(bytes)
+    && receipt.combinedSha256 === freeze.combinedSha256 && receipt.fileCount === 16,
+  'BLOCKED_INPUT', 'FROZEN_EXECUTION_RECEIPT_MISMATCH')
+  for (const item of files) {
+    const local = localFrozenBytes(item.path)
+    requireCondition(local.length === item.size && hash(local) === item.sha256, 'BLOCKED_INPUT', 'FROZEN_EXECUTION_BYTES_CHANGED')
+  }
+  return receipt
+}
 export function relative(root, value) {
   const result = path.relative(root, value)
   requireCondition(result && !result.startsWith('..') && !path.isAbsolute(result), 'BLOCKED_ENVIRONMENT', 'PATH_OUTSIDE_CASE')
@@ -60,18 +244,27 @@ export async function command(executable, args, options = {}) {
   return await new Promise((resolve, reject) => {
     const child = spawn(executable, args, { cwd: options.cwd || toolsRoot, env: safeEnvironment(options.env),
       windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
-    let stdout = '', stderrBytes = 0, timedOut = false
+    let stdout = '', stderr = '', stderrBytes = 0, timedOut = false
     const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL') }, timeout)
     child.stdout.on('data', chunk => {
       if (stdout.length + chunk.length > 512 * 1024) { timedOut = true; child.kill('SIGKILL') }
       else stdout += chunk.toString('utf8')
     })
-    child.stderr.on('data', chunk => { stderrBytes += chunk.length })
-    child.on('error', () => { clearTimeout(timer); reject(new AcceptanceError('BLOCKED_ENVIRONMENT', 'NATIVE_COMMAND_UNAVAILABLE')) })
-    child.on('close', code => {
+    child.stderr.on('data', chunk => { stderrBytes += chunk.length; if (stderr.length < 32768) stderr += chunk.toString('utf8').slice(0, 32768 - stderr.length) })
+    child.on('error', error => {
       clearTimeout(timer)
-      if (timedOut) reject(new AcceptanceError(options.kind || 'BLOCKED_ENVIRONMENT', 'NATIVE_COMMAND_TIMEOUT'))
-      else resolve({ code, stdout, stderrBytes, pid: child.pid })
+      const failure = new AcceptanceError('BLOCKED_ENVIRONMENT', 'NATIVE_COMMAND_UNAVAILABLE')
+      failure.nativeError = { name: error.name, code: error.code }
+      reject(failure)
+    })
+    child.on('close', (code, signal) => {
+      clearTimeout(timer)
+      const diagnostic = safeDiagnostic({ message: stderr, exitCode: code, signal }, 'unknown', 'NATIVE_PROCESS_RESULT')
+      if (timedOut) {
+        const failure = new AcceptanceError(options.kind || 'BLOCKED_ENVIRONMENT', 'NATIVE_COMMAND_TIMEOUT')
+        failure.nativeError = { name: 'TimeoutError', code: diagnostic.errno, exitCode: code, signal }
+        reject(failure)
+      } else resolve({ code, stdout, stderrBytes, pid: child.pid, signal, diagnostic })
     })
     child.stdin.on('error', () => {})
     child.stdin.end(options.input || '')
@@ -86,8 +279,11 @@ export async function platformCommand(action, args = [], options = {}) {
   let value
   try { value = JSON.parse(result.stdout.trim() || '{}') } catch { value = {} }
   if (result.code !== 0 || value.ok !== true) {
-    throw new AcceptanceError(value.kind || options.kind || 'BLOCKED_ENVIRONMENT',
+    const failure = new AcceptanceError(value.kind || options.kind || 'BLOCKED_ENVIRONMENT',
       /^[A-Z0-9_]+$/.test(value.code || '') ? value.code : 'NATIVE_PLATFORM_FAILED')
+    failure.nativeError = { name: result.diagnostic.errorClass, code: result.diagnostic.errno, exitCode: result.code, signal: result.signal,
+      location: { file: result.diagnostic.path, line: result.diagnostic.line, column: result.diagnostic.column } }
+    throw failure
   }
   return value
 }
@@ -152,8 +348,11 @@ export function scanEvidence(value, secrets = []) {
 export function writeEvidence(file, value, secrets = []) {
   requireCondition(FILES.includes(file), 'BLOCKED_INPUT', 'UNKNOWN_EVIDENCE_FILE')
   const { root } = controlledRoot()
+  const stateFile = path.join(root, 'run-state.json')
+  if (file === 'acceptance-result.json' && fs.existsSync(stateFile)) value = mergeRunState(value, JSON.parse(fs.readFileSync(stateFile, 'utf8')))
   scanEvidence(value, secrets)
   fs.writeFileSync(path.join(root, 'evidence', file), JSON.stringify(value, null, 2) + '\n', { mode: 0o600 })
+  if (file === 'acceptance-result.json') fs.writeFileSync(stateFile, JSON.stringify(value), { mode: 0o600 })
 }
 export function minimalResult(owner, kind, code) {
   return { schemaVersion: 1, kind: 'acceptance-result', harnessSha: owner.harnessSha,
@@ -164,7 +363,17 @@ export function minimalResult(owner, kind, code) {
 export async function cleanup() {
   const { root } = controlledRoot()
   // Platform cleanup only targets case-owned paths/processes/rules; it never uninstalls a product.
-  await platformCommand('cleanup', [], { timeout: 60000 })
+  checkpoint('cleanup')
+  const start = new Date().toISOString()
+  let error
+  try { await platformCommand('cleanup', [], { timeout: 60000 }) } catch (failure) { error = failure }
+  const state = caseState()
+  state.value.cleanup = !error
+  state.value.cleanupEvidence = { attempts: [...(state.value.cleanupEvidence?.attempts || []), {
+    stage: 'cleanup', startedAt: start, endedAt: new Date().toISOString(), cleanupSucceeded: !error,
+  }] }
+  saveState(state)
+  if (error) { recordFailure(error, 'cleanup', 'OWNED_CLEANUP_FAILED'); throw error }
   const file = path.join(root, 'evidence/acceptance-result.json')
   if (fs.existsSync(file)) {
     const result = JSON.parse(fs.readFileSync(file, 'utf8'))
@@ -174,6 +383,7 @@ export async function cleanup() {
 }
 export function publishEvidence() {
   const { root, owner } = controlledRoot()
+  ensureTerminalOutcome('publish')
   const destination = path.join(root, 'public-evidence')
   // Publication owns a fresh directory; never clean up someone else's previous output.
   fs.mkdirSync(destination, { mode: 0o700 })
@@ -194,26 +404,88 @@ export function publishEvidence() {
       fs.copyFileSync(path.join(root, 'evidence', name), path.join(destination, name), fs.constants.COPYFILE_EXCL)
       copied.push(name)
     }
-  } catch {
+  } catch (error) {
     // No partial success bundle is uploaded if scanning fails.
     for (const name of copied) {
       const file = path.join(destination, name)
       if (fs.existsSync(file)) fs.unlinkSync(file)
     }
-    fs.writeFileSync(path.join(destination, 'acceptance-result.json'), JSON.stringify(minimalResult(owner, 'FAIL_CREDENTIAL', 'EVIDENCE_SCAN_FAILED')), { flag: 'wx', mode: 0o600 })
+    const prior = caseState().value
+    const summary = mergeRunState(minimalResult(owner, 'FAIL_CREDENTIAL', 'EVIDENCE_SCAN_FAILED'), prior)
+    applyFailure(summary, new AcceptanceError('FAIL_CREDENTIAL', 'EVIDENCE_SCAN_FAILED'), 'publish', 'EVIDENCE_SCAN_FAILED')
+    scanEvidence(summary)
+    fs.writeFileSync(path.join(destination, 'acceptance-result.json'), JSON.stringify(summary), { flag: 'wx', mode: 0o600 })
     throw new AcceptanceError('FAIL_CREDENTIAL', 'EVIDENCE_SCAN_FAILED')
   }
 }
+export function ensureTerminalOutcome(stage) {
+  const state = caseState().value
+  if (!state.diagnostics?.length && !(state.status === 'PASS' && state.complete === true)) {
+    return recordFailure(new Error('No terminal evidence'), stage, 'RUNNER_NO_TERMINAL_EVIDENCE')
+  }
+  return state
+}
 export default class PrivateReporter {
-  onEnd(result) { process.stdout.write('Native acceptance runner: ' + result.status + '; review sanitized evidence.\n') }
+  // The second argument is an in-memory test seam; Playwright supplies only options.
+  constructor(_options = {}, io = { checkpoint, stage: currentStage, fail: recordFailure,
+    state: () => caseState().value, output: line => process.stdout.write(line) }) { this.io = io }
+  onBegin() { this.io.checkpoint('discovery-or-worker-start') }
+  onTestBegin() { this.io.checkpoint('test-start') }
+  onError(error) { this.io.fail(error, this.io.stage(), 'RUNNER_ERROR') }
+  onTestEnd(_test, result) {
+    if (result.status !== 'passed') {
+      for (const error of result.errors?.length ? result.errors.slice(0, 3) : [new Error('Test did not pass')]) {
+        this.io.fail(error, this.io.stage(), result.status === 'timedOut' ? 'TEST_TIMED_OUT' : 'TEST_FAILED')
+      }
+    }
+  }
+  onEnd(result) {
+    let state = this.io.state()
+    if (!state.diagnostics?.length && (result.status !== 'passed' || state.status !== 'PASS' || !state.complete)) {
+      this.io.fail(new Error('Runner did not produce complete passing evidence'), this.io.stage(), 'RUNNER_NO_TERMINAL_EVIDENCE')
+      state = this.io.state()
+    }
+    // Projection only; never log TestResult, attachments, stdout, errors or parameters.
+    this.io.output(JSON.stringify({ status: state.status, reasonCode: state.reasonCode,
+      stage: state.stage || 'unknown', diagnostics: state.diagnostics || [] }) + '\n')
+  }
+}
+async function runRunner() {
+  requireFrozenExecution()
+  checkpoint('runner-start')
+  try {
+    const cli = createRequire(import.meta.url).resolve('@playwright/test/cli')
+    const result = await command(process.execPath, [cli, 'test'], { timeout: 680000, env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1', DEBUG: '', PWDEBUG: '' } })
+    if (result.code !== 0) {
+      const error = new AcceptanceError('BLOCKED_ENVIRONMENT', 'RUNNER_EXIT_NONZERO')
+      error.nativeError = { name: result.diagnostic.errorClass, code: result.diagnostic.errno, exitCode: result.code, signal: result.signal,
+        location: { file: result.diagnostic.path, line: result.diagnostic.line, column: result.diagnostic.column } }
+      recordFailure(error, currentStage(), 'RUNNER_EXIT_NONZERO')
+    }
+    const state = ensureTerminalOutcome('runner-end')
+    process.stdout.write(JSON.stringify({ status: state.status, reasonCode: state.reasonCode, stage: state.stage,
+      diagnostics: state.diagnostics || [] }) + '\n')
+    if (result.code !== 0 || state.status !== 'PASS' || !state.complete) process.exitCode = 1
+  } catch (error) {
+    recordFailure(error, currentStage(), 'RUNNER_START_FAILED')
+    throw new AcceptanceError('BLOCKED_ENVIRONMENT', 'RUNNER_START_FAILED')
+  }
 }
 
 async function cli() {
   const [operation, first, second] = process.argv.slice(2)
+  if (operation === 'freeze') {
+    const freeze = createFreeze(localFrozenBytes)
+    fs.writeFileSync(path.join(repoRoot, FREEZE_RELATIVE), JSON.stringify(freeze, null, 2) + '\n', { flag: 'wx' })
+    process.stdout.write('Frozen 16-file combination: ' + freeze.combinedSha256 + '\n')
+    return
+  }
   if (operation === 'prepare') {
     const manifest = validateManifest(JSON.parse(fs.readFileSync(manifestPath, 'utf8')))
     requireCondition(commitPattern.test(process.env.GITHUB_SHA || ''), 'BLOCKED_INPUT', 'HARNESS_SHA_MISSING')
+    const frozen = await verifyCheckout()
     if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, 'manifest_sha256=' + hash(fs.readFileSync(manifestPath)) + '\n')
+    if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, 'combined_sha256=' + frozen.combinedSha256 + '\n')
     process.stdout.write('Frozen input contract: ' + manifest.releases.map(item => item.version).join(' -> ') + '\n')
     return
   }
@@ -230,13 +502,27 @@ async function cli() {
     fs.writeFileSync(path.join(root, 'owner.json'), JSON.stringify(owner), { flag: 'wx', mode: 0o600 })
     fs.mkdirSync(path.join(root, 'evidence'), { mode: 0o700 })
     process.env.NA_CASE_ROOT = root
-    writeEvidence('acceptance-result.json', minimalResult(owner, 'BLOCKED_INPUT', 'NOT_EXECUTED'))
+    // Private progress is not a terminal acceptance artifact.
+    checkpoint('case-init')
     fs.appendFileSync(process.env.GITHUB_ENV, 'NA_CASE_ROOT=' + root + '\nNA_PUBLIC_EVIDENCE=' + path.join(root, 'public-evidence') + '\n')
+    return
+  }
+  if (operation === 'verify') {
+    checkpoint('freeze-verification')
+    try {
+      const { root, owner } = controlledRoot()
+      const receipt = await verifyCheckout()
+      requireCondition(receipt.combinedSha256 === process.env.NA_EXPECTED_COMBINED_SHA256, 'BLOCKED_INPUT', 'PREPARE_FREEZE_MISMATCH')
+      fs.writeFileSync(path.join(root, 'freeze-receipt.json'), JSON.stringify({ ...receipt, caseId: owner.caseId,
+        runId: owner.runId, runAttempt: Number(owner.runAttempt) }), { flag: 'wx', mode: 0o600 })
+    } catch (error) { recordFailure(error, 'freeze-verification', 'FROZEN_CHECKOUT_FAILED'); throw error }
     return
   }
   if (operation === 'fetch') {
     const { root, owner } = controlledRoot()
     try {
+      requireFrozenExecution()
+      checkpoint('download')
       const require = createRequire(import.meta.url)
       const { main } = require(path.join(repoRoot, '.github/scripts/fetch-upgrade-installers.cjs'))
       const receipt = await main(['--platform', owner.platform, '--arch', owner.arch])
@@ -244,15 +530,17 @@ async function cli() {
       await validatedInputs()
     } catch (error) {
       const code = error.upgradeCode || error.code || 'DOWNLOAD_INPUT_FAILED'
-      writeEvidence('acceptance-result.json', minimalResult(owner, 'BLOCKED_INPUT', /^[A-Z0-9_]+$/.test(code) ? code : 'DOWNLOAD_INPUT_FAILED'))
+      recordFailure(new AcceptanceError('BLOCKED_INPUT', /^[A-Z0-9_]+$/.test(code) ? code : 'DOWNLOAD_INPUT_FAILED'), 'download', 'DOWNLOAD_INPUT_FAILED')
       throw new AcceptanceError('BLOCKED_INPUT', code)
     }
     return
   }
+  if (operation === 'run') return runRunner()
   if (operation === 'cleanup') return cleanup()
   if (operation === 'publish') return publishEvidence()
-  if (operation === 'collect') {
-    const expected = new Set(['windows-x64', 'macOS-arm64', 'macOS-x64']), selected = new Map()
+  if (operation === 'collect' || operation === 'collect-mac') {
+    const macOnly = operation === 'collect-mac'
+    const expected = new Set(macOnly ? ['macOS-arm64', 'macOS-x64'] : ['windows-x64', 'macOS-arm64', 'macOS-x64']), selected = new Map()
     for (const directory of fs.readdirSync(first)) {
       const file = path.join(first, directory, 'acceptance-result.json')
       if (!fs.existsSync(file)) continue
@@ -264,7 +552,7 @@ async function cli() {
       requireCondition(expected.has(key), 'BLOCKED_INPUT', 'COLLECT_PLATFORM_UNKNOWN')
       if (!selected.has(key) || selected.get(key).result.runAttempt < result.runAttempt) selected.set(key, { result, directory })
     }
-    let allPassed = selected.size === 3 && process.env.NA_NATIVE_RESULT === 'success'
+    let allPassed = selected.size === expected.size && process.env.NA_NATIVE_RESULT === 'success'
     for (const [key, { result, directory }] of selected) {
       const required = ['PACKAGED_VERSION_ARCH', 'PACKAGE_RUNTIME_NAME', 'EFFECTIVE_USER_DATA', 'EFFECTIVE_SESSION_DATA',
         'INSTALLED_APP_PATH', 'CASE_MARKER', 'NETWORK_node', 'NETWORK_electron', 'NETWORK_child', 'SETTINGS_API',
@@ -284,7 +572,14 @@ async function cli() {
           requireCondition(value.caseId === result.caseId && value.harnessSha === result.harnessSha
             && value.runId === result.runId && value.runAttempt === result.runAttempt
             && value.platform === result.platform && value.arch === result.arch, 'BLOCKED_INPUT', 'COLLECT_FILE_IDENTITY_MISMATCH')
-          if (name === 'input-manifest.json') requireCondition(value.manifestSha256 === hash(fs.readFileSync(manifestPath)), 'BLOCKED_INPUT', 'COLLECT_ASSET_MANIFEST_MISMATCH')
+          if (name === 'input-manifest.json') {
+            requireCondition(value.manifestSha256 === hash(fs.readFileSync(manifestPath)), 'BLOCKED_INPUT', 'COLLECT_ASSET_MANIFEST_MISMATCH')
+            const freezeBytes = localFrozenBytes(FREEZE_RELATIVE), freeze = JSON.parse(freezeBytes.toString('utf8'))
+            validateFreeze(freeze)
+            requireCondition(value.frozenSource?.harnessSha === result.harnessSha && value.frozenSource?.fileCount === 16
+              && value.frozenSource?.freezeSha256 === hash(freezeBytes) && value.frozenSource?.combinedSha256 === freeze.combinedSha256,
+            'BLOCKED_INPUT', 'COLLECT_FROZEN_SOURCE_MISMATCH')
+          }
           if (name === 'network-isolation.json') requireCondition(value.inherited === true && value.descendantsCovered === true
             && value.cleanupSucceeded === true && value.credentialRequestObserved === false && value.controls?.length === 12
             && value.controls.every(item => item.loopback === true && item.externalDenied === true), 'BLOCKED_ENVIRONMENT', 'COLLECT_NETWORK_GATE_MISSING')
@@ -295,7 +590,9 @@ async function cli() {
       allPassed &&= passed
       process.stdout.write(key + ': ' + result.status + ' / ' + result.reasonCode + '\n')
     }
-    const message = 'Machine evidence ' + (allPassed ? 'complete' : 'incomplete or failing') + '. Astra review/signoff required.\n'
+    const message = (macOnly ? 'Mac-only machine evidence ' : 'All-platform machine evidence ')
+      + (allPassed ? 'complete' : 'incomplete or failing') + '. Astra review/signoff required.\n'
+      + (macOnly ? 'Windows NOT EXECUTED (BLOCKED_F2); all-platform acceptance is NOT complete.\n' : '')
     process.stdout.write(message)
     if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, message)
     if (!allPassed) process.exitCode = 1
@@ -304,5 +601,9 @@ async function cli() {
   throw new AcceptanceError('BLOCKED_INPUT', 'UNKNOWN_OPERATION')
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  cli().catch(error => { process.stderr.write((error.kind || 'BLOCKED_ENVIRONMENT') + ' / ' + (error.code || 'HARNESS_COMMAND_FAILED') + '\n'); process.exitCode = 1 })
+  cli().catch(error => {
+    const diagnostic = safeDiagnostic(error, 'unknown', error instanceof AcceptanceError ? error.code : 'HARNESS_COMMAND_FAILED')
+    try { if (process.env.NA_CASE_ROOT) recordFailure(error, currentStage(), 'HARNESS_COMMAND_FAILED') } catch { /* Only safe projection below, even if the evidence filesystem is unavailable. */ }
+    process.stderr.write(JSON.stringify(diagnostic) + '\n'); process.exitCode = 1
+  })
 }

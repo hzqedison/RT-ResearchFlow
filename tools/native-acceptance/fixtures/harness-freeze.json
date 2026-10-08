@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "commitBinding": "workflow-checkout-commit",
+  "files": [
+    {
+      "path": ".github/scripts/fetch-upgrade-installers.cjs",
+      "size": 10080,
+      "sha256": "8cb2214fdb9a972de2433cebbc7e4a6a67f20b69c5496f7a6a52f3c114645a06"
+    },
+    {
+      "path": ".github/workflows/native-upgrade-acceptance.yml",
+      "size": 5248,
+      "sha256": "e793ff8c657710d5a2a21e2574545d9f3685d45d3e32dd53d425fb7987df9072"
+    },
+    {
+      "path": "tests/fixtures/releases/native-upgrade-1.0-1.1.json",
+      "size": 1808,
+      "sha256": "b65be09318ab5dbba790909a6024cd6df83ccdf5671c66b55669ecea3a3c6b7f"
+    },
+    {
+      "path": "tools/native-acceptance/README.md",
+      "size": 9298,
+      "sha256": "d0af1dc8e14aebcb3580c38270cf486fc77d73b2634b6256f1b54051c7f6e6bb"
+    },
+    {
+      "path": "tools/native-acceptance/evidence.mjs",
+      "size": 40217,
+      "sha256": "2f8c3442f8707a55df4d0b142f3f5cc609cac86639440aa4812906050475184b"
+    },
+    {
+      "path": "tools/native-acceptance/fixtures/version-contract.json",
+      "size": 2457,
+      "sha256": "b9634472a2d3805c9396811c1b075d4c6a61ef837a22e7fc6af12dc06492e7a7"
+    },
+    {
+      "path": "tools/native-acceptance/harness.ts",
+      "size": 32523,
+      "sha256": "8d27e36a97c3b9c4d67f4cf6987039e2b841afecdf3066f3d005fce9e462a80a"
+    },
+    {
+      "path": "tools/native-acceptance/native-upgrade.spec.ts",
+      "size": 689,
+      "sha256": "e3b29698b5a2143c9792d8c50b78a71182ebe08df30f2ff66654ebcd5d873581"
+    },
+    {
+      "path": "tools/native-acceptance/offline.test.mjs",
+      "size": 35735,
+      "sha256": "985dd204e4dd7eb2cace69cf617e7fb57d632a056e739721752fe76a525dc7ee"
+    },
+    {
+      "path": "tools/native-acceptance/package.json",
+      "size": 319,
+      "sha256": "ad9c6e47c663b4aadd9c5181c0b0ee713cc5b9f7046370104784797909581298"
+    },
+    {
+      "path": "tools/native-acceptance/platform/macos.mjs",
+      "size": 9486,
+      "sha256": "0d4cd7edeabd1bab839bb8a864c2aa11e57ce6ce0c693f4b96688a5d14eb0a90"
+    },
+    {
+      "path": "tools/native-acceptance/platform/macos.sh",
+      "size": 155,
+      "sha256": "f952ebfeccaaaeb875af61568edf7319ee02a2e76b9f1c652cafe620f337e06c"
+    },
+    {
+      "path": "tools/native-acceptance/platform/windows.ps1",
+      "size": 11982,
+      "sha256": "fc5a2ceb1d608eef6fb15f4ffe780253015d0c37d0736bea85e24a75b3a1c778"
+    },
+    {
+      "path": "tools/native-acceptance/playwright.config.ts",
+      "size": 504,
+      "sha256": "7f23244a40deecbab076fb39d7e5e4d8bd13d960836f65e14fa6af61eed13c81"
+    },
+    {
+      "path": "tools/native-acceptance/pnpm-lock.yaml",
+      "size": 1317,
+      "sha256": "7009ed801624686eff210f907b2312ce368f5f04ab2ac09f6465c1b9151fe70d"
+    },
+    {
+      "path": "tools/native-acceptance/snapshot.cjs",
+      "size": 4955,
+      "sha256": "671af518c48fde83548d51fc3a27bf2d85d9fd3ff326b1ff04a08dafaa067945"
+    }
+  ],
+  "combinedSha256": "8fef94360d98b7be394def53a2f455794a8ac12707136a42971c7dbff67a6795"
+}

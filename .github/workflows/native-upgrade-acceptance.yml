@@ -1,4 +1,4 @@
-name: Published native upgrade acceptance (1.0 to 1.1)
+name: Mac published native upgrade acceptance (1.0 to 1.1; Windows held)
 
 on:
   push:
@@ -18,6 +18,13 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Applied to checkout's Git subprocesses before any working-tree files exist.
+  # Do not normalize files after checkout to manufacture a passing digest.
+  GIT_CONFIG_COUNT: '2'
+  GIT_CONFIG_KEY_0: core.autocrlf
+  GIT_CONFIG_VALUE_0: 'false'
+  GIT_CONFIG_KEY_1: core.eol
+  GIT_CONFIG_VALUE_1: lf
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
   DEBUG: ''
   PWDEBUG: ''
@@ -28,6 +35,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       manifest_sha256: ${{ steps.inputs.outputs.manifest_sha256 }}
+      combined_sha256: ${{ steps.inputs.outputs.combined_sha256 }}
     steps:
       - uses: actions/checkout@v4.2.2
         with:
@@ -38,6 +46,8 @@ jobs:
           node-version: '20'
       - name: Validate frozen published inputs (no native download)
         id: inputs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: node tools/native-acceptance/evidence.mjs prepare
 
   native:
@@ -47,9 +57,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: windows-latest
-            platform: windows
-            arch: x64
           - runner: macos-15
             platform: macOS
             arch: arm64
@@ -66,6 +73,15 @@ jobs:
         with:
           node-version: '20'
           architecture: ${{ matrix.arch }}
+      - name: Create owned hosted-native case (private progress, no placeholder artifact)
+        id: initialize
+        run: node tools/native-acceptance/evidence.mjs init ${{ matrix.platform }} ${{ matrix.arch }}
+      - name: Verify all 16 raw files against freeze and this exact source commit
+        timeout-minutes: 3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NA_EXPECTED_COMBINED_SHA256: ${{ needs.prepare.outputs.combined_sha256 }}
+        run: node tools/native-acceptance/evidence.mjs verify
       - uses: pnpm/action-setup@v4.1.0
         with:
           version: 10.14.0
@@ -74,16 +90,13 @@ jobs:
       - name: Install only the standalone harness (no product scripts or browsers)
         working-directory: tools/native-acceptance
         run: pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace
-      - name: Create owned hosted-native case
-        id: initialize
-        run: node tools/native-acceptance/evidence.mjs init ${{ matrix.platform }} ${{ matrix.arch }}
       - name: Fetch both immutable published installers with hash and size verification
         timeout-minutes: 11
         run: node tools/native-acceptance/evidence.mjs fetch
       - name: Four independent launches across real native upgrade and Keychain persistence
         timeout-minutes: 12
         working-directory: tools/native-acceptance
-        run: pnpm exec playwright test
+        run: node evidence.mjs run
       - name: Always restore owned network and temporary Keychain state
         if: ${{ always() && steps.initialize.outcome == 'success' }}
         timeout-minutes: 2
@@ -121,7 +134,7 @@ jobs:
         with:
           pattern: native-acceptance-*-${{ github.run_id }}-*
           path: ${{ runner.temp }}/native-acceptance-collection
-      - name: Require all three native results and full evidence gates
+      - name: Require both Mac results; Windows remains outside this acceptance run
         env:
           NA_NATIVE_RESULT: ${{ needs.native.result }}
-        run: node tools/native-acceptance/evidence.mjs collect "${{ runner.temp }}/native-acceptance-collection"
+        run: node tools/native-acceptance/evidence.mjs collect-mac "${{ runner.temp }}/native-acceptance-collection"

@@ -10,14 +10,50 @@ The dedicated branch is `codex/acceptance-1.0-to-1.1`. A branch push can discove
 this workflow without first installing it on the default branch; manual dispatch
 has GitHub's normal default-branch workflow availability requirement.
 
+The current workflow runs ONLY macOS arm64 and macOS x64. Windows is deliberately
+absent because the fixed 1.0 installer failure requires Astra's separate D0
+diagnostic design and implementation. A successful Mac job or collection is not
+Windows acceptance or all-platform acceptance. Do not re-add Windows to this
+matrix or rerun its failed installer without a newly reviewed execution plan.
+
 ## Entry points
 
 The workflow calls `evidence.mjs prepare`, `init <windows|macOS> <x64|arm64>`,
-`fetch`, the one Playwright test, `cleanup`, `publish`, then `collect <directory>`.
+`verify`, `fetch`, `run` (the bounded Playwright process wrapper), `cleanup`,
+`publish`, then `collect-mac <directory>`.
+The Mac-only collector requires both architectures and the unchanged full native
+evidence gates; it rejects Windows artifacts and explicitly reports Windows as
+not executed. The original `collect <directory>` remains a strict three-platform
+collector; two successful Mac cases can never satisfy it.
 `init` exports the case and public-evidence directories through `GITHUB_ENV`.
 The existing downloader receipt is retained privately as `download-receipt.json`;
 its installer paths remain relative to `RUNNER_TEMP`. No alternate downloader,
 URL overrides, or unsigned receipt is accepted.
+
+## Frozen source bytes and commit identity
+
+`fixtures/harness-freeze.json` lists exactly the 16 acceptance payload files,
+their byte lengths and SHA-256 hashes. Its combination is SHA-256 of the compact
+JSON array of `{path,size,sha256}` entries in fixed path order. The freeze file
+itself is deliberately excluded. It contains no own commit ID or own digest.
+After changing any payload file, regenerate it with the local `freeze` operation
+only as an explicit new freeze, then let Astra review the resulting bytes.
+
+The harness source identity is the workflow's exact `github.sha`, not either
+product commit. Prepare and each native job read the 16 original blobs and the
+freeze file from GitHub's read-only contents API at that exact SHA, validate Git
+blob integrity, and compare raw bytes with both checkout and freeze. The runtime
+receipt records that SHA, the independent freeze-file SHA-256 and combination.
+This permits payload and freeze in one commit without circular self-hashing.
+There is no dependency on a predicted future commit hash. Publishing this branch
+must preserve the reviewed bytes; changing line endings requires a new freeze.
+
+Checkout disables `core.autocrlf` and selects LF via Git environment configuration
+before checkout. It does not rewrite working-tree files afterward. Missing files,
+CRLF conversion, other byte drift or an unavailable fixed-commit blob block before
+dependency installation, installer download or application execution. The wrapper
+and harness also recheck local frozen bytes and the case-bound verified receipt
+before execution. No checkout mismatch is repaired silently by the verifier.
 
 `fixtures/version-contract.json` freezes package-name and data-path rules,
 source/settings/AI IPC expectations, read-only SQL, and lifecycle timeouts.
@@ -61,6 +97,25 @@ Only four sanitized JSON basenames may be staged and uploaded:
 collection. A sanitization failure emits only a minimal failure summary. No
 profile, Keychain, database, key, raw process log, trace, screenshot, or dump is
 uploaded. Test keys and the Keychain password are scanned before staging.
+
+Init now writes private progress, not a public NOT_EXECUTED placeholder. Reporter
+hooks, the guarded test entry and the outer runner capture discovery/worker,
+module-load, constructor, execute, setup/install/launch and archival failures.
+Stage checkpoints and cleanup attempts are separate from acceptance assertions.
+The first failure remains primary when cleanup, reporting or archiving also fail.
+Only allowlisted error classes, errno/signal, integer exit codes, fixed explanatory
+text and locations within the frozen source list can leave the process. Messages,
+stacks, IPC arguments, attachments and raw runner output are never forwarded.
+If no terminal test result was recorded, publication reports that observed lack
+of terminal evidence as BLOCKED; it does not infer that no installer ever ran.
+Failed early runs may legitimately publish only their actual failure record.
+
+Run 37726873605 attempt 1 remains failed. The old Windows 1.0 installer exit
+`0xC0000005` in System.dll has no confirmed root cause or proven invocation bug.
+This change preserves the existing NSIS invocation and event evidence, protection,
+and installer bytes, but excludes Windows from the active workflow matrix.
+Further controlled diagnostics require Astra's
+design; neither retry nor a rebuilt baseline is an acceptance substitute.
 
 Each phase requires explicit OS denial evidence, not a timeout alone. Windows
 requires owned PID/target WFP 5157 audit records; macOS requires permission-denied
