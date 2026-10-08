@@ -61,6 +61,27 @@ async function assertNoFatalWindows(application: ElectronApplication) {
   }
 }
 
+async function assertMainOwnerReady(application: ElectronApplication) {
+  const startup = await application.evaluate(() => {
+    const owner = Reflect.get(process, Symbol.for('RT-ResearchFlow.main.owner.v1')) as
+      { phase?: string; suppressedEvaluations?: number } | undefined
+    const diagnostic = Reflect.get(process, Symbol.for('RT-ResearchFlow.main.diagnostic.v1')) as
+      { entryEvaluations?: number; bootstrapInvocations?: number; readySubscriptions?: number } | undefined
+    return {
+      phase: owner?.phase ?? null,
+      entryEvaluations: diagnostic?.entryEvaluations ?? 0,
+      bootstrapInvocations: diagnostic?.bootstrapInvocations ?? 0,
+      readySubscriptions: diagnostic?.readySubscriptions ?? 0,
+      suppressedEvaluations: owner?.suppressedEvaluations ?? -1,
+    }
+  })
+  expect(startup.phase).toBe('ready')
+  expect(startup.bootstrapInvocations).toBe(1)
+  expect(startup.readySubscriptions).toBe(1)
+  expect(startup.entryEvaluations).toBeGreaterThanOrEqual(1)
+  expect(startup.suppressedEvaluations).toBe(startup.entryEvaluations - 1)
+}
+
 async function openPanel(application: ElectronApplication) {
   const page = await application.firstWindow()
   try {
@@ -237,6 +258,7 @@ test('installed Mac exposes a real narrow bridge and private diagnostic without 
       packaged: true, name: applicationName, userData: fixture, appData,
     })
     let page = await openPanel(application)
+    await assertMainOwnerReady(application)
     expect(await readState(page)).toMatchObject({
       adapterVersion: '3', serviceState: 'BLOCKED_STORAGE', code: 'STORAGE_UNAVAILABLE',
       recoveryReason: 'STORAGE_IO', liveEnabled: false, canInitialize: false, canPrepare: false,
@@ -265,6 +287,7 @@ test('installed Mac exposes a real narrow bridge and private diagnostic without 
       packaged: true, name: applicationName, userData: defaultDirectory, appData,
     })
     page = await openPanel(application)
+    await assertMainOwnerReady(application)
     const directoryStat = lstatSync(defaultDirectory)
     expect(directoryStat.isDirectory()).toBe(true)
     expect(directoryStat.isSymbolicLink()).toBe(false)
