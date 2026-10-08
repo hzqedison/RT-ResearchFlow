@@ -5,11 +5,50 @@ import { homedir, userInfo } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { MacThsProductState } from '../../electron/shared/macThsTypes'
 
+async function assertNoFatalWindows(application: ElectronApplication) {
+  let fatalFound = false
+  for (const window of application.windows()) {
+    if (window.isClosed()) continue
+    let fatal
+    try {
+      fatal = await window.evaluate(() => {
+        const heading = document.querySelector('#fatal-title')
+        if (!heading || !document.querySelector('a[href="trade-watch-fatal://exit"]')) return null
+        const title = heading.textContent?.trim()
+        const fatalKind = title === '应用启动失败' ? 'BOOTSTRAP_FAILED'
+          : title === '本地数据目录初始化失败' ? 'APP_DATA_FAILED' : 'UNKNOWN'
+        const details = (document.querySelector('pre.details')?.textContent ?? '').slice(0, 16000)
+        const duplicate = /Attempted to register a second handler for '([^'\r\n]{1,120})'/.exec(details)
+        const allowedChannels = [
+          'renderer:ready', 'window:minimize', 'window:toggleMaximize',
+          'window:close', 'window:isMaximized', 'app:relaunch',
+        ]
+        const bundleFrames = Array.from(details.matchAll(
+          /(?:^|\n)[ \t]*at[^\r\n]*[/\\]out[/\\]main[/\\]index\.js:(\d{1,9}):(\d{1,9})/g,
+        )).slice(0, 2).map(frame => ({ line: Number(frame[1]), column: Number(frame[2]) }))
+        return { fatalKind, duplicateHandler: duplicate !== null,
+          channel: duplicate && allowedChannels.includes(duplicate[1]) ? duplicate[1] : 'UNKNOWN',
+          bundleFrames }
+      })
+    } catch {
+      if (window.isClosed()) continue
+      throw new Error('STARTUP_WINDOW_INSPECTION_FAILED')
+    }
+    if (fatal) {
+      fatalFound = true
+      console.error('[Mac installed startup] Fatal window detected', fatal)
+    }
+  }
+  if (fatalFound) throw new Error('FATAL_STARTUP_WINDOW_PRESENT')
+}
+
 async function openPanel(application: ElectronApplication) {
   const page = await application.firstWindow()
   try {
     await page.getByTestId('quant-onboarding-open').click()
   } catch (error) {
+    try { await assertNoFatalWindows(application) }
+    catch { /* Preserve the original click failure and its existing safe diagnostics. */ }
     let diagnosticTimer: ReturnType<typeof setTimeout> | undefined
     try {
       const windows = application.windows()
@@ -87,6 +126,7 @@ async function openPanel(application: ElectronApplication) {
   await page.getByTestId('quant-onboarding-step-4').click()
   await expect(page.getByTestId('mac-trading-panel')).toBeVisible()
   await expect(page.getByTestId('mac-ths-diagnostic')).toContainText('"loaded": true')
+  await assertNoFatalWindows(application)
   return page
 }
 async function readState(page: Page) {
@@ -193,6 +233,7 @@ test('installed Mac exposes a real narrow bridge and private diagnostic without 
     await expect(page.getByTestId('mac-ths-cancel-live')).toBeDisabled()
     await expect(page.getByTestId('mac-ths-export')).toBeEnabled()
     expect(existsSync(join(fixture, 'mac-ths-orders.v2.sqlite'))).toBe(false)
+    await assertNoFatalWindows(application)
     await application.close()
     application = undefined
 
@@ -307,7 +348,10 @@ test('installed Mac exposes a real narrow bridge and private diagnostic without 
           holder.__rtThsInitDialog?.restore()
           delete holder.__rtThsInitDialog
         })
-      } finally { await application.close() }
+      } finally {
+        try { await assertNoFatalWindows(application) }
+        finally { await application.close() }
+      }
     }
     // Preserve both owned fixtures on the disposable runner, especially on failure.
     // No recursive deletion, unknown-profile cleanup, or modification of an existing default.

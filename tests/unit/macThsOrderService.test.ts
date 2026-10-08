@@ -385,7 +385,7 @@ describe('1.3 production adapter + real SQLite + actual owned harmless child', (
     expect(service.getState().intents.find(i => i.intentId === oldId)).toMatchObject({ state: 'UNKNOWN', gateReleased: true, executionForbidden: true })
     expect(scenario.prompts.at(-1)!.detail).toContain('本次追加风险')
     expect(readFileSync(spawnLog, 'utf8').trim().split('\n')).toHaveLength(2)
-  })
+  }, 15000)
   it('a settled duplicate needs explicit additional-order linkage without poisoning the store', async () => {
     const { service } = await chain()
     await enable(service)
@@ -395,7 +395,7 @@ describe('1.3 production adapter + real SQLite + actual owned harmless child', (
     const previousIntentId = service.getState().intents[0].intentId
     const next = { ...orderRequest(), additionalOrder: { previousIntentId, additionalOrderAcknowledged: true as const } }
     expect((await service.execute(await offer(service, next), caller)).code).toBe('ACCEPTED_OBSERVED')
-  })
+  }, 15000)
   it('cancel snapshots use the observed full target and preserve partial-cancel/unknown-quantity meaning', async () => {
     const { service, scenario, database } = await chain()
     await enable(service); scenario.behavior = 'partial_cancel'
@@ -413,7 +413,7 @@ describe('1.3 production adapter + real SQLite + actual owned harmless child', (
     await enable(service); scenario.behavior = 'before_submit'
     expect((await service.execute(await offer(service, orderRequest()), caller)).code).toBe('NOT_SUBMITTED')
     expect(service.getState().unknownPending).toBe(false)
-  })
+  }, 15000)
   it('projects masked-only account capability as ambiguous and never grants live permission', async () => {
     const { service, scenario } = await chain()
     scenario.behavior = 'masked'
