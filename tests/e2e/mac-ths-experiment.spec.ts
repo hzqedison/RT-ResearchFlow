@@ -30,6 +30,33 @@ async function openPanel(application: ElectronApplication) {
               titleMatches: document.title === 'RT-ResearchFlow',
               hasStartupDiagnostic: ['应用启动失败', '本地数据目录初始化失败'].some(title =>
                 document.title === title || document.querySelector('h1')?.textContent?.trim() === title),
+              fatalKind: (() => {
+                const title = document.querySelector('#fatal-title')?.textContent?.trim()
+                return title === '应用启动失败' ? 'BOOTSTRAP_FAILED' :
+                  title === '本地数据目录初始化失败' ? 'APP_DATA_FAILED' : 'NONE'
+              })(),
+              fatalError: (() => {
+                const details = document.querySelector('pre.details')?.textContent ?? ''
+                const errorClass = /\bSqliteError\b/.test(details) ? 'SqliteError' :
+                  /\bTypeError\b/.test(details) ? 'TypeError' :
+                  /\bReferenceError\b/.test(details) ? 'ReferenceError' :
+                  /\bRangeError\b/.test(details) ? 'RangeError' :
+                  /\bError\b/.test(details) ? 'Error' : 'UNKNOWN'
+                const category = /no such table/i.test(details) ? 'MISSING_TABLE' :
+                  /no such column/i.test(details) ? 'MISSING_COLUMN' :
+                  /UNIQUE constraint failed/i.test(details) ? 'UNIQUE_CONSTRAINT' :
+                  /NOT NULL constraint failed/i.test(details) ? 'NOT_NULL_CONSTRAINT' :
+                  /database is locked/i.test(details) ? 'DATABASE_LOCKED' :
+                  /Cannot find module|MODULE_NOT_FOUND/i.test(details) ? 'MODULE_NOT_FOUND' :
+                  /ERR_DLOPEN_FAILED/i.test(details) ? 'ERR_DLOPEN_FAILED' :
+                  /SQLITE_CANTOPEN/i.test(details) ? 'SQLITE_CANTOPEN' :
+                  /EACCES/i.test(details) ? 'EACCES' :
+                  /EBUSY/i.test(details) ? 'EBUSY' : 'UNCLASSIFIED'
+                const location = details.match(/out\/main\/index\.js:(\d+):(\d+)/)
+                return { errorClass, category,
+                  bundleLine: location ? Number(location[1]) : null,
+                  bundleColumn: location ? Number(location[2]) : null }
+              })(),
               entryCount: document.querySelectorAll('[data-testid="quant-onboarding-open"]').length,
             }))
             console.error('[Mac installed startup] Window detail', { index, ...detail })
