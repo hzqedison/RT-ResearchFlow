@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ConfigDrawerTab } from '../ConfigDrawer/ConfigDrawer'
 import { getFlowProgress, type InitializationFlowState } from '../Onboarding/initializationTaskModel'
 import { AIQualityEvaluation } from './AIQualityEvaluation'
+import { SupportFeedbackPanel } from './SupportFeedbackPanel'
 import { DATA_SAFETY_STATUS_META, exportScopeLabel, formatBytes, formatDateTime, type DataBackupResult, type DataExportResult, type DataExportScope, type DataSafetyStatus } from './dataSafetyModel'
 
 type DiagnosticStatus = 'ok' | 'warning' | 'error'
@@ -442,6 +443,8 @@ export function DiagnosticsPanel({ onNavigateConfig, onOpenGuide, initialization
             </button>
           </div>
         </div>
+
+        <SupportFeedbackPanel />
 
         {snapshot && (
           <div data-testid="diagnostics-summary" className="grid grid-cols-3 gap-3">

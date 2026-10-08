@@ -2,114 +2,655 @@ name: Release
 
 on:
   push:
+    branches:
+      - 'codex/release-1.1'
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing tested tag, for example v1.1.0 or v1.1.0-beta.1
+        required: true
+        type: string
+      tested_run_id:
+        description: Original tag or authorized 1.1 branch Release run ID (reuse tested packages, never rebuild)
+        required: true
+        type: string
+      publish:
+        description: Publish only after all platform and uploaded-byte gates pass; otherwise keep a draft
+        default: false
+        type: boolean
 
 permissions:
-  contents: write
+  contents: read
+  actions: read
 
+# The one-time 1.1 branch, its tag and publish-only retries share the same lock.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.1' && 'v1.1.0') || github.event.inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
+env:
+  RELEASE_TAG: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.1' && 'v1.1.0') || github.event.inputs.release_tag || github.ref_name }}
+  GH_REPO: ${{ github.repository }}
+
 jobs:
-  windows-release:
-    name: windows-release
-    runs-on: windows-latest
-    timeout-minutes: 60
-
+  prepare:
+    name: release-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+      tested_run_id: ${{ steps.source.outputs.tested_run_id }}
+      build_required: ${{ steps.source.outputs.build_required }}
+      bootstrap_release: ${{ steps.source.outputs.bootstrap_release }}
+      version: ${{ steps.contract.outputs.version }}
+      prerelease: ${{ steps.contract.outputs.prerelease }}
     steps:
-      - name: Check out tagged source
-        uses: actions/checkout@v4
+      - name: Reject published versions and pin the authorized source commit
+        id: source
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = process.env.RELEASE_TAG;
+            const semver = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-beta\.(0|[1-9]\d*))?$/;
+            if (!semver.test(tag)) throw new Error('Only stable SemVer and beta.N tags are accepted.');
+            if (process.env.GH_REPO !== 'hzqedison/RT-ResearchFlow') {
+              throw new Error('Release repository must match the application GitHub update source.');
+            }
+            const repo = context.repo;
+            const build = context.eventName === 'push';
+            const bootstrap = build && context.ref === 'refs/heads/codex/release-1.1';
+            if (build && (context.payload.deleted || (!bootstrap && context.ref !== 'refs/tags/' + tag))) {
+              throw new Error('Only existing release tags or the authorized 1.1 branch may build.');
+            }
+            if (bootstrap && tag !== 'v1.1.0') throw new Error('Branch bootstrap is limited to v1.1.0.');
+            // Check public releases before any tag resolution or build. Include private drafts.
+            const matches = (await github.paginate(github.rest.repos.listReleases,
+              { ...repo, per_page: 100 })).filter(release => release.tag_name === tag);
+            if (matches.length > 1) throw new Error('Duplicate release tag records.');
+            if (matches.some(release => !release.draft)) {
+              throw new Error('Published versions are immutable; use a new version.');
+            }
+            let ref;
+            try {
+              ref = (await github.rest.git.getRef({ ...repo, ref: 'tags/' + tag })).data;
+            } catch (error) {
+              // Only this branch may start before its tag exists; prepare remains read-only.
+              if (error.status !== 404 || !bootstrap) throw error;
+            }
+            let object = ref?.object;
+            for (let depth = 0; object?.type === 'tag'; depth++) {
+              if (depth >= 8) throw new Error('Too many annotated tag indirections.');
+              object = (await github.rest.git.getTag({ ...repo, tag_sha: object.sha })).data.object;
+            }
+            if (object && object.type !== 'commit') throw new Error('Tag must resolve to a commit.');
+            const sha = bootstrap ? context.sha : object.sha;
+            if (bootstrap && object && object.sha !== sha) {
+              throw new Error('Existing v1.1.0 tag points to another commit; never move it.');
+            }
+            if (build && !bootstrap && context.sha !== sha && context.sha !== ref.object.sha) {
+              throw new Error('Tag moved after the triggering event; refusing to build.');
+            }
+            const runId = build ? String(context.runId) : context.payload.inputs.tested_run_id;
+            if (!/^[1-9]\d*$/.test(runId || '') || !Number.isSafeInteger(Number(runId))) {
+              throw new Error('A valid original tested run ID is required.');
+            }
+            if (!build) {
+              const original = (await github.rest.actions.getWorkflowRun({ ...repo, run_id: Number(runId) })).data;
+              const current = (await github.rest.actions.getWorkflowRun({ ...repo, run_id: context.runId })).data;
+              if (original.event !== 'push' || original.status !== 'completed' ||
+                  original.head_sha !== sha || original.workflow_id !== current.workflow_id ||
+                  original.path !== '.github/workflows/release.yml') {
+                throw new Error('Reuse requires a completed push run of this workflow at the same commit.');
+              }
+              // A publish/upload failure is recoverable if all three build jobs succeeded.
+              // Their attempt-specific conclusions are checked again against the manifests.
+            }
+            if (matches.length) {
+              const release = matches[0];
+              const marker = '<!-- rt-release-pipeline:' + runId + ':' + sha + ' -->';
+              if (!release.body?.includes(marker)) {
+                throw new Error('Existing draft belongs to another run or lacks tested provenance.');
+              }
+            }
+            core.setOutput('source_sha', sha);
+            core.setOutput('tested_run_id', runId);
+            core.setOutput('build_required', String(build));
+            core.setOutput('bootstrap_release', String(bootstrap));
 
-      - name: Validate release tag
-        shell: pwsh
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          $package = Get-Content -Raw package.json | ConvertFrom-Json
-          $expectedTag = "v$($package.version)"
-          if ($env:RELEASE_TAG -ne $expectedTag) {
-            throw "Tag '$env:RELEASE_TAG' does not match package version '$($package.version)'."
-          }
-          if ($package.version -notmatch '^\d+\.\d+\.\d+-beta\.\d+$') {
-            throw "Package version '$($package.version)' is not a beta release version."
-          }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.source_sha }}
+          persist-credentials: false
+
+      - name: Validate tag, version, product identity and notes
+        id: contract
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const config = require(path.resolve('electron-builder.js'));
+            const version = process.env.RELEASE_TAG.slice(1);
+            if (pkg.version !== version) throw new Error('Tag/package version mismatch.');
+            if (pkg.name !== 'rt-research-flow' || config.appId !== 'com.tradewatcher.app' ||
+                config.productName !== 'RT-ResearchFlow' || config.nsis.deleteAppDataOnUninstall !== false ||
+                config.nsis.perMachine !== false || config.nsis.include !== 'resources/installer.nsh') {
+              throw new Error('Fixed product identity and data-preserving installer contract changed.');
+            }
+            if (!fs.statSync('docs/releases/v' + version + '.md').isFile()) {
+              throw new Error('Versioned release notes are required.');
+            }
+            core.setOutput('version', version);
+            core.setOutput('prerelease', String(version.includes('-beta.')));
+
+  build:
+    name: release-${{ matrix.platform }}-${{ matrix.arch }}
+    needs: prepare
+    if: needs.prepare.outputs.build_required == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: windows
+            arch: x64
+            tests: 2
+          - runner: macos-15
+            platform: macos
+            arch: arm64
+            tests: 3
+          - runner: macos-15-intel
+            platform: macos
+            arch: x64
+            tests: 3
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
+    env:
+      SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      RELEASE_PLATFORM: ${{ matrix.platform }}
+      RELEASE_ARCH: ${{ matrix.arch }}
+      EXPECTED_TESTS: ${{ matrix.tests }}
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+      npm_config_electron_mirror: https://github.com/electron/electron/releases/download/
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+      - name: Confirm isolated native runner
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (process.env.RUNNER_ENVIRONMENT !== 'github-hosted') {
+              throw new Error('Installation tests require a disposable GitHub-hosted runner.');
+            }
+            core.exportVariable('PLAYWRIGHT_JSON_OUTPUT_NAME',
+              require('node:path').join(process.env.RUNNER_TEMP, 'release-installed-tests.json'));
+            if (process.arch !== process.env.RELEASE_ARCH ||
+                process.platform !== (process.env.RELEASE_PLATFORM === 'windows' ? 'win32' : 'darwin')) {
+              throw new Error('Runner is not native to the requested platform and architecture.');
+            }
+            if (JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version !== process.env.RELEASE_VERSION) {
+              throw new Error('Checked-out package version changed.');
+            }
 
       - name: Check public boundary
         shell: pwsh
         run: ./.github/scripts/Test-PublicBoundary.ps1
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.14.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Verify tagged source
+      - name: Install pinned native dependencies
+        run: pnpm install --frozen-lockfile --config.side-effects-cache=false
+      - name: Verify pinned release source
         run: pnpm run verify
+      - name: Verify Mac upstream safety
+        if: matrix.platform == 'macos'
+        run: node --test macos/sync-upstream.test.mjs
 
-      - name: Build Windows x64 installer
+      # Each installer is produced once. There is no build in the assemble job.
+      - name: Build Windows EXE without launching the installer output
+        if: matrix.platform == 'windows'
+        run: pnpm exec electron-builder --win --x64 --config electron-builder.js --config.nsis.runAfterFinish=false --publish never
+      - name: Build native Mac DMG with the existing packaging script
+        if: matrix.platform == 'macos'
+        run: node macos/build.mjs
+
+      - name: Record exact installer bytes before installation
+        id: bytes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const crypto = require('node:crypto');
+            const version = process.env.RELEASE_VERSION;
+            const arch = process.env.RELEASE_ARCH;
+            const windows = process.env.RELEASE_PLATFORM === 'windows';
+            const name = windows ? 'RT-ResearchFlow-Setup-' + version + '-x64.exe'
+              : 'RT-ResearchFlow-macOS-' + version + '-' + arch + '.dmg';
+            const extension = windows ? '.exe' : '.dmg';
+            const installers = fs.readdirSync('release').filter(file => file.endsWith(extension));
+            if (installers.length !== 1 || installers[0] !== name) {
+              throw new Error('Missing, unexpected or mismatched installer.');
+            }
+            const installer = fs.readFileSync('release/' + name);
+            if (!installer.length) throw new Error('Empty installer.');
+            const hash = crypto.createHash('sha256').update(installer).digest('hex');
+            fs.writeFileSync('release/SHA256SUMS.txt', hash + '  ' + name + '\n', 'ascii');
+            core.setOutput('name', name);
+            core.setOutput('sha256', hash);
+
+      - name: Check packaged public boundary
+        shell: pwsh
+        run: ./.github/scripts/Test-PublicBoundary.ps1 -ArtifactDirectory release
+
+      - name: Install the exact Windows EXE in a runner-only directory
+        if: matrix.platform == 'windows'
         shell: pwsh
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: pnpm exec electron-builder --win --x64 --config electron-builder.js
-
-      - name: Verify installer and generate checksum
-        shell: pwsh
+          INSTALLER_NAME: ${{ steps.bytes.outputs.name }}
         run: |
-          $package = Get-Content -Raw package.json | ConvertFrom-Json
-          $expectedName = "RT-ResearchFlow-Setup-$($package.version)-x64.exe"
-          $installer = Get-Item -LiteralPath (Join-Path release $expectedName)
-          $unexpectedInstallers = @(Get-ChildItem -LiteralPath release -Filter '*.exe' -File | Where-Object Name -ne $expectedName)
-          if ($unexpectedInstallers.Count -gt 0) {
-            throw "Unexpected installer artifacts: $($unexpectedInstallers.Name -join ', ')"
-          }
-          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $expectedName" | Set-Content -LiteralPath release/SHA256SUMS.txt -Encoding ascii
-          ./.github/scripts/Test-PublicBoundary.ps1 -ArtifactDirectory release
+          $ErrorActionPreference = 'Stop'
+          $installer = (Get-Item -LiteralPath (Join-Path release $env:INSTALLER_NAME)).FullName
+          $install = Join-Path $env:RUNNER_TEMP "rt-release-installed-$env:RELEASE_VERSION"
+          $process = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$install") -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
+          $executable = Join-Path $install 'RT-ResearchFlow.exe'
+          if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'Installed executable is missing.' }
+          "TRADE_WATCH_PACKAGED_EXECUTABLE=$executable" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "RELEASE_INSTALL_DIRECTORY=$install" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
 
-      - name: Smoke test packaged application
+      - name: Install the exact Mac DMG in a runner-only directory
+        if: matrix.platform == 'macos'
+        shell: bash
+        env:
+          INSTALLER_NAME: ${{ steps.bytes.outputs.name }}
+        run: |
+          set -euo pipefail
+          mount="$RUNNER_TEMP/rt-release-dmg"
+          install="$RUNNER_TEMP/rt-release-installed"
+          mkdir -p "$mount" "$install"
+          hdiutil attach "release/$INSTALLER_NAME" -nobrowse -readonly -mountpoint "$mount"
+          trap 'hdiutil detach "$mount" || true' EXIT
+          ditto "$mount/RT-ResearchFlow.app" "$install/RT-ResearchFlow.app"
+          hdiutil detach "$mount"
+          trap - EXIT
+          app="$install/RT-ResearchFlow.app"
+          codesign --verify --deep --strict "$app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = 'com.tradewatcher.app'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "$RELEASE_VERSION"
+          executable="$app/Contents/MacOS/RT-ResearchFlow"
+          test "$(lipo -archs "$executable")" = "$RELEASE_ARCH"
+          printf 'TRADE_WATCH_PACKAGED_EXECUTABLE=%s\n' "$executable" >> "$GITHUB_ENV"
+
+      - name: Test installed Windows application with synthetic data only
+        if: matrix.platform == 'windows'
+        run: pnpm exec playwright test tests/e2e/packaged-app-smoke.spec.ts tests/e2e/windows-integrated-app.spec.ts --workers=1 --retries=0 --reporter=line,json
+      - name: Test installed Mac application with synthetic data only
+        if: matrix.platform == 'macos'
+        run: pnpm exec playwright test tests/e2e/macos-app-smoke.spec.ts tests/e2e/quant-trading-onboarding.spec.ts tests/e2e/mac-ths-experiment.spec.ts --workers=1 --retries=0 --reporter=line,json
+
+      - name: Check Windows same-directory reinstall preserves CI data
+        if: matrix.platform == 'windows'
         shell: pwsh
         env:
-          TRADE_WATCH_PACKAGED_EXECUTABLE: ${{ github.workspace }}\release\win-unpacked\RT-ResearchFlow.exe
-        run: pnpm exec playwright test tests/e2e/packaged-app-smoke.spec.ts --reporter=line
+          INSTALLER_NAME: ${{ steps.bytes.outputs.name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $install = [System.IO.Path]::GetFullPath($env:RELEASE_INSTALL_DIRECTORY)
+          $temporaryRoot = [System.IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\') + '\'
+          if (-not $install.StartsWith($temporaryRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Installation path escaped the runner temporary directory.'
+          }
+          $data = Join-Path $install 'data'
+          if (-not (Test-Path -LiteralPath $data -PathType Container)) { throw 'Installed CI data directory is missing.' }
+          'Synthetic release preservation fixture, not user data.' |
+            Set-Content -LiteralPath (Join-Path $data 'release-ci-preservation.txt') -Encoding ascii
+          $before = @{}
+          foreach ($file in Get-ChildItem -LiteralPath $data -Recurse -File) {
+            $before[$file.FullName] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+          }
+          $installer = (Get-Item -LiteralPath (Join-Path release $env:INSTALLER_NAME)).FullName
+          $process = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$install") -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Reinstall failed: $($process.ExitCode)" }
+          foreach ($file in $before.Keys) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf) -or
+                (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $before[$file]) {
+              throw 'Reinstall changed or removed persisted synthetic CI data.'
+            }
+          }
 
-      - name: Upload workflow artifacts
+      - name: Seal tested bytes and zero-skipped installation evidence
+        uses: actions/github-script@v7
+        env:
+          INSTALLER_NAME: ${{ steps.bytes.outputs.name }}
+          INSTALLER_SHA256: ${{ steps.bytes.outputs.sha256 }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const crypto = require('node:crypto');
+            const report = JSON.parse(fs.readFileSync(process.env.PLAYWRIGHT_JSON_OUTPUT_NAME, 'utf8'));
+            const count = Number(process.env.EXPECTED_TESTS);
+            if (report.stats.expected !== count || report.stats.unexpected !== 0 ||
+                report.stats.flaky !== 0 || report.stats.skipped !== 0 || report.errors?.length) {
+              throw new Error('Installation tests must all pass; skipped/flaky tests cannot release.');
+            }
+            const specs = [];
+            function visit(suite) {
+              specs.push(...(suite.specs || []));
+              for (const child of suite.suites || []) visit(child);
+            }
+            for (const suite of report.suites || []) visit(suite);
+            if (specs.length !== count || specs.some(spec => !spec.ok || spec.tests.length !== 1 ||
+                spec.tests[0].status !== 'expected' || spec.tests[0].results.length !== 1 ||
+                spec.tests[0].results[0].status !== 'passed')) {
+              throw new Error('Incomplete installed-application test evidence.');
+            }
+            const name = process.env.INSTALLER_NAME;
+            const bytes = fs.readFileSync('release/' + name);
+            const hash = crypto.createHash('sha256').update(bytes).digest('hex');
+            if (hash !== process.env.INSTALLER_SHA256) throw new Error('Installer changed after testing.');
+            fs.mkdirSync('tested-package');
+            fs.copyFileSync('release/' + name, 'tested-package/' + name);
+            fs.copyFileSync('release/SHA256SUMS.txt', 'tested-package/SHA256SUMS.txt');
+            const evidence = {
+              schema: 'rt-release-pipeline-v1', tag: process.env.RELEASE_TAG,
+              version: process.env.RELEASE_VERSION, sourceSha: process.env.SOURCE_SHA,
+              runId: process.env.GITHUB_RUN_ID, runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+              platform: process.env.RELEASE_PLATFORM, arch: process.env.RELEASE_ARCH,
+              installer: name, sha256: hash, size: bytes.length, installed: true,
+              tests: { passed: count, skipped: 0, flaky: 0, failed: 0 },
+              testFiles: specs.map(spec => spec.file),
+              windowsSameDirectoryReinstall: process.env.RELEASE_PLATFORM === 'windows',
+            };
+            fs.writeFileSync('tested-package/INSTALLATION-PROVENANCE.json', JSON.stringify(evidence, null, 2) + '\n');
+
+      - name: Upload immutable tested installer, checksum and provenance
         uses: actions/upload-artifact@v4
         with:
-          name: RT-ResearchFlow-${{ github.ref_name }}-windows-x64
-          path: |
-            release/RT-ResearchFlow-Setup-*-x64.exe
-            release/SHA256SUMS.txt
+          name: release-${{ env.RELEASE_TAG }}-${{ matrix.platform }}-${{ matrix.arch }}
+          path: tested-package/*
           if-no-files-found: error
+          overwrite: false
+          retention-days: 30
+      - name: Upload isolated installation-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence-${{ env.RELEASE_TAG }}-${{ matrix.platform }}-${{ matrix.arch }}-attempt-${{ github.run_attempt }}
+          path: |
+            test-results/
+            ${{ runner.temp }}/release-installed-tests.json
+          if-no-files-found: ignore
           retention-days: 14
 
-      - name: Create draft prerelease
-        shell: pwsh
+  assemble:
+    name: verified-draft-or-publish
+    needs: [prepare, build]
+    # A publish-only dispatch intentionally skips build; a failed platform never gets here.
+    if: >-
+      always() && !cancelled() && needs.prepare.result == 'success' &&
+      (needs.prepare.outputs.build_required == 'false' || needs.build.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    env:
+      SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      TESTED_RUN_ID: ${{ needs.prepare.outputs.tested_run_id }}
+      RELEASE_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+      PUBLISH_RELEASE: ${{ needs.prepare.outputs.bootstrap_release == 'true' || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          persist-credentials: false
+      # Keep each architecture in a separate directory; SHA256SUMS must not overwrite.
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-${{ env.RELEASE_TAG }}-windows-x64
+          path: tested/windows-x64
+          run-id: ${{ needs.prepare.outputs.tested_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-${{ env.RELEASE_TAG }}-macos-arm64
+          path: tested/macos-arm64
+          run-id: ${{ needs.prepare.outputs.tested_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-${{ env.RELEASE_TAG }}-macos-x64
+          path: tested/macos-x64
+          run-id: ${{ needs.prepare.outputs.tested_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Verify all native jobs, source provenance and same-byte installers
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const crypto = require('node:crypto');
+            const version = process.env.RELEASE_VERSION;
+            if (JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version !== version) throw new Error('Publish source/version mismatch.');
+            const configurations = [
+              ['windows', 'x64', 2, 'RT-ResearchFlow-Setup-' + version + '-x64.exe'],
+              ['macos', 'arm64', 3, 'RT-ResearchFlow-macOS-' + version + '-arm64.dmg'],
+              ['macos', 'x64', 3, 'RT-ResearchFlow-macOS-' + version + '-x64.dmg'],
+            ];
+            const expectedFiles = {
+              windows: ['packaged-app-smoke.spec.ts', 'windows-integrated-app.spec.ts'],
+              macos: ['macos-app-smoke.spec.ts', 'quant-trading-onboarding.spec.ts', 'mac-ths-experiment.spec.ts'],
+            };
+            const evidence = [];
+            const sums = [];
+            const jobsByAttempt = new Map();
+            fs.mkdirSync('publish-assets');
+            for (const [platform, arch, count, name] of configurations) {
+              const directory = 'tested/' + platform + '-' + arch;
+              const files = fs.readdirSync(directory).sort();
+              const allowed = [name, 'SHA256SUMS.txt', 'INSTALLATION-PROVENANCE.json'].sort();
+              if (JSON.stringify(files) !== JSON.stringify(allowed)) throw new Error('Unexpected artifact files.');
+              const proof = JSON.parse(fs.readFileSync(directory + '/INSTALLATION-PROVENANCE.json', 'utf8'));
+              if (proof.schema !== 'rt-release-pipeline-v1' || proof.tag !== process.env.RELEASE_TAG ||
+                  proof.version !== version || proof.sourceSha !== process.env.SOURCE_SHA ||
+                  proof.runId !== process.env.TESTED_RUN_ID || proof.platform !== platform ||
+                  proof.arch !== arch || proof.installer !== name || proof.installed !== true ||
+                  !Number.isSafeInteger(proof.runAttempt) || proof.runAttempt < 1 ||
+                  proof.tests?.passed !== count || proof.tests?.skipped !== 0 ||
+                  proof.tests?.failed !== 0 || proof.tests?.flaky !== 0 ||
+                  (platform === 'windows' && proof.windowsSameDirectoryReinstall !== true)) {
+                throw new Error('Installer provenance or installation-test gate failed.');
+              }
+              const basenames = proof.testFiles.map(file => file.replaceAll('\\', '/').split('/').pop()).sort();
+              if (JSON.stringify(basenames) !== JSON.stringify([...expectedFiles[platform]].sort())) {
+                throw new Error('Expected installed-application suites were not tested.');
+              }
+              if (!jobsByAttempt.has(proof.runAttempt)) {
+                jobsByAttempt.set(proof.runAttempt, await github.paginate(
+                  github.rest.actions.listJobsForWorkflowRunAttempt,
+                  { ...context.repo, run_id: Number(process.env.TESTED_RUN_ID),
+                    attempt_number: proof.runAttempt, per_page: 100 }
+                ));
+              }
+              const job = jobsByAttempt.get(proof.runAttempt).find(item => item.name === 'release-' + platform + '-' + arch);
+              if (!job || job.status !== 'completed' || job.conclusion !== 'success' ||
+                  job.head_sha !== process.env.SOURCE_SHA) {
+                throw new Error('A native build/install job did not finish successfully at the tested commit.');
+              }
+              const bytes = fs.readFileSync(directory + '/' + name);
+              const hash = crypto.createHash('sha256').update(bytes).digest('hex');
+              const sum = hash + '  ' + name + '\n';
+              if (bytes.length !== proof.size || hash !== proof.sha256 ||
+                  fs.readFileSync(directory + '/SHA256SUMS.txt', 'ascii') !== sum) {
+                throw new Error('Downloaded workflow installer bytes do not match tested bytes.');
+              }
+              fs.copyFileSync(directory + '/' + name, 'publish-assets/' + name);
+              evidence.push(proof);
+              sums.push(sum);
+            }
+            // Basename-only lines are compatible with the existing GitHub update service.
+            fs.writeFileSync('publish-assets/SHA256SUMS.txt', sums.join(''), 'ascii');
+            fs.writeFileSync('publish-assets/RELEASE-PROVENANCE.json', JSON.stringify({
+              schema: 'rt-release-pipeline-v1', tag: process.env.RELEASE_TAG,
+              sourceSha: process.env.SOURCE_SHA, testedRunId: process.env.TESTED_RUN_ID,
+              installations: evidence,
+            }, null, 2) + '\n');
+
+      - name: Create or resume only this tested draft; upload without overwriting
+        id: draft
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const { execFileSync } = require('node:child_process');
+            const tag = process.env.RELEASE_TAG;
+            const bootstrap = context.eventName === 'push' &&
+              context.ref === 'refs/heads/codex/release-1.1' && tag === 'v1.1.0';
+            async function assertTag() {
+              let ref;
+              try {
+                ref = (await github.rest.git.getRef({ ...context.repo, ref: 'tags/' + tag })).data;
+              } catch (error) {
+                if (error.status !== 404 || !bootstrap || context.sha !== process.env.SOURCE_SHA) throw error;
+                // All native jobs and downloaded artifact provenance passed before this step.
+                // Create once, never update/force a ref. GITHUB_TOKEN prevents another push run.
+                try {
+                  await github.rest.git.createRef({ ...context.repo,
+                    ref: 'refs/tags/v1.1.0', sha: process.env.SOURCE_SHA });
+                } catch (creationError) {
+                  if (creationError.status !== 422) throw creationError;
+                  // A competing creation is acceptable only if the readback has the same SHA.
+                }
+                ref = (await github.rest.git.getRef({ ...context.repo, ref: 'tags/' + tag })).data;
+              }
+              let object = ref.object;
+              for (let depth = 0; object.type === 'tag'; depth++) {
+                if (depth >= 8) throw new Error('Too many tag indirections.');
+                object = (await github.rest.git.getTag({ ...context.repo, tag_sha: object.sha })).data.object;
+              }
+              if (object.type !== 'commit' || object.sha !== process.env.SOURCE_SHA) {
+                throw new Error('Tag moved; refusing release mutation.');
+              }
+            }
+            const marker = '<!-- rt-release-pipeline:' + process.env.TESTED_RUN_ID + ':' + process.env.SOURCE_SHA + ' -->';
+            const prerelease = process.env.RELEASE_PRERELEASE === 'true';
+            const matches = (await github.paginate(github.rest.repos.listReleases,
+              { ...context.repo, per_page: 100 })).filter(item => item.tag_name === tag);
+            if (matches.length > 1) throw new Error('Duplicate release tag records.');
+            let release = matches[0];
+            if (release) {
+              if (!release.draft || release.prerelease !== prerelease || !release.body?.includes(marker)) {
+                throw new Error('Refusing to replace a public, foreign or differently classified release.');
+              }
+            }
+            // Recheck the release before creating a missing tag; no build failure can reserve it.
+            await assertTag();
+            if (!release) {
+              const notes = fs.readFileSync('docs/releases/v' + process.env.RELEASE_VERSION + '.md', 'utf8');
+              const proof = '\n\n## Isolated package acceptance\n\n' +
+                'Windows x64 EXE and macOS arm64/x64 DMG were installed and tested on disposable native runners. ' +
+                'All required installed-app suites passed without skips. SHA256SUMS.txt identifies the tested bytes.\n\n' +
+                'This does not certify real accounts, old-version data migration, Windows SmartScreen, ' +
+                'macOS Gatekeeper/Developer ID notarization, or target-device compatibility.\n\n' +
+                'Tested run: https://github.com/' + process.env.GH_REPO + '/actions/runs/' + process.env.TESTED_RUN_ID +
+                '\nCommit: ' + process.env.SOURCE_SHA + '\n\n' + marker + '\n';
+              release = (await github.rest.repos.createRelease({
+                ...context.repo, tag_name: tag, target_commitish: process.env.SOURCE_SHA,
+                name: 'RT-ResearchFlow ' + tag, body: notes + proof,
+                draft: true, prerelease, make_latest: 'false',
+              })).data;
+            }
+            const files = fs.readdirSync('publish-assets').sort();
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets,
+              { ...context.repo, release_id: release.id, per_page: 100 });
+            if (assets.some(asset => !files.includes(asset.name)) ||
+                new Set(assets.map(asset => asset.name)).size !== assets.length) {
+              throw new Error('Draft has unexpected or duplicate attachments.');
+            }
+            const missing = files.filter(name => !assets.some(asset => asset.name === name));
+            if (missing.length) {
+              // No --clobber: a conflicting upload fails and remains a private draft.
+              execFileSync('gh', ['release', 'upload', tag, ...missing.map(name => 'publish-assets/' + name)],
+                { stdio: 'inherit', env: process.env });
+            }
+            core.setOutput('release_id', String(release.id));
+
+      - name: Download draft attachments and verify every uploaded byte before publishing
+        uses: actions/github-script@v7
         env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          $package = Get-Content -Raw package.json | ConvertFrom-Json
-          $installer = "release/RT-ResearchFlow-Setup-$($package.version)-x64.exe"
-          $notes = "docs/releases/v$($package.version).md"
-          if (-not (Test-Path -LiteralPath $notes)) {
-            throw "Release notes '$notes' do not exist."
-          }
-          gh release create $env:RELEASE_TAG `
-            $installer `
-            'release/SHA256SUMS.txt' `
-            --draft `
-            --prerelease `
-            --verify-tag `
-            --title "RT-ResearchFlow $env:RELEASE_TAG" `
-            --notes-file $notes
+          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const crypto = require('node:crypto');
+            const path = require('node:path');
+            const { execFileSync } = require('node:child_process');
+            const tag = process.env.RELEASE_TAG;
+            const id = Number(process.env.RELEASE_ID);
+            const marker = '<!-- rt-release-pipeline:' + process.env.TESTED_RUN_ID + ':' + process.env.SOURCE_SHA + ' -->';
+            const files = fs.readdirSync('publish-assets').sort();
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets,
+              { ...context.repo, release_id: id, per_page: 100 });
+            if (assets.length !== files.length || new Set(assets.map(asset => asset.name)).size !== files.length ||
+                assets.some(asset => !files.includes(asset.name) || asset.state !== 'uploaded')) {
+              throw new Error('Release attachments are incomplete or unexpected.');
+            }
+            const downloaded = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP, 'release-readback-'));
+            execFileSync('gh', ['release', 'download', tag, '--dir', downloaded],
+              { stdio: 'inherit', env: process.env });
+            const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+            for (const name of files) {
+              const expected = fs.readFileSync('publish-assets/' + name);
+              const actual = fs.readFileSync(path.join(downloaded, name));
+              const asset = assets.find(item => item.name === name);
+              if (expected.length !== actual.length || asset.size !== actual.length || hash(expected) !== hash(actual)) {
+                throw new Error('Uploaded asset does not match the tested release set: ' + name);
+              }
+              if (asset.digest && asset.digest !== 'sha256:' + hash(actual)) {
+                throw new Error('GitHub asset digest mismatch: ' + name);
+              }
+            }
+            let object = (await github.rest.git.getRef({ ...context.repo, ref: 'tags/' + tag })).data.object;
+            for (let depth = 0; object.type === 'tag'; depth++) {
+              if (depth >= 8) throw new Error('Too many tag indirections.');
+              object = (await github.rest.git.getTag({ ...context.repo, tag_sha: object.sha })).data.object;
+            }
+            const release = (await github.rest.repos.getRelease({ ...context.repo, release_id: id })).data;
+            const finalAssets = await github.paginate(github.rest.repos.listReleaseAssets,
+              { ...context.repo, release_id: id, per_page: 100 });
+            const identities = list => list.map(asset => [asset.id, asset.name, asset.size, asset.updated_at, asset.state]).sort();
+            if (object.type !== 'commit' || object.sha !== process.env.SOURCE_SHA ||
+                release.tag_name !== tag || !release.draft || !release.body?.includes(marker) ||
+                release.prerelease !== (process.env.RELEASE_PRERELEASE === 'true') ||
+                JSON.stringify(identities(assets)) !== JSON.stringify(identities(finalAssets))) {
+              throw new Error('Tag, draft or attachments changed during readback; refusing publication.');
+            }
+            if (process.env.PUBLISH_RELEASE === 'true') {
+              await github.rest.repos.updateRelease({
+                ...context.repo, release_id: id, draft: false,
+                prerelease: process.env.RELEASE_PRERELEASE === 'true',
+                // The app selects updates by SemVer, not GitHub's latest pointer.
+                // Publishing an older retry must not displace a newer release.
+                make_latest: 'false',
+              });
+            }
+            await core.summary
+              .addHeading(process.env.PUBLISH_RELEASE === 'true' ? 'Verified release published' : 'Verified draft retained')
+              .addRaw('Native installations: Windows x64, macOS arm64, macOS x64.\n\n')
+              .addRaw('Original tested run: ' + process.env.TESTED_RUN_ID + '; commit: ' + process.env.SOURCE_SHA + '.\n\n')
+              .addRaw('All five release attachments passed downloaded-byte SHA-256 verification.\n\n')
+              .addRaw('No source rebuild, real-account operation or production-device installation was performed by the publishing job.')
+              .write();

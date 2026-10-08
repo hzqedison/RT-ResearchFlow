@@ -49,9 +49,26 @@ describe('diagnostics data-quality actions', () => {
     await expect(runDiagnosticAction({} as never, 'syncTradeCalendar')).resolves.toEqual({
       action: 'syncTradeCalendar',
       status: 'completed',
-      message: '交易日历同步完成，写入 1323 条并重新检查',
+      message: '交易日历处理完成：Tushare，1323 条',
     })
     expect(mocks.persistDataQualitySnapshot).toHaveBeenCalledOnce()
+  })
+
+  it('未配置付费 Token 时仍可使用官方日历并记录检查结果', async () => {
+    const db = {} as never
+    mocks.getDataSourceConfig.mockReturnValue({ tushareEnabled: false, tushareTokenEncrypted: null })
+    mocks.syncTradeCalFull.mockResolvedValue({
+      status: 'completed', source: 'official-sse', rowCount: 1096, insertedRows: 0,
+      coverageStart: '20240101', coverageEnd: '20261231',
+    })
+
+    await expect(runDiagnosticAction(db, 'syncTradeCalendar')).resolves.toMatchObject({
+      action: 'syncTradeCalendar', status: 'completed',
+      message: expect.stringContaining('已有数据未覆盖'),
+    })
+    expect(mocks.syncTradeCalFull).toHaveBeenCalledWith(db, null)
+    expect(mocks.decryptApiKey).not.toHaveBeenCalled()
+    expect(mocks.persistDataQualitySnapshot).toHaveBeenCalledWith(db)
   })
 
   it.each([

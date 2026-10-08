@@ -4,7 +4,7 @@
  * fills missing rows within announced coverage; no future weekdays are guessed.
  */
 import Database from 'better-sqlite3'
-import { upsertTradeCal, getLatestCalDate, insertTradeCalIfMissing } from '../database/tradeCalRepository'
+import { upsertTradeCal, hasTradeCalCoverage, insertTradeCalIfMissing } from '../database/tradeCalRepository'
 import { fetchTradeCal } from './tushareService'
 import { getBeijingYmd, offsetYmd } from './marketSettlementPolicy'
 import {
@@ -50,8 +50,8 @@ export async function syncTradeCalIfNeeded(db: Database.Database, token?: string
     return
   }
   seedOfficialTradeCalendar(db)
-  const latest = getLatestCalDate(db)
-  if (latest !== null && latest >= offsetYmd(getBeijingYmd(), 60)) return
+  const today = getBeijingYmd()
+  if (hasTradeCalCoverage(db, today, offsetYmd(today, 60))) return
   await syncTradeCalFull(db, token)
 }
 

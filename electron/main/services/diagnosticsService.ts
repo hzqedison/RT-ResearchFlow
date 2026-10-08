@@ -527,9 +527,9 @@ export async function runDiagnosticAction(db: Database.Database, action: Diagnos
         }
       }
       const result = await syncTradeCalFull(db, token)
+      persistDataQualitySnapshot(db)
       if (result.status === 'empty') throw new Error('TRADE_CAL_SYNC_EMPTY')
       if (result.status === 'failed') throw new Error('TRADE_CAL_SYNC_FAILED')
-      persistDataQualitySnapshot(db)
       const source = result.source === 'official-sse' ? OFFICIAL_SSE_CALENDAR_LABEL : 'Tushare'
       const coverage = result.coverageStart && result.coverageEnd
         ? `，范围 ${result.coverageStart} 至 ${result.coverageEnd}` : ''
@@ -619,4 +619,3 @@ export async function runDiagnosticAction(db: Database.Database, action: Diagnos
       throw new Error('INVALID_ACTION')
   }
 }
-

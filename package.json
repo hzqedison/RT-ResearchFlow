@@ -1,6 +1,6 @@
 {
   "name": "rt-research-flow",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "RT-ResearchFlow - 资讯、AI研究、策略验证与本人确认交易的一体化工作台",
   "main": "./out/main/index.js",
   "author": { "name": "hzqedison", "url": "https://github.com/hzqedison" },

@@ -1,21 +1,27 @@
 import { expect, test, _electron as electron } from '@playwright/test'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 test('installed Windows beta keeps AI save fixed and blocks the Mac-only trading bridge', async () => {
   test.skip(process.platform !== 'win32' || process.env.CI !== 'true' || !process.env.TRADE_WATCH_PACKAGED_EXECUTABLE,
     'Runs only against an isolated installed Windows CI application.')
   test.setTimeout(90_000)
+  const executablePath = resolve(process.env.TRADE_WATCH_PACKAGED_EXECUTABLE!)
+  const relativeExecutable = relative(resolve(process.env.RUNNER_TEMP || tmpdir()), executablePath)
+  if (!relativeExecutable || isAbsolute(relativeExecutable) || relativeExecutable.split(sep).includes('..')) {
+    throw new Error('Packaged Windows tests require an executable inside the isolated temporary root')
+  }
   const fixture = mkdtempSync(join(tmpdir(), 'rt-windows-integrated-'))
   if (dirname(resolve(fixture)) !== resolve(tmpdir())) throw new Error('Unsafe fixture cleanup path')
   const environment = { ...process.env }
   delete environment.ELECTRON_RUN_AS_NODE
   const application = await electron.launch({
-    executablePath: process.env.TRADE_WATCH_PACKAGED_EXECUTABLE!,
+    executablePath,
     args: [`--user-data-dir=${fixture}`], env: environment,
   })
   try {
+    expect(resolve(await application.evaluate(({ app }) => app.getPath('userData')))).toBe(resolve(dirname(executablePath), 'data'))
     const packageVersion = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')).version
     expect(await application.evaluate(({ app }) => app.getVersion())).toBe(packageVersion)
     const page = await application.firstWindow()

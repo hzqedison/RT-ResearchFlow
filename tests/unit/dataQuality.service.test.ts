@@ -2,12 +2,9 @@ import Database from 'better-sqlite3'
 import { describe, expect, it } from 'vitest'
 import { DATABASE_MIGRATIONS, runMigrations } from '../../electron/main/database/db'
 import { getDataQualitySnapshot, persistDataQualitySnapshot } from '../../electron/main/services/dataQualityService'
+import { buildOfficialSseTradingCalendar } from '../../electron/shared/officialSseTradingCalendar'
 
 const NOW = Date.parse('2026-07-24T02:00:00.000Z')
-
-function ymd(date: Date): string {
-  return date.toISOString().slice(0, 10).replace(/-/g, '')
-}
 
 function createDb(): Database.Database {
   const db = new Database(':memory:')
@@ -21,34 +18,19 @@ function seedUsableFixture(db: Database.Database): string[] {
     VALUES ('600001.SH', '示例股份', '电子', '主板', 'L', 100, ?)
   `).run(NOW)
 
-  const lastHistorical = new Date('2026-07-23T00:00:00.000Z')
-  const historical: string[] = []
-  const insertCalendar = db.prepare('INSERT INTO trade_cal (cal_date, is_open, pretrade_date) VALUES (?, 1, ?)')
+  const calendar = buildOfficialSseTradingCalendar()
+  const historical = calendar.filter(row => row.isOpen === 1 && row.calDate <= '20260723')
+    .map(row => row.calDate).slice(-480)
+  const insertCalendar = db.prepare('INSERT INTO trade_cal (cal_date, is_open, pretrade_date) VALUES (?, ?, ?)')
   const insertDaily = db.prepare(`
     INSERT INTO daily_close_cache (ts_code, trade_date, close, pct_chg, open, high, low, vol, turnover_rate)
     VALUES ('600001.SH', ?, 10, 0, 10, 10.5, 9.5, 100, 1)
   `)
   const insertHistory = db.transaction(() => {
-    let previous: string | null = null
-    for (let offset = 479; offset >= 0; offset -= 1) {
-      const date = new Date(lastHistorical)
-      date.setUTCDate(date.getUTCDate() - offset)
-      const value = ymd(date)
-      historical.push(value)
-      insertCalendar.run(value, previous)
-      insertDaily.run(value)
-      previous = value
-    }
+    for (const row of calendar) insertCalendar.run(row.calDate, row.isOpen, row.pretradeDate)
+    for (const date of historical) insertDaily.run(date)
   })
   insertHistory()
-  db.prepare(`INSERT INTO trade_cal (cal_date, is_open, pretrade_date) VALUES ('20260724', 1, '20260723')`).run()
-  const future = new Date('2026-07-25T00:00:00.000Z')
-  const insertFuture = db.prepare('INSERT INTO trade_cal (cal_date, is_open, pretrade_date) VALUES (?, 0, NULL)')
-  for (let offset = 0; offset <= 70; offset += 1) {
-    const date = new Date(future)
-    date.setUTCDate(date.getUTCDate() + offset)
-    insertFuture.run(ymd(date))
-  }
 
   db.prepare(`
     INSERT INTO stk_auction_cache (ts_code, trade_date, price, vol, amount, fetched_at)
@@ -140,6 +122,34 @@ describe('dataQualityService', () => {
       const daily = getDataQualitySnapshot(db, NOW).datasets.find((item) => item.key === 'dailyMarket')
       expect(daily?.status).toBe('degraded')
       expect(daily?.reasons.map((item) => item.code)).toEqual(expect.arrayContaining(['FUTURE_FACTS', 'ADJUSTMENT_GAPS']))
+    } finally {
+      db.close()
+    }
+  })
+
+  it('已有日历与官方公告冲突时保留原始记录并发出提醒', () => {
+    const db = createDb()
+    try {
+      seedUsableFixture(db)
+      db.prepare("UPDATE trade_cal SET is_open = 0 WHERE cal_date = '20260724'").run()
+      const calendar = getDataQualitySnapshot(db, NOW).datasets.find(item => item.key === 'tradeCalendar')
+      expect(calendar?.status).toBe('degraded')
+      expect(calendar?.reasons.map(item => item.code)).toContain('OFFICIAL_SCHEDULE_DIFFERENCE')
+      expect(db.prepare("SELECT is_open FROM trade_cal WHERE cal_date = '20260724'").get()).toEqual({ is_open: 0 })
+    } finally {
+      db.close()
+    }
+  })
+
+  it('竞价事实缺失不改变其他数据集的检查结果', () => {
+    const db = createDb()
+    try {
+      seedUsableFixture(db)
+      const before = getDataQualitySnapshot(db, NOW)
+      db.prepare('DELETE FROM stk_auction_cache').run()
+      const after = getDataQualitySnapshot(db, NOW)
+      expect(after.datasets.find(item => item.key === 'auction')?.status).toBe('blocked')
+      expect(after.datasets.filter(item => item.key !== 'auction')).toEqual(before.datasets.filter(item => item.key !== 'auction'))
     } finally {
       db.close()
     }

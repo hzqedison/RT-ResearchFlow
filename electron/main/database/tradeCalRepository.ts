@@ -39,7 +39,7 @@ export function getPrevTradeDay(db: Database.Database, calDate: string): string 
   const row = db
     .prepare('SELECT pretrade_date FROM trade_cal WHERE cal_date = ?')
     .get(calDate) as { pretrade_date: string | null } | undefined
-  return row?.pretrade_date ?? getPreviousOfficialSseTradingDay(calDate)
+  return row === undefined ? getPreviousOfficialSseTradingDay(calDate) : row.pretrade_date
 }
 
 /**
@@ -102,6 +102,44 @@ export function getLatestCalDate(db: Database.Database): string | null {
   return row?.latest ?? null
 }
 
+function parseCalendarDate(ymd: string): Date | null {
+  if (!/^\d{8}$/.test(ymd)) return null
+  const date = new Date(Date.UTC(Number(ymd.slice(0, 4)), Number(ymd.slice(4, 6)) - 1, Number(ymd.slice(6, 8))))
+  return formatCalendarDate(date) === ymd ? date : null
+}
+
+function formatCalendarDate(date: Date): string {
+  return date.toISOString().slice(0, 10).replace(/-/g, '')
+}
+
+/** Every calendar date must have an explicit valid open/closed fact. */
+export function hasTradeCalCoverage(db: Database.Database, startDate: string, endDate: string): boolean {
+  const date = parseCalendarDate(startDate)
+  if (!date || !parseCalendarDate(endDate) || startDate > endDate) return false
+  const rows = db.prepare('SELECT cal_date, is_open FROM trade_cal WHERE cal_date BETWEEN ? AND ?')
+    .all(startDate, endDate) as { cal_date: string; is_open: number }[]
+  const facts = new Map(rows.map((row) => [row.cal_date, row.is_open]))
+  while (formatCalendarDate(date) <= endDate) {
+    const status = facts.get(formatCalendarDate(date))
+    if (status !== 0 && status !== 1) return false
+    date.setUTCDate(date.getUTCDate() + 1)
+  }
+  return true
+}
+
+/** Do not bridge a missing or invalid daily fact with an assumed predecessor. */
+function getVerifiedPredecessor(facts: Map<string, number>, calDate: string): string | null {
+  const date = parseCalendarDate(calDate)
+  if (!date) return null
+  for (;;) {
+    date.setUTCDate(date.getUTCDate() - 1)
+    const ymd = formatCalendarDate(date)
+    const status = facts.get(ymd)
+    if (status === 1) return ymd
+    if (status !== 0) return null
+  }
+}
+
 /** Only fill absent dates; retain existing facts and report schedule differences. */
 export function insertTradeCalIfMissing(
   db: Database.Database,
@@ -110,21 +148,28 @@ export function insertTradeCalIfMissing(
   const existing = db.prepare('SELECT is_open, pretrade_date FROM trade_cal WHERE cal_date = ?')
   const insert = db.prepare('INSERT OR IGNORE INTO trade_cal (cal_date, is_open, pretrade_date) VALUES (?, ?, ?)')
   return db.transaction(() => {
+    const stored = db.prepare('SELECT cal_date, is_open FROM trade_cal').all() as { cal_date: string; is_open: number }[]
+    const facts = new Map(stored.map((row) => [row.cal_date, row.is_open]))
     let insertedRows = 0
     let conflictRows = 0
     let firstConflictDate: string | null = null
-    for (const row of rows) {
+    for (const row of [...rows].sort((a, b) => a.calDate.localeCompare(b.calDate))) {
+      if (!parseCalendarDate(row.calDate) || (row.isOpen !== 0 && row.isOpen !== 1)) {
+        throw new Error('INVALID_CALENDAR_ROW')
+      }
+      const previous = getVerifiedPredecessor(facts, row.calDate)
       const current = existing.get(row.calDate) as { is_open: number; pretrade_date: string | null } | undefined
       if (current) {
         const differs = current.is_open !== row.isOpen
-          || (current.pretrade_date !== null && row.pretradeDate !== null && current.pretrade_date !== row.pretradeDate)
+          || (current.pretrade_date !== null && previous !== null && current.pretrade_date !== previous)
         if (differs) {
           conflictRows += 1
           firstConflictDate ??= row.calDate
         }
         continue
       }
-      insertedRows += insert.run(row.calDate, row.isOpen, row.pretradeDate).changes
+      insertedRows += insert.run(row.calDate, row.isOpen, previous).changes
+      facts.set(row.calDate, row.isOpen)
     }
     return { insertedRows, conflictRows, firstConflictDate }
   })()

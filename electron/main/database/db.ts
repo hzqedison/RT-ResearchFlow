@@ -1,13 +1,15 @@
 import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
-import { copyFileSync, existsSync, statSync } from 'fs'
+import { existsSync, statSync } from 'fs'
+import { runDatabaseStartup } from './databaseStartup'
 import {
   DEFAULT_ARTICLE_ANALYSIS_PROMPT,
   LEGACY_DEFAULT_ARTICLE_ANALYSIS_PROMPT,
 } from '../aiPromptDefaults'
 
 let _db: Database.Database | null = null
+let initialization: Promise<Database.Database> | null = null
 
 export function getDb(): Database.Database {
   if (!_db) {
@@ -16,10 +18,17 @@ export function getDb(): Database.Database {
   return _db
 }
 
-export function initDb(): Database.Database {
+export function initDb(): Promise<Database.Database> {
+  if (_db) return Promise.resolve(_db)
+  if (initialization) return initialization
+  initialization = initializeDatabase().finally(() => { initialization = null })
+  return initialization
+}
+
+async function initializeDatabase(): Promise<Database.Database> {
   const userDataPath = app.getPath('userData')
   const dbPath = join(userDataPath, 'trade-watch.db')
-
+  const existedBeforeOpen = existsSync(dbPath) && statSync(dbPath).size > 0
   const db = new Database(dbPath)
 
   try {
@@ -28,25 +37,17 @@ export function initDb(): Database.Database {
     db.pragma('synchronous = NORMAL')
     db.pragma('cache_size = -32000') // 32 MB cache
 
-    runMigrations(db)
+    await runDatabaseStartup(db, {
+      databasePath: dbPath,
+      existedBeforeOpen,
+      migrationVersions: MIGRATIONS.map(migration => migration.version),
+      onWarning: code => console.warn(`[DB] ${code}`),
+    }, () => runMigrations(db))
   } catch (err) {
     const logPath = join(app.getPath('logs'), 'trade-watch.log')
     const message = err instanceof Error ? err.message : String(err)
     db.close()
     throw new Error(`${message}\n\n日志路径：${logPath}`)
-  }
-
-  // Auto-backup: copy to trade-watch.db.bak if last backup was >24h ago (T097)
-  const bakPath = join(userDataPath, 'trade-watch.db.bak')
-  const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000
-  try {
-    const needsBackup = !existsSync(bakPath) ||
-      Date.now() - statSync(bakPath).mtimeMs > BACKUP_INTERVAL_MS
-    if (needsBackup) {
-      copyFileSync(dbPath, bakPath)
-    }
-  } catch {
-    // Non-fatal: backup failure should not prevent app startup
   }
 
   _db = db

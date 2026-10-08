@@ -27,6 +27,7 @@ type WireRequest = Record<string, unknown> & { id?: unknown; type?: unknown }
 type WireError = ResearchAccessGatewayError | { code: 'PROTOCOL_MISMATCH'; message: string }
 
 let transportServer: Server | null = null
+const transportSockets = new Set<Socket>()
 let transportStatus: ResearchAccessTransportStatus = {
   state: 'stopped',
   pipePath: null,
@@ -63,7 +64,11 @@ export async function startResearchAccessTransport(
     errorCode: null,
   }
 
-  const server = createServer((socket) => handleConnection(db, socket))
+  const server = createServer((socket) => {
+    transportSockets.add(socket)
+    socket.once('close', () => transportSockets.delete(socket))
+    handleConnection(db, socket)
+  })
   server.maxConnections = 16
 
   try {
@@ -107,7 +112,9 @@ export async function stopResearchAccessTransport(): Promise<void> {
   const pipePath = transportStatus.pipePath
   transportServer = null
   if (server) {
-    await new Promise<void>((resolve) => server.close(() => resolve()))
+    const closed = new Promise<void>((resolve) => server.close(() => resolve()))
+    for (const socket of transportSockets) socket.destroy()
+    await closed
   }
   if (process.platform !== 'win32' && pipePath && existsSync(pipePath)) {
     try {
@@ -131,6 +138,7 @@ function handleConnection(db: Database.Database, socket: Socket): void {
   socket.setTimeout(5 * 60_000, () => socket.destroy())
 
   socket.on('data', (chunk: Buffer) => {
+    if (socket.destroyed) return
     buffer = Buffer.concat([buffer, chunk])
     if (buffer.length > RESEARCH_ACCESS_PIPE_MAX_REQUEST_BYTES && buffer.indexOf(0x0a) < 0) {
       writeWireResponse(socket, null, false, undefined, pipeError('INPUT_TOO_LARGE'))

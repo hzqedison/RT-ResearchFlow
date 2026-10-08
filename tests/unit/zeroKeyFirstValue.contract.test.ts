@@ -1,23 +1,37 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
 function source(path: string): string {
   return readFileSync(resolve(process.cwd(), path), 'utf8')
 }
 
+function trustedHandlerBody(syntax: ts.SourceFile, channel: string): string {
+  const matches: ts.CallExpression[] = []
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+      && node.expression.text === 'registerTrustedIpcHandler'
+      && node.arguments[0] && ts.isStringLiteral(node.arguments[0])
+      && node.arguments[0].text === channel) matches.push(node)
+    ts.forEachChild(node, visit)
+  }
+  visit(syntax)
+  expect(matches).toHaveLength(1)
+  expect(matches[0].arguments[1]?.getText(syntax)).toBe('getWindow')
+  const handler = matches[0].arguments[2]
+  if (!handler || (!ts.isArrowFunction(handler) && !ts.isFunctionExpression(handler))) {
+    throw new Error(`Missing trusted callback: ${channel}`)
+  }
+  return handler.body.getText(syntax)
+}
+
 describe('FR-252 zero-key first-value contracts', () => {
   it('keeps the fallback inside existing narrow IPC channels', () => {
     const handlers = source('electron/main/ipc/aiHandlers.ts')
-    const fetchStart = handlers.indexOf("ipcMain.handle('datasource:fetchStock'")
-    const fetchEnd = handlers.indexOf("ipcMain.handle('datasource:updateStockName'", fetchStart)
-    const refreshStart = handlers.indexOf("ipcMain.handle('datasource:refreshStock'")
-    const refreshEnd = handlers.indexOf("ipcMain.handle('datasource:fetchStock'", refreshStart)
-    const fetchHandler = handlers.slice(fetchStart, fetchEnd)
-    const refreshHandler = handlers.slice(refreshStart, refreshEnd)
-
-    expect(fetchStart).toBeGreaterThan(0)
-    expect(refreshStart).toBeGreaterThan(0)
+    const syntax = ts.createSourceFile('aiHandlers.ts', handlers, ts.ScriptTarget.Latest, true)
+    const fetchHandler = trustedHandlerBody(syntax, 'datasource:fetchStock')
+    const refreshHandler = trustedHandlerBody(syntax, 'datasource:refreshStock')
     expect(fetchHandler).toContain("getCachedStockFetchSummary(db, stockCode, 'local-cache', 0)")
     expect(fetchHandler).toContain('fetchSelectedStockDaily(db, stockCode)')
     expect(fetchHandler).not.toContain('TUSHARE_NOT_CONFIGURED')

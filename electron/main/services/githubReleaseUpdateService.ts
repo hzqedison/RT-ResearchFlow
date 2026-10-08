@@ -1,9 +1,9 @@
 import { app, net } from 'electron'
 import Store from 'electron-store'
 import { createHash, randomUUID } from 'node:crypto'
-import { createReadStream, constants } from 'node:fs'
-import { copyFile, mkdir, open, stat, statfs, unlink } from 'node:fs/promises'
-import { dirname, isAbsolute, join } from 'node:path'
+import { createReadStream } from 'node:fs'
+import { link, lstat, mkdir, open, statfs, unlink } from 'node:fs/promises'
+import { dirname, extname, isAbsolute, join } from 'node:path'
 import {
   compareReleaseVersions, displayReleaseVersion, installerFileName, parseReleaseVersion,
 } from '../../shared/appReleasePolicy'
@@ -262,13 +262,13 @@ export function cancelAppUpdateDownload(): void {
 
 async function hashExistingFile(path: string, size: number): Promise<string | null> {
   try {
-    const info = await stat(path)
+    const info = await lstat(path)
     if (!info.isFile() || info.size !== size) return null
     const hash = createHash('sha256')
     for await (const chunk of createReadStream(path)) hash.update(chunk)
     return hash.digest('hex')
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    if (['ENOENT', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) return null
     throw error
   }
 }
@@ -286,7 +286,14 @@ export async function downloadAppInstaller(
   if (!candidate || candidate.version !== version) throw new AppUpdateError('CHECK_REQUIRED', '请先检查更新，再下载本次检测到的版本。')
   const selected = { ...candidate }
   const directory = getPreferences().get('downloadDirectory')
-  const finalPath = join(directory, selected.asset.name)
+  let finalName = selected.asset.name
+  let finalPath = join(directory, finalName)
+  const chooseFreshDestination = (): void => {
+    const extension = extname(selected.asset.name)
+    const stem = selected.asset.name.slice(0, selected.asset.name.length - extension.length)
+    finalName = `${stem}-${randomUUID()}${extension}`
+    finalPath = join(directory, finalName)
+  }
   const temporaryPath = join(directory, `.${selected.asset.name}.${randomUUID()}.part`)
   const controller = new AbortController()
   activeDownload = controller
@@ -294,12 +301,13 @@ export async function downloadAppInstaller(
   let receivedBytes = 0
   let timedOut = false
   let handle: Awaited<ReturnType<typeof open>> | null = null
+  let temporaryIdentity: { dev: bigint; ino: bigint } | null = null
   let lastNotification = 0
   const emit = (phase: AppUpdateProgress['phase'], message: string): void => {
     progress = {
       phase, receivedBytes, totalBytes: selected.asset.size,
       percent: Math.min(100, Math.floor(receivedBytes * 100 / selected.asset.size)),
-      fileName: selected.asset.name, message,
+      fileName: finalName, message,
     }
     try { notify({ ...progress }) } catch { /* A closed renderer does not invalidate the file operation. */ }
   }
@@ -313,11 +321,13 @@ export async function downloadAppInstaller(
       receivedBytes = selected.asset.size
       verifiedFile = finalPath
       emit('ready', '已有安装包通过 SHA-256 校验，无需重复下载。')
-      return { fileName: selected.asset.name, directory, sha256: selected.sha256, reused: true }
+      return { fileName: finalName, directory, sha256: selected.sha256, reused: true }
     }
     try {
-      await stat(finalPath)
-      throw new AppUpdateError('FILE_EXISTS', '下载目录已有同名但未通过校验的文件，请选择其他目录；不会覆盖原文件。')
+      await lstat(finalPath)
+      // Older interrupted copies and unrelated same-name files have unknown ownership.
+      // Preserve them and choose a new name rather than making retries permanently fail.
+      chooseFreshDestination()
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
@@ -328,6 +338,8 @@ export async function downloadAppInstaller(
     const response = await fetchGitHub(selected.asset.browser_download_url, controller.signal)
     if (!response.body) throw new AppUpdateError('EMPTY_RESPONSE', 'GitHub 没有返回安装包内容。')
     handle = await open(temporaryPath, 'wx', 0o600)
+    const created = await handle.stat({ bigint: true })
+    temporaryIdentity = { dev: created.dev, ino: created.ino }
     const reader = response.body.getReader()
     const hash = createHash('sha256')
     try {
@@ -360,10 +372,50 @@ export async function downloadAppInstaller(
     await handle.close()
     handle = null
     if (controller.signal.aborted) throw new AppUpdateError('CANCELLED', '下载已取消。')
-    await copyFile(temporaryPath, finalPath, constants.COPYFILE_EXCL)
+    const temporaryInfo = await lstat(temporaryPath, { bigint: true })
+    if (!temporaryIdentity || !temporaryInfo.isFile()
+      || temporaryInfo.dev !== temporaryIdentity.dev || temporaryInfo.ino !== temporaryIdentity.ino) {
+      throw new AppUpdateError('FILE_CHANGED', '临时文件已被其他操作替换，已停止保存；请重试。')
+    }
+    let published = false
+    let reused = false
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      if (controller.signal.aborted) throw new AppUpdateError('CANCELLED', '下载已取消。')
+      try {
+        // Same-directory hard linking publishes the complete file atomically and
+        // refuses existing targets on Windows and macOS. Never fall back to a
+        // partial final copy or a rename that can overwrite an unknown target.
+        await link(temporaryPath, finalPath)
+        published = true
+        break
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code === 'EEXIST') {
+          if (await hashExistingFile(finalPath, selected.asset.size) === selected.sha256) {
+            published = true
+            reused = true
+            break
+          }
+          chooseFreshDestination()
+          continue
+        }
+        if (['ENOTSUP', 'EOPNOTSUPP', 'EPERM', 'EXDEV', 'ENOSYS'].includes(code ?? '')) {
+          throw new AppUpdateError('ATOMIC_SAVE_UNAVAILABLE', '此下载目录不支持安全保存安装包，请选择本地 NTFS 或 APFS 下载目录后重试。')
+        }
+        throw error
+      }
+    }
+    if (!published) throw new AppUpdateError('FILE_EXISTS', '下载文件名连续发生冲突，请重试或更换下载目录；原文件未覆盖。')
+    if (controller.signal.aborted) throw new AppUpdateError('CANCELLED', '下载已取消。')
+    // Confirm the actual published bytes as well as the streamed checksum.
+    // A failed or cancelled publication is never exposed as a verified installer.
+    if (await hashExistingFile(finalPath, selected.asset.size) !== selected.sha256) {
+      throw new AppUpdateError('CHECKSUM_MISMATCH', '保存后的安装包校验不通过，请重试；不会信任或覆盖该文件。')
+    }
+    if (controller.signal.aborted) throw new AppUpdateError('CANCELLED', '下载已取消。')
     verifiedFile = finalPath
     emit('ready', '完整安装包已下载并通过校验。请先备份数据、结束交易操作，再自行运行安装包。')
-    return { fileName: selected.asset.name, directory, sha256: selected.sha256, reused: false }
+    return { fileName: finalName, directory, sha256: selected.sha256, reused }
   } catch (error) {
     const failure = controller.signal.aborted
       ? new AppUpdateError(timedOut ? 'TIMEOUT' : 'CANCELLED', timedOut ? '下载超时，请检查网络或重试。' : '下载已取消。')
@@ -374,7 +426,16 @@ export async function downloadAppInstaller(
   } finally {
     clearTimeout(timer)
     await handle?.close().catch(() => {})
-    await unlink(temporaryPath).catch(() => {})
+    if (temporaryIdentity) {
+      // 'wx' may fail because a file already exists. Never delete that file,
+      // nor a different file subsequently moved over our owned temporary path.
+      try {
+        const remaining = await lstat(temporaryPath, { bigint: true })
+        if (remaining.isFile() && remaining.dev === temporaryIdentity.dev && remaining.ino === temporaryIdentity.ino) {
+          await unlink(temporaryPath)
+        }
+      } catch { /* Cleanup is best effort; unverified temporary files are never trusted. */ }
+    }
     activeDownload = null
   }
 }

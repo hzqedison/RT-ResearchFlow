@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { SupportDiagnosticPreview, SupportFeedbackResult, SupportFeedbackSaveOutcome } from '../shared/supportDiagnostics'
 import type { AppUpdateCheck, AppUpdateDownload, AppUpdateInfo, AppUpdateProgress, AppUpdateResult } from '../shared/appUpdateTypes'
 import type { DailyDataProvider, DataProbeProvider, DataSourcePreference, SaveDataSourcePreference, DataSourceProbeResult, ResearchReportResult, WencaiResult } from '../shared/dataSourceTypes'
 import type { MacThsRequest, MacThsResult } from '../shared/macThsTypes'
@@ -2831,6 +2832,11 @@ const api = {
   },
 
   // ── Diagnostics (FR-192) ──────────────────────────────
+  supportDiagnostics: {
+    generatePreview: () => ipcRenderer.invoke('supportDiagnostics:generatePreview') as Promise<SupportFeedbackResult<SupportDiagnosticPreview>>,
+    savePreview: (previewId: string) => ipcRenderer.invoke('supportDiagnostics:savePreview', previewId) as Promise<SupportFeedbackResult<SupportFeedbackSaveOutcome>>
+  },
+
   diagnostics: {
     getHealth: () => ipcRenderer.invoke('diagnostics:getHealth') as Promise<
       | {

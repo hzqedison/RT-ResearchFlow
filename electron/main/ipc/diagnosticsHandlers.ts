@@ -1,6 +1,9 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow } from 'electron'
+import { registerTrustedIpcHandler, type TrustedWindowGetter } from '../security/trustedIpc'
 import { getDb } from '../database/db'
 import { getDiagnosticsHealth, runDiagnosticAction, type DiagnosticRunAction } from '../services/diagnosticsService'
+import { recordSupportFailure } from '../services/supportDiagnosticsService'
+import type { SupportErrorCode } from '../../shared/supportDiagnostics'
 
 const ALLOWED_ACTIONS: DiagnosticRunAction[] = [
   'refreshHealth',
@@ -63,8 +66,26 @@ function toErrorMessage(code: string): string {
   return '诊断动作执行失败'
 }
 
-export function registerDiagnosticsHandlers(): void {
-  ipcMain.handle('diagnostics:getHealth', () => {
+function toSupportErrorCode(code: string): SupportErrorCode {
+  switch (code) {
+    case 'TUSHARE_DISABLED': return 'CONFIG_MISSING'
+    case 'TUSHARE_QUOTA_INSUFFICIENT':
+    case 'TUSHARE_AUTH_FAILED': return 'PROVIDER_PERMISSION_DENIED'
+    case 'TUSHARE_REQUEST_TIMEOUT': return 'NETWORK_FAILED'
+    case 'HISTORICAL_DAILY_UPSTREAM_UNAVAILABLE':
+    case 'TRADE_CAL_HISTORY_INCOMPLETE':
+    case 'TRADE_CAL_SYNC_EMPTY':
+    case 'BENCHMARK_SYNC_EMPTY':
+    case 'PUBLIC_STOCK_UNIVERSE_INCOMPLETE':
+    case 'PUBLIC_STOCK_UNIVERSE_NOT_READY': return 'DATA_MISSING'
+    case 'INVALID_PARAM':
+    case 'PUBLIC_DAILY_INVALID_TARGET_DATE': return 'INVALID_INPUT'
+    default: return 'INTERNAL_ERROR'
+  }
+}
+
+export function registerDiagnosticsHandlers(getWindow: TrustedWindowGetter): void {
+  registerTrustedIpcHandler('diagnostics:getHealth', getWindow, () => {
     try {
       return { ok: true as const, data: getDiagnosticsHealth(getDb()) }
     } catch (err) {
@@ -73,7 +94,7 @@ export function registerDiagnosticsHandlers(): void {
     }
   })
 
-  ipcMain.handle('diagnostics:runCheck', async (event, payload?: { action?: DiagnosticRunAction }) => {
+  registerTrustedIpcHandler('diagnostics:runCheck', getWindow, async (event, payload?: { action?: DiagnosticRunAction }) => {
     const action = payload?.action
     if (!action || !ALLOWED_ACTIONS.includes(action)) {
       return { ok: false as const, error: 'INVALID_PARAM' as const, message: '诊断动作参数无效' }
@@ -82,9 +103,15 @@ export function registerDiagnosticsHandlers(): void {
       const win = BrowserWindow.fromWebContents(event.sender) ?? undefined
       return { ok: true as const, data: await runDiagnosticAction(getDb(), action, win) }
     } catch (err) {
-      console.error(`[diagnostics:runCheck] action=${action} failed:`, err)
       const code = toErrorCode(err)
-      return { ok: false as const, error: code, message: toErrorMessage(code) }
+      const failure = recordSupportFailure(toSupportErrorCode(code), action === 'refreshHealth' ? 'runtime' : 'data')
+      console.error(`[diagnostics:runCheck] action=${action} failed:`, { code, correlationId: failure.correlationId })
+      return {
+        ok: false as const,
+        error: code,
+        message: `${toErrorMessage(code)} 问题编号：${failure.correlationId}`,
+        correlationId: failure.correlationId,
+      }
     }
   })
 }

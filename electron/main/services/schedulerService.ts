@@ -124,6 +124,10 @@ import {
   PREMARKET_AUCTION_CONFIRM_MINUTE_BJ,
 } from './premarketCutoffPolicy'
 
+import { SchedulerTaskHost, type SchedulerScope } from './schedulerTaskHost'
+
+const _scheduler = new SchedulerTaskHost()
+
 let _timer: ReturnType<typeof setTimeout> | null = null
 let _nextScanAt: number | null = null
 let _backtestTimer: ReturnType<typeof setTimeout> | null = null
@@ -148,6 +152,7 @@ let _premarketNotification929Timer: ReturnType<typeof setTimeout> | null = null
 
 // FR-123: 个股分钟级 K 线订阅状态（全局唯一活跃订阅）
 let _activeMinuteSubscription: { stockCode: string; intervalId: ReturnType<typeof setInterval> | null } | null = null
+let _minutePullInFlight = false
 let _consecutiveMinuteFailCount = 0
 let _afterCloseRunPromise: Promise<AfterCloseSyncRun> | null = null
 let _stockBasicSyncPromise: Promise<StockBasicSyncResult | null> | null = null
@@ -157,7 +162,8 @@ export function getNextScanAt(): number | null {
 }
 
 export function startScheduler(): void {
-  stopScheduler()
+  if (!_scheduler.start()) return
+  const startup = _scheduler.replaceScope('startup')
   try {
     seedOfficialTradeCalendar(getDb())
   } catch {
@@ -166,14 +172,16 @@ export function startScheduler(): void {
   scheduleNext()
   scheduleBacktestCron()
   scheduleMinuteCleanupCron()
-  // 所有盘后任务统一由 18:00 协调器触发
   scheduleAfterCloseDailySync()
   scheduleConceptMembersSync()
   scheduleRtKRefresh()
   scheduleMorningAuctionTimers()
   schedulePremarketScenario845()
   schedulePremarketNotification929()
-  void reconcilePremarketNotificationForToday().catch((error) => {
+  void _scheduler.run(() => {
+    if (!_scheduler.isCurrent(startup)) return
+    return reconcilePremarketNotificationForToday()
+  }).catch((error) => {
     console.warn('[Premarket] notification reconcile failed:', error instanceof Error ? error.message : String(error))
   })
   void reconfigurePremarketCaptures().catch((error) => {
@@ -182,48 +190,60 @@ export function startScheduler(): void {
   scheduleClosingHalfHourFinalize()
   scheduleTradeCalSync()
   schedulePortfolioForecast()
-  // 启动时立即拉一次交易日历，确保调休补班日判断正确
-  const _token = getTushareTokenOrNull()
-  void runStartupStockBasicSyncIfStale()
-    .then(() => _token
-      ? null
-      : runStartupPublicHistoricalDailySyncIfNeeded(getDb(), getLastSettledCalendarDate()))
-    .catch((error) =>
+
+  const token = getTushareTokenOrNull()
+  void _scheduler.run(async () => {
+    if (!_scheduler.isCurrent(startup)) return
+    try {
+      await runStartupStockBasicSyncIfStale()
+      if (!_scheduler.isCurrent(startup)) return
+      if (!token) await runStartupPublicHistoricalDailySyncIfNeeded(getDb(), getLastSettledCalendarDate())
+    } catch (error) {
       console.warn('[StockBasicSync] startup catch-up failed:', error instanceof Error ? error.message : String(error))
-    )
-    .finally(() => {
-      if (!_token) schedulePublicHistoricalDailyResumeCheck()
-    })
-  void refreshTradingCalendar(_token).catch(() =>
-    console.warn('[TradingCalendar] startup refresh failed')
-  )
-  void syncTradeCalIfNeeded(getDb(), _token).catch(() =>
-    console.warn('[TradeCal] startup sync failed')
-  )
-  if (_token) {
-    void runStartupDailyCloseCatchUp(getDb(), _token)
-      .then((result) => console.log(`[DailyCloseCatchUp] checked=${result.totalTradeDays} synced=${result.syncedTradeDays} failed=${result.failedTradeDays}`))
-      .catch((error) => console.warn('[DailyCloseCatchUp] startup catch-up failed:', error instanceof Error ? error.message : String(error)))
-      .finally(() => {
-        void runStartupPublicHistoricalDailySyncIfNeeded(getDb(), getLastSettledCalendarDate())
-          .catch((error) =>
-            console.warn('[PublicDailySync] startup resume failed:', error instanceof Error ? error.message : String(error))
-          )
-          .finally(() => {
-            schedulePublicHistoricalDailyResumeCheck()
-            void runStartupAfterCloseCatchUp().catch((error) =>
-              console.warn('[AfterCloseSync] startup catch-up failed:', error instanceof Error ? error.message : String(error))
-            )
-          })
-      })
-  } else {
-    void runStartupAfterCloseCatchUp().catch((error) =>
+    } finally {
+      if (_scheduler.isCurrent(startup) && !token) schedulePublicHistoricalDailyResumeCheck()
+    }
+  })
+  void _scheduler.run(() => {
+    if (!_scheduler.isCurrent(startup)) return
+    return refreshTradingCalendar(token)
+  }).catch(() => console.warn('[TradingCalendar] startup refresh failed'))
+  void _scheduler.run(() => {
+    if (!_scheduler.isCurrent(startup)) return
+    return syncTradeCalIfNeeded(getDb(), token)
+  }).catch(() => console.warn('[TradeCal] startup sync failed'))
+
+  void _scheduler.run(async () => {
+    if (!_scheduler.isCurrent(startup)) return
+    if (token) {
+      try {
+        const result = await runStartupDailyCloseCatchUp(getDb(), token)
+        if (!_scheduler.isCurrent(startup)) return
+        console.log(`[DailyCloseCatchUp] checked=${result.totalTradeDays} synced=${result.syncedTradeDays} failed=${result.failedTradeDays}`)
+      } catch (error) {
+        console.warn('[DailyCloseCatchUp] startup catch-up failed:', error instanceof Error ? error.message : String(error))
+      }
+      if (!_scheduler.isCurrent(startup)) return
+      try {
+        await runStartupPublicHistoricalDailySyncIfNeeded(getDb(), getLastSettledCalendarDate())
+      } catch (error) {
+        console.warn('[PublicDailySync] startup resume failed:', error instanceof Error ? error.message : String(error))
+      }
+      if (!_scheduler.isCurrent(startup)) return
+      schedulePublicHistoricalDailyResumeCheck()
+    }
+    if (!_scheduler.isCurrent(startup)) return
+    try {
+      await runStartupAfterCloseCatchUp()
+    } catch (error) {
       console.warn('[AfterCloseSync] startup catch-up failed:', error instanceof Error ? error.message : String(error))
-    )
-  }
+    }
+  })
 }
 
 export function stopScheduler(): void {
+  _scheduler.stop()
+  _nextScanAt = null
   if (_timer) {
     clearTimeout(_timer)
     _timer = null
@@ -286,16 +306,36 @@ export function stopScheduler(): void {
 }
 
 export function reschedule(): void {
+  if (!_scheduler.running) return
   if (_timer) clearTimeout(_timer)
   _timer = null
   _nextScanAt = null
-  scheduleNext()
+  // Only the scan chain changes generation; other business schedules retain their timing.
+  scheduleNext(_scheduler.replaceScope('scan'))
 }
 
-function schedulePublicHistoricalDailyResumeCheck(): void {
+/**
+ * Waits for timer callbacks, startup chains, minute pulls and premarket reconfiguration
+ * admitted by this host, including awaited retries and nested jobs, across old generations.
+ * Does not cancel promises or cover independently invoked manual jobs, other services'
+ * detached work, heartbeat, cleaner, IPC or application-owned tasks.
+ * Stop admission first. A timeout is NOT permission to close resources still in use.
+ */
+export function waitForSchedulerIdle(timeoutMs: number): Promise<boolean> {
+  return _scheduler.waitForIdle(timeoutMs).then((result) => result.idle)
+}
+
+/** Keeps the legacy synchronous stop API; application shutdown can await this companion. */
+export function stopSchedulerAndWait(timeoutMs: number): Promise<boolean> {
+  stopScheduler()
+  return waitForSchedulerIdle(timeoutMs)
+}
+
+function schedulePublicHistoricalDailyResumeCheck(scope = _scheduler.replaceScope('public-daily-resume')): void {
+  if (!_scheduler.isCurrent(scope)) return
   if (_publicDailyResumeTimer) clearInterval(_publicDailyResumeTimer)
-  _publicDailyResumeTimer = setInterval(() => {
-    void runStartupPublicHistoricalDailySyncIfNeeded(getDb(), getLastSettledCalendarDate())
+  _publicDailyResumeTimer = _scheduler.interval(scope, () => {
+    return runStartupPublicHistoricalDailySyncIfNeeded(getDb(), getLastSettledCalendarDate())
       .then((result) => {
         if (result) {
           console.log(`[PublicDailySync] resumed from checkpoint, synced=${result.syncedStocks} failed=${result.failedStocks}`)
@@ -307,18 +347,19 @@ function schedulePublicHistoricalDailyResumeCheck(): void {
   }, 60_000)
 }
 
-function scheduleNext(): void {
+function scheduleNext(scope = _scheduler.replaceScope('scan')): void {
+  if (!_scheduler.isCurrent(scope)) return
   const settings = getSettings()
   const intervalMs = settings.scanIntervalMinutes * 60 * 1000
   _nextScanAt = Date.now() + intervalMs
 
-  _timer = setTimeout(async () => {
+  _timer = _scheduler.timeout(scope, async () => {
     try {
       await runScan('SCHEDULED')
     } catch (err) {
       console.error('[Scheduler] Scan failed:', err)
     }
-    scheduleNext()
+    scheduleNext(scope)
   }, intervalMs)
 }
 
@@ -326,7 +367,8 @@ function scheduleNext(): void {
  * Schedule the 15:05 (Beijing time) daily backtest cron.
  * Calculates ms until next 15:05 BJ time, then repeats every 24h.
  */
-function scheduleBacktestCron(): void {
+function scheduleBacktestCron(scope = _scheduler.replaceScope('backtest')): void {
+  if (!_scheduler.isCurrent(scope)) return
   const now = Date.now()
   const bjNow = new Date(now + 8 * 60 * 60 * 1000)
 
@@ -340,14 +382,14 @@ function scheduleBacktestCron(): void {
     delayMs += 24 * 60 * 60 * 1000
   }
 
-  _backtestTimer = setTimeout(async () => {
-    await runBacktestCronJob()
+  _backtestTimer = _scheduler.timeout(scope, async () => {
+    await runBacktestCronJob(scope)
     // Reschedule for next day
-    scheduleBacktestCron()
+    scheduleBacktestCron(scope)
   }, delayMs)
 }
 
-async function runBacktestCronJob(): Promise<void> {
+async function runBacktestCronJob(scope: SchedulerScope): Promise<void> {
   // Only run on weekdays (Monday=1 .. Friday=5)
   const bjNow = new Date(Date.now() + 8 * 60 * 60 * 1000)
   const dow = bjNow.getUTCDay()
@@ -356,6 +398,7 @@ async function runBacktestCronJob(): Promise<void> {
   try {
     const db = getDb()
     const synced = await syncIntradayForPredictedStocks(db)
+    if (!_scheduler.isCurrent(scope)) return
     const backtested = runAllPendingBacktests(db)
     console.log(`[Backtest Cron] Synced ${synced} intraday entries, backtested ${backtested} forecasts`)
   } catch (err) {
@@ -391,7 +434,8 @@ function toTsCodeForMinute(code: string): string {
  * klt=1 完整 OHLCV（免 token，60s 节奏经探针验证不触发反爬）。
  * 仅当两者都连续失败 3 次才推 fallback 并自动 unsubscribe。
  */
-async function pullStockMinute(stockCode: string): Promise<void> {
+async function pullStockMinute(stockCode: string, scope: SchedulerScope): Promise<void> {
+  if (!_scheduler.isCurrent(scope)) return
   const db = getDb()
   const dsCfg = getDataSourceConfig(db)
   let gotData = false
@@ -402,6 +446,7 @@ async function pullStockMinute(stockCode: string): Promise<void> {
     if (token) {
       try {
         const rows = await fetchStockMinuteDaily(token, toTsCodeForMinute(stockCode))
+        if (!_scheduler.isCurrent(scope)) return
         if (rows.length > 0) {
           upsertStockMinute(db, rows)
           gotData = true
@@ -413,10 +458,13 @@ async function pullStockMinute(stockCode: string): Promise<void> {
     }
   }
 
+  if (!_scheduler.isCurrent(scope)) return
+
   // 2. 无 Tushare / Tushare 未取到 → 东财 push2his klt=1 完整 OHLCV（免 token）
   if (!gotData) {
     try {
       const bars = await fetchEastmoneyMinuteOHLCV(stockCode)
+      if (!_scheduler.isCurrent(scope)) return
       if (bars.length > 0) {
         const now = Date.now()
         upsertStockMinute(db, bars.map((b) => ({
@@ -439,6 +487,8 @@ async function pullStockMinute(stockCode: string): Promise<void> {
     }
   }
 
+  if (!_scheduler.isCurrent(scope)) return
+
   // 3. 结果处理
   if (gotData) {
     _consecutiveMinuteFailCount = 0
@@ -459,23 +509,32 @@ async function pullStockMinute(stockCode: string): Promise<void> {
 
 /** 订阅个股分钟 K 线轮询. 同股重复调用幂等; 切换股票自动 unsubscribe 旧订阅. */
 export function subscribeStockMinute(stockCode: string): void {
+  if (!_scheduler.running) return
   if (_activeMinuteSubscription?.stockCode === stockCode) return
-  if (_activeMinuteSubscription) unsubscribeStockMinute()
-
-  // 立即拉一次（无论是否盘中, 用于补全当日数据）
-  void pullStockMinute(stockCode)
-
-  const intervalId = setInterval(() => {
+  unsubscribeStockMinute()
+  const scope = _scheduler.replaceScope('stock-minute')
+  const pull = (): Promise<void> | void => {
+    if (!_scheduler.isCurrent(scope) || _minutePullInFlight) return
+    _minutePullInFlight = true
+    return pullStockMinute(stockCode, scope).catch((error) => {
+      console.warn('[MinuteCron] pull failed:', error instanceof Error ? error.message : String(error))
+    }).finally(() => {
+      if (_scheduler.isCurrent(scope)) _minutePullInFlight = false
+    })
+  }
+  const intervalId = _scheduler.interval(scope, () => {
     if (!isInTradingHoursMain()) return
-    void pullStockMinute(stockCode)
+    return pull()
   }, 60_000)
-
   _activeMinuteSubscription = { stockCode, intervalId }
+  void _scheduler.run(pull)
   console.log(`[MinuteCron] subscribeStockMinute(${stockCode}) started`)
 }
 
 /** 取消当前活跃订阅. 幂等. */
 export function unsubscribeStockMinute(): void {
+  _scheduler.replaceScope('stock-minute')
+  _minutePullInFlight = false
   if (_activeMinuteSubscription?.intervalId) {
     clearInterval(_activeMinuteSubscription.intervalId)
   }
@@ -487,7 +546,8 @@ export function unsubscribeStockMinute(): void {
 }
 
 /** 每日北京时间 16:00 清理 7 天前的分钟 K 缓存 */
-function scheduleMinuteCleanupCron(): void {
+function scheduleMinuteCleanupCron(scope = _scheduler.replaceScope('minute-cleanup')): void {
+  if (!_scheduler.isCurrent(scope)) return
   const now = Date.now()
   const bjNow = new Date(now + 8 * 60 * 60 * 1000)
   const target = new Date(bjNow)
@@ -495,7 +555,7 @@ function scheduleMinuteCleanupCron(): void {
   let delayMs = target.getTime() - bjNow.getTime()
   if (delayMs <= 0) delayMs += 24 * 60 * 60 * 1000
 
-  _minuteCleanupTimer = setTimeout(() => {
+  _minuteCleanupTimer = _scheduler.timeout(scope, () => {
     const db = getDb()
     try {
       const removed = cleanupStockMinuteCache(db, 7)
@@ -535,7 +595,7 @@ function scheduleMinuteCleanupCron(): void {
     } catch (err) {
       console.error('[ShortTermCleanup] Error:', err)
     }
-    scheduleMinuteCleanupCron()
+    scheduleMinuteCleanupCron(scope)
   }, delayMs)
 }
 
@@ -582,6 +642,8 @@ function isTradingDay(ymd: string): boolean {
 }
 
 function clearPremarketCaptureTimers(): void {
+  _scheduler.replaceScope('premarket-capture-overnight')
+  _scheduler.replaceScope('premarket-capture-asia_open')
   if (_premarketOvernightTimer) {
     clearTimeout(_premarketOvernightTimer)
     _premarketOvernightTimer = null
@@ -600,11 +662,15 @@ function setPremarketTimer(
   else _premarketAsiaOpenTimer = timer
 }
 
-function schedulePremarketCaptureStage(stage: PremarketCaptureStage): void {
+function schedulePremarketCaptureStage(
+  stage: PremarketCaptureStage,
+  scope = _scheduler.replaceScope(`premarket-capture-${stage}`),
+): void {
+  if (!_scheduler.isCurrent(scope)) return
   if (!getPremarketNetworkEnabled()) return
   const nextRun = getNextPremarketCaptureRun(getDb(), stage)
   if (!nextRun) return
-  const timer = setTimeout(async () => {
+  const timer = _scheduler.timeout(scope, async () => {
     setPremarketTimer(stage, null)
     try {
       if (!getPremarketNetworkEnabled()) return
@@ -615,21 +681,23 @@ function schedulePremarketCaptureStage(stage: PremarketCaptureStage): void {
     } catch (error) {
       console.warn(`[Premarket] ${stage} capture failed:`, error instanceof Error ? error.message : String(error))
     } finally {
-      if (getPremarketNetworkEnabled()) schedulePremarketCaptureStage(stage)
+      if (_scheduler.isCurrent(scope) && getPremarketNetworkEnabled()) schedulePremarketCaptureStage(stage, scope)
     }
   }, Math.max(0, nextRun.scheduledAt - Date.now()))
   setPremarketTimer(stage, timer)
 }
 
-function schedulePremarketScenario845(): void {
+function schedulePremarketScenario845(scope = _scheduler.replaceScope('premarket-scenario')): void {
+  if (!_scheduler.isCurrent(scope)) return
   const nextRun = getNextPremarketCaptureRun(getDb(), 'asia_open')
   if (!nextRun) return
-  _premarketScenario845Timer = setTimeout(async () => {
+  _premarketScenario845Timer = _scheduler.timeout(scope, async () => {
     _premarketScenario845Timer = null
     try {
       if (getPremarketNetworkEnabled()) {
         await runPremarketCaptureStage(getDb(), 'asia_open', Date.now())
       }
+      if (!_scheduler.isCurrent(scope)) return
       await runPremarketScenarioStage(getDb(), {
         tradeDate: nextRun.tradeDate,
         stage: 'asia_open',
@@ -638,7 +706,7 @@ function schedulePremarketScenario845(): void {
     } catch (error) {
       console.warn('[Premarket] 08:45 scenario failed:', error instanceof Error ? error.message : String(error))
     } finally {
-      schedulePremarketScenario845()
+      schedulePremarketScenario845(scope)
     }
   }, Math.max(0, nextRun.scheduledAt - Date.now()))
 }
@@ -668,11 +736,12 @@ export function getNextPremarketNotificationRun(now = Date.now()): { tradeDate: 
   return null
 }
 
-export function schedulePremarketNotification929(): void {
+export function schedulePremarketNotification929(scope = _scheduler.replaceScope('premarket-notification')): void {
+  if (!_scheduler.isCurrent(scope)) return
   if (_premarketNotification929Timer) clearTimeout(_premarketNotification929Timer)
   const next = getNextPremarketNotificationRun()
   if (!next) return
-  _premarketNotification929Timer = setTimeout(() => {
+  _premarketNotification929Timer = _scheduler.timeout(scope, () => {
     _premarketNotification929Timer = null
     try {
       const win = BrowserWindow.getAllWindows()[0] ?? undefined
@@ -680,7 +749,7 @@ export function schedulePremarketNotification929(): void {
     } catch (error) {
       console.warn('[Premarket] 09:29 notification failed:', error instanceof Error ? error.message : String(error))
     } finally {
-      schedulePremarketNotification929()
+      schedulePremarketNotification929(scope)
     }
   }, Math.max(0, next.scheduledAt - Date.now()))
 }
@@ -698,14 +767,20 @@ export async function reconcilePremarketNotificationForToday(now = Date.now()): 
   deliverPremarketScenarioNotification(getDb(), tradeDate, win, now)
 }
 
-export async function reconfigurePremarketCaptures(now = Date.now()): Promise<void> {
+export function reconfigurePremarketCaptures(now = Date.now()): Promise<void> {
+  const scope = _scheduler.replaceScope('premarket-reconfigure')
   clearPremarketCaptureTimers()
-  const enabled = getPremarketNetworkEnabled()
-  if (enabled) {
-    for (const stage of PREMARKET_CAPTURE_STAGES) schedulePremarketCaptureStage(stage)
-    await reconcilePremarketCaptureForToday(getDb(), true, now)
-  }
-  await reconcilePremarketScenariosForToday(getDb(), now)
+  if (!_scheduler.isCurrent(scope)) return Promise.resolve()
+  return _scheduler.run(async () => {
+    if (!_scheduler.isCurrent(scope)) return
+    const enabled = getPremarketNetworkEnabled()
+    if (enabled) {
+      for (const stage of PREMARKET_CAPTURE_STAGES) schedulePremarketCaptureStage(stage)
+      await reconcilePremarketCaptureForToday(getDb(), true, now)
+    }
+    if (!_scheduler.isCurrent(scope)) return
+    await reconcilePremarketScenariosForToday(getDb(), now)
+  })
 }
 
 export function getPremarketCaptureScheduleStatus(
@@ -944,15 +1019,16 @@ export async function runStartupAfterCloseCatchUp(now = Date.now()): Promise<Aft
 }
 
 /** 每个交易日北京时间 18:00 统一执行全部盘后任务。 */
-export function scheduleAfterCloseDailySync(): void {
-  _afterCloseDailyTimer = setTimeout(async () => {
+export function scheduleAfterCloseDailySync(scope = _scheduler.replaceScope('after-close')): void {
+  if (!_scheduler.isCurrent(scope)) return
+  _afterCloseDailyTimer = _scheduler.timeout(scope, async () => {
     try {
       const tradeDate = getBjTodayYmd()
       if (isTradingDay(tradeDate)) await runUnifiedAfterCloseSyncJob(tradeDate, 'scheduled')
     } catch (error) {
       console.warn('[AfterCloseSync] 18:00 coordinator failed:', error instanceof Error ? error.message : String(error))
     } finally {
-      scheduleAfterCloseDailySync()
+      scheduleAfterCloseDailySync(scope)
     }
   }, delayUntilBjTime(AFTER_CLOSE_SYNC_HOUR_BJ, AFTER_CLOSE_SYNC_MINUTE_BJ))
 }
@@ -1147,13 +1223,14 @@ async function syncWatchlistToStockPriceCache(dailyRows: DailyRow[], tradeDate: 
 type DailyRow = Awaited<ReturnType<typeof fetchDailyByDate>>[number]
 
 /** 每周一北京 04:00：只同步当前题材源的成分股。证券主数据由18:00协调器独立负责。 */
-export function scheduleConceptMembersSync(): void {
-  _conceptMembersTimer = setTimeout(async () => {
+export function scheduleConceptMembersSync(scope = _scheduler.replaceScope('concept-members')): void {
+  if (!_scheduler.isCurrent(scope)) return
+  _conceptMembersTimer = _scheduler.timeout(scope, async () => {
     const dow = new Date(Date.now() + 8 * 60 * 60 * 1000).getUTCDay()
     if (dow === 1) {
       await runConceptMembersSyncJob()
     }
-    scheduleConceptMembersSync()
+    scheduleConceptMembersSync(scope)
   }, delayUntilBjTime(4, 0))
 }
 
@@ -1415,17 +1492,21 @@ export async function runInitialDailyDataSync(
 
 /** 盘中每 60s 自动刷新 sharedRtKCache（全市场实时行情快照） */
 export function scheduleRtKRefresh(): void {
+  const scope = _scheduler.replaceScope('rt-k-refresh')
+  const resetScope = _scheduler.replaceScope('rt-k-reset')
+  if (!_scheduler.isCurrent(scope)) return
   if (_rtKRefreshTimer) {
     clearInterval(_rtKRefreshTimer)
     _rtKRefreshTimer = null
   }
-  _rtKRefreshTimer = setInterval(async () => {
+  _rtKRefreshTimer = _scheduler.interval(scope, async () => {
     const token = getTushareTokenOrNull()
     if (!token) return
     // 仅在交易时段（北京时间 09:15–15:00 工作日）执行刷新
     if (!isInTradingHoursMain()) return
     try {
       await refreshRtKCache(token)
+      if (!_scheduler.isCurrent(scope)) return
       console.log(`[RtKRefresh] cache refreshed at ${new Date().toISOString()}`)
       // 追加今日涨停/跌停时间序列点 + 失效概念热度缓存（下次前端请求时重算）
       appendTimelinePoint(getDb())
@@ -1443,7 +1524,7 @@ export function scheduleRtKRefresh(): void {
   // 利用 clearSwL1Cache 已调用 clearRtKCache，行业云图 04:00 清缓存已覆盖该逻辑
   // 此处额外保底：独立 setTimeout 确保即使行业云图从未使用也能清理
   const msUntil4 = delayUntilBjTime(4, 0)
-  setTimeout(() => {
+  _scheduler.timeout(resetScope, async () => {
     clearRtKCache()
     clearTodayTimeline()
     clearConceptHeatCache()
@@ -1451,12 +1532,15 @@ export function scheduleRtKRefresh(): void {
     console.log('[RtKRefresh] daily cache cleared at 04:00 BJ')
     // 04:00 日切后重新拉取今日交易日历
     const tok = getTushareTokenOrNull()
-    void refreshTradingCalendar(tok)
+    await refreshTradingCalendar(tok)
   }, msUntil4)
 }
 
 /** FR-137: 早盘竞价定时自动触发（09:15 预热 + 09:28 刷新），链式 setTimeout 每日循环 */
 function scheduleMorningAuctionTimers(): void {
+  const warmupScope = _scheduler.replaceScope('morning-915')
+  const confirmScope = _scheduler.replaceScope('morning-928')
+  if (!_scheduler.isCurrent(warmupScope)) return
   // 获取当前北京时间小时和分钟，用于启动补偿判断
   const bjNow = new Date(Date.now() + 8 * 60 * 60 * 1000)
   const bjHHMM = bjNow.getUTCHours() * 100 + bjNow.getUTCMinutes()
@@ -1465,7 +1549,8 @@ function scheduleMorningAuctionTimers(): void {
 
   // 09:15 预热：链式注册，无论是否工作日均链式循环；仅交易日执行快照预热
   function schedule915(): void {
-    _morningAuction915Timer = setTimeout(async function fire915() {
+    if (!_scheduler.isCurrent(warmupScope)) return
+    _morningAuction915Timer = _scheduler.timeout(warmupScope, async function fire915() {
       if (isTradingDay(getBjTodayYmd())) {
         const today = getBjTodayYmd()
         try {
@@ -1481,7 +1566,8 @@ function scheduleMorningAuctionTimers(): void {
 
   // 09:28 刷新：给 stk_auction 留出上游出数时间，再冻结竞价确认版。
   function schedule928(): void {
-    _morningAuction928Timer = setTimeout(async function fire928() {
+    if (!_scheduler.isCurrent(confirmScope)) return
+    _morningAuction928Timer = _scheduler.timeout(confirmScope, async function fire928() {
       if (isTradingDay(getBjTodayYmd())) {
         const today = getBjTodayYmd()
         try {
@@ -1490,6 +1576,7 @@ function scheduleMorningAuctionTimers(): void {
         } catch (err) {
           console.warn('[MorningAuction] 09:28 refresh failed:', err)
         }
+        if (!_scheduler.isCurrent(confirmScope)) return
         try {
           await runPremarketScenarioStage(getDb(), {
             tradeDate: today,
@@ -1510,7 +1597,10 @@ function scheduleMorningAuctionTimers(): void {
     // 09:15–09:28 之间启动：立即执行预热（fire-and-forget），跳过当天 09:15 timer
     if (isTradingDay(getBjTodayYmd())) {
       const today = getBjTodayYmd()
-      void getOrCreateMorningAuctionSnapshot(today).catch(err => {
+      void _scheduler.run(() => {
+        if (!_scheduler.isCurrent(warmupScope)) return
+        return getOrCreateMorningAuctionSnapshot(today)
+      }).catch(err => {
         console.warn('[MorningAuction] startup pre-warm failed:', err)
       })
     }
@@ -1522,12 +1612,16 @@ function scheduleMorningAuctionTimers(): void {
 
 /** FR-250: 15:01形成尾盘最终快照；启动落在15:01至18:00时执行一次当日补偿。 */
 function scheduleClosingHalfHourFinalize(): void {
+  const scope = _scheduler.replaceScope('closing-half-hour')
+  if (!_scheduler.isCurrent(scope)) return
   const runToday = async (): Promise<void> => {
+    if (!_scheduler.isCurrent(scope)) return
     const today = getBjTodayYmd()
     if (!isTradingDay(today)) return
     try {
       const token = getTushareTokenOrNull()
       if (token) await refreshRtKCache(token)
+      if (!_scheduler.isCurrent(scope)) return
       const snapshot = await refreshClosingHalfHourSnapshot(today)
       console.log(`[ClosingHalfHour] 15:01 finalize done date=${snapshot.tradeDate} candidates=${snapshot.candidateCount} saved=${snapshot.stocks.filter((stock) => stock.judgment.tier === 'active' || stock.judgment.tier === 'confirm').length}`)
     } catch (error) {
@@ -1536,7 +1630,8 @@ function scheduleClosingHalfHourFinalize(): void {
   }
 
   const scheduleNext = (): void => {
-    _closingHalfHourTimer = setTimeout(async () => {
+    if (!_scheduler.isCurrent(scope)) return
+    _closingHalfHourTimer = _scheduler.timeout(scope, async () => {
       await runToday()
       scheduleNext()
     }, delayUntilBjTime(15, 1))
@@ -1544,7 +1639,7 @@ function scheduleClosingHalfHourFinalize(): void {
 
   const now = new Date(Date.now() + 8 * 60 * 60 * 1000)
   const hhmm = now.getUTCHours() * 100 + now.getUTCMinutes()
-  if (hhmm >= 1501 && hhmm < 1800) void runToday()
+  if (hhmm >= 1501 && hhmm < 1800) void _scheduler.run(runToday)
   scheduleNext()
 }
 
@@ -1556,7 +1651,8 @@ function scheduleClosingHalfHourFinalize(): void {
  * 链式 setTimeout，每月 1 日北京时间 04:00 自动同步交易日历。
  * 确保节假日调整（如调休补班通知）每月至少同步一次。
  */
-function scheduleTradeCalSync(): void {
+function scheduleTradeCalSync(scope = _scheduler.replaceScope('trade-calendar')): void {
+  if (!_scheduler.isCurrent(scope)) return
   // 计算距下一个月 1 日 04:00 的毫秒数
   function msUntilNextFirstOfMonth(): number {
     // 北京 04:00 = UTC 前一天 20:00，但这里用链式方式计算，每次触发后再注册即可
@@ -1564,7 +1660,7 @@ function scheduleTradeCalSync(): void {
     return 24 * 60 * 60 * 1000 // 每天检查一次
   }
 
-  _tradeCalSyncTimer = setTimeout(async function fire() {
+  _tradeCalSyncTimer = _scheduler.timeout(scope, async function fire() {
     const bjNow = new Date(Date.now() + 8 * 60 * 60 * 1000)
     if (bjNow.getUTCDate() === 1) {
       const token = getTushareTokenOrNull()
@@ -1574,7 +1670,7 @@ function scheduleTradeCalSync(): void {
         console.warn('[TradeCal] monthly sync failed')
       }
     }
-    scheduleTradeCalSync()
+    scheduleTradeCalSync(scope)
   }, msUntilNextFirstOfMonth())
 }
 
@@ -1586,8 +1682,9 @@ function scheduleTradeCalSync(): void {
  * 链式 setTimeout，每个交易日北京时间 13:15 自动触发持仓批量预测.
  * 13:15 为午盘开盘后约 15 分钟，分时数据已充足但任务结束有富余时间.
  */
-function schedulePortfolioForecast(): void {
-  _portfolioForecastTimer = setTimeout(async function fire() {
+function schedulePortfolioForecast(scope = _scheduler.replaceScope('portfolio-forecast')): void {
+  if (!_scheduler.isCurrent(scope)) return
+  _portfolioForecastTimer = _scheduler.timeout(scope, async function fire() {
     if (isBjWeekday()) {
       const db = getDb()
       const win = BrowserWindow.getAllWindows()[0] ?? null
@@ -1597,6 +1694,6 @@ function schedulePortfolioForecast(): void {
         console.warn('[Portfolio] 13:15 cron failed:', err)
       }
     }
-    schedulePortfolioForecast()
+    schedulePortfolioForecast(scope)
   }, delayUntilBjTime(13, 15))
 }

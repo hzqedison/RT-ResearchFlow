@@ -308,11 +308,16 @@ function benchmarkQuality(db: Database.Database, now: number): DataQualityDatase
   if (tableExists(db, 'daily_close_cache')) parts.push(`SELECT ts_code AS code, trade_date FROM daily_close_cache WHERE ts_code IN (${placeholders})`)
   if (tableExists(db, 'stock_price_cache')) parts.push(`SELECT stockCode AS code, tradeDate AS trade_date FROM stock_price_cache WHERE stockCode IN (${placeholders})`)
   const params = parts.flatMap(() => [...CORE_BENCHMARK_CODES])
+  const asOf = expectedCompletedTradeDate(db, now)
   const rows = db.prepare(`
     SELECT code, COUNT(DISTINCT trade_date) AS trade_days, MIN(trade_date) AS earliest_date, MAX(trade_date) AS latest_date
-    FROM (${parts.join(' UNION ALL ')}) GROUP BY code
-  `).all(...params) as Array<{ code: string; trade_days: number; earliest_date: string; latest_date: string }>
-  const asOf = expectedCompletedTradeDate(db, now)
+    FROM (${parts.join(' UNION ALL ')}) WHERE trade_date <= ? GROUP BY code
+  `).all(...params, asOf) as Array<{ code: string; trade_days: number; earliest_date: string; latest_date: string }>
+  const futureRows = (db.prepare(`
+    SELECT COUNT(*) AS count FROM (
+      SELECT DISTINCT code, trade_date FROM (${parts.join(' UNION ALL ')}) WHERE trade_date > ?
+    )
+  `).get(...params, asOf) as { count: number }).count
   const byCode = new Map(rows.map((row) => [row.code, row]))
   const missing = CORE_BENCHMARK_CODES.filter((code) => !byCode.has(code))
   const short = rows.filter((row) => row.trade_days < 30)
@@ -322,6 +327,7 @@ function benchmarkQuality(db: Database.Database, now: number): DataQualityDatase
   else if (missing.length > 0) reasons.push(reason('INDEX_MISSING', `${missing.length} 个核心基准没有本地日线。`, 'warning'))
   if (short.length > 0) reasons.push(reason('HISTORY_SHORT', `${short.length} 个核心基准不足30个交易日。`, 'warning'))
   if (stale.length > 0) reasons.push(reason('STALE', `${stale.length} 个核心基准未更新到最近可用日期。`, 'warning'))
+  if (futureRows > 0) reasons.push(reason('FUTURE_FACTS', `${futureRows} 条基准日线晚于当前可用截止日，已排除在覆盖与时效判断之外。`, 'warning'))
   const allDates = rows.flatMap((row) => [row.earliest_date, row.latest_date]).sort()
   const recordCount = rows.reduce((sum, row) => sum + row.trade_days, 0)
   const status: DataTrustStatus = missing.length === CORE_BENCHMARK_CODES.length ? 'blocked' : reasons.length > 0 ? 'degraded' : 'reliable'

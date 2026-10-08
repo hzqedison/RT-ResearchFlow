@@ -110,6 +110,18 @@ describe('FR-255 research access local transport', () => {
     expect(researchAccessPipePath(longDataPath, 'win32')).toMatch(/^\\\\\.\\pipe\\trade-watch-research-/)
   })
 
+  it('stops promptly with an idle connected client and can restart afterwards', async () => {
+    const status = await startResearchAccessTransport(db, userDataPath)
+    const socket = await openSocket(status.pipePath!)
+    const clientClosed = new Promise<void>(resolve => socket.once('close', () => resolve()))
+    await stopResearchAccessTransport()
+    await clientClosed
+    const restarted = await startResearchAccessTransport(db, userDataPath)
+    expect(restarted.state).toBe('ready')
+    await stopResearchAccessTransport()
+    await stopResearchAccessTransport()
+  }, 3000)
+
   it.skipIf(process.platform !== 'darwin')('keeps the macOS socket and its directory private to the current user', async () => {
     const status = await startResearchAccessTransport(db, userDataPath)
     expect(status.state).toBe('ready')

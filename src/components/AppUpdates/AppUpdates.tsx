@@ -7,6 +7,19 @@ function sizeLabel(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+function releasePageErrorMessage(code: unknown): string {
+  switch (code) {
+    case 'UNAUTHORIZED':
+      return '当前窗口无权打开发布页面。请关闭此页面，从应用主窗口重新进入应用更新后重试。'
+    case 'INVALID_URL':
+      return '发布页面地址未通过安全检查。请重新打开应用更新后重试，仍失败时请反馈此问题。'
+    case 'OPEN_FAILED':
+      return '系统未能打开浏览器。请确认已设置默认浏览器后重试。'
+    default:
+      return '发布页面打开失败。请稍后重试，仍失败时请反馈此问题。'
+  }
+}
+
 export function AppUpdates() {
   const [info, setInfo] = useState<AppUpdateInfo | null>(null)
   const [check, setCheck] = useState<AppUpdateCheck | null>(null)
@@ -45,6 +58,20 @@ export function AppUpdates() {
     }
   }
 
+  async function openReleasePage(): Promise<void> {
+    setWorking(true)
+    setError('')
+    try {
+      // openExternal has its own { ok, error } contract, not AppUpdateResult<T>.
+      const result = await window.api.openExternal('https://github.com/hzqedison/RT-ResearchFlow/releases')
+      if (!result.ok) setError(releasePageErrorMessage(result.error))
+    } catch {
+      setError('发布页面未能打开，请稍后重试。')
+    } finally {
+      setWorking(false)
+    }
+  }
+
   const buttonClass = 'rounded-md border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'
   const primaryClass = 'rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50'
 
@@ -78,7 +105,7 @@ export function AppUpdates() {
               void perform(() => window.api.appUpdates.check(includePrereleases), setCheck)
             }}>检查更新</button>
             <button type="button" className={buttonClass} disabled={!info || busy} onClick={() => void perform(() => window.api.appUpdates.chooseDirectory(), setInfo)}>选择下载位置</button>
-            <button type="button" className={buttonClass} disabled={busy} onClick={() => void perform(() => window.api.openExternal('https://github.com/hzqedison/RT-ResearchFlow/releases'), () => {})}>打开发布页面</button>
+            <button type="button" className={buttonClass} disabled={busy} onClick={() => void openReleasePage()}>打开发布页面</button>
           </div>
           <label className="mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-gray-300">
             <input type="checkbox" checked={includePrereleases} disabled={busy} onChange={event => { setIncludePrereleases(event.target.checked); setCheck(null) }} />
