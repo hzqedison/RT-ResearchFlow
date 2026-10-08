@@ -18,4 +18,4 @@ if (!statSync(nativeTestBinding).isFile()) throw new Error('Test SQLite native b
 
 // os.tmpdir follows the host's TEMP/TMP/TMPDIR. Resolve macOS temporary-directory
 // aliases before creating fixtures, preserving the production canonical-path gate.
-export const nativeTestTempRoot = realpathSync(tmpdir())
+export const nativeTestTempRoot = realpathSync.native(tmpdir())

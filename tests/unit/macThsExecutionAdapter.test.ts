@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import childProcess from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
@@ -23,8 +23,9 @@ const facts = { account: ACCOUNT, clientVersion: '9.0.0', tradingDate: DATE }
 const directories: string[] = []
 const adapters: MacThsExecutionAdapter[] = []
 const stores: { store: MacThsIntentStore; adapter: MacThsExecutionAdapter }[] = []
+const nativeTempRoot = realpathSync.native(tmpdir())
 function directory(): string {
-  const path = mkdtempSync(join(tmpdir(), 'rt-native-adapter-'))
+  const path = mkdtempSync(join(nativeTempRoot, 'rt-native-adapter-'))
   directories.push(path)
   return path
 }
@@ -33,7 +34,7 @@ afterEach(async () => {
   for (const adapter of adapters.splice(0)) await adapter.stopOwned()
   for (const { store, adapter } of stores.splice(0)) await store.shutdown(adapter.coordinator)
   for (const path of directories.splice(0)) {
-    if (dirname(resolve(path)) !== resolve(tmpdir()) || !path.includes('rt-native-adapter-')) throw new Error('UNOWNED_TEST_DIRECTORY')
+    if (dirname(resolve(path)) !== nativeTempRoot || !path.includes('rt-native-adapter-')) throw new Error('UNOWNED_TEST_DIRECTORY')
     rmSync(path, { recursive: true, force: true })
   }
 })

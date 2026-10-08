@@ -1,9 +1,10 @@
 import { nativeTestBinding, nativeTestTempRoot } from '../fixtures/macThsNativeTestRuntime'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as fs from 'node:fs'
 import { join } from 'node:path'
 import { createMacThsOrderDirectoryPreparation } from '../../electron/main/services/macThsOrderDirectory'
 import { MacThsOrderService, type TrustedCaller } from '../../electron/main/services/macThsOrderService'
+import { MacThsIntentStore } from '../../electron/main/services/macThsIntentStore'
 
 const root = fs.realpathSync.native(fs.mkdtempSync(join(nativeTestTempRoot, 'rt-i13-directory-')))
 const binding = nativeTestBinding
@@ -192,16 +193,54 @@ describe('trusted default order directory: real K paths and modeled POSIX permis
 describe('directory preparation through actual order-service startup and SQLite', () => {
   it.each([true, false])('permits explicit SQLite initialization after private-root preparation; existing=%s', async existing => {
     const f = fixture(existing)
-    const { service, confirmations } = await start(f)
-    expect(service.getState()).toMatchObject({ serviceState: 'NOT_INITIALIZED', canInitialize: true })
-    expect(fs.existsSync(join(f.directory, 'mac-ths-orders.v2.sqlite'))).toBe(false)
-    expect(confirmations()).toBe(0)
-    expect(await service.recover({ kind: 'initialize' }, caller)).toMatchObject({
-      serviceState: 'READY_DISABLED', canPrepare: true, coverage: { kind: 'fresh' },
+    const nativeMac = process.platform === 'darwin'
+    // Own fixture only: preserve the real nonprivate starting condition, irrespective of umask.
+    if (nativeMac && existing) fs.chmodSync(f.directory, 0o755)
+    const originalMode = existing ? fs.statSync(f.directory).mode & 0o777 : null
+    if (nativeMac && existing) expect(originalMode).toBe(0o755)
+    const failure = (stage: string, error: unknown): never => {
+      const details = error as { code?: string; reason?: string }
+      console.error('Directory initialization raw failure:', { stage, platform: process.platform,
+        code: details?.code ?? null, reason: details?.reason ?? null })
+      throw error
+    }
+    if (nativeMac) {
+      const recordChmod = f.hooks.chmod!, recordSync = f.hooks.sync!
+      f.hooks.chmod = (fd, mode) => {
+        try { fs.fchmodSync(fd, mode) } catch (error) { failure('fchmod', error) }
+        recordChmod(fd, mode)
+      }
+      f.hooks.sync = fd => {
+        try { fs.fsyncSync(fd) } catch (error) { failure('directory-fsync', error) }
+        recordSync(fd)
+      }
+    }
+    // Observe and rethrow the real store error; no replacement database or success fallback.
+    const originalOpen = MacThsIntentStore.open.bind(MacThsIntentStore)
+    const open = vi.spyOn(MacThsIntentStore, 'open').mockImplementation(options => {
+      try { return originalOpen(options) } catch (error) { return failure('store.open', error) }
     })
-    expect(confirmations()).toBe(1)
-    expect(fs.statSync(join(f.directory, 'mac-ths-orders.v2.sqlite')).size).toBeGreaterThan(0)
-    expect(f.changed.length).toBe(existing ? 1 : 0)
+    try {
+      const { service, confirmations } = await start(f)
+      const started = service.getState()
+      const diskMode = fs.statSync(f.directory).mode & 0o777
+      console.info('Directory preparation evidence:', { existing, platform: process.platform,
+        originalMode, diskMode, modelMode: f.model.mode, serviceState: started.serviceState,
+        code: started.code, recoveryReason: started.recoveryReason })
+      expect(started).toMatchObject({ serviceState: 'NOT_INITIALIZED', canInitialize: true })
+      if (nativeMac) expect(diskMode).toBe(0o700)
+      expect(fs.existsSync(join(f.directory, 'mac-ths-orders.v2.sqlite'))).toBe(false)
+      expect(confirmations()).toBe(0)
+      const recovered = await service.recover({ kind: 'initialize' }, caller)
+      console.info('Directory initialization evidence:', { existing, platform: process.platform,
+        serviceState: recovered.serviceState, code: recovered.code, recoveryReason: recovered.recoveryReason })
+      expect(recovered).toMatchObject({
+        serviceState: 'READY_DISABLED', canPrepare: true, coverage: { kind: 'fresh' },
+      })
+      expect(confirmations()).toBe(1)
+      expect(fs.statSync(join(f.directory, 'mac-ths-orders.v2.sqlite')).size).toBeGreaterThan(0)
+      expect(f.changed.length).toBe(existing ? 1 : 0)
+    } finally { open.mockRestore() }
   }, 20000)
   it.each(['unknown-default', 'wrong-owner', 'fsync-failure'] as const)(
     'returns storage-blocked without throwing into research startup: %s', async reason => {
