@@ -44,6 +44,7 @@ export default function MacTradingPanel({ confirmationHost }: { confirmationHost
   const mounted = useRef(false)
   const busyRef = useRef(false)
   const cursor = useRef(createMacThsStateCursor())
+  const latestStateRead = useRef<Promise<MacThsProductState | null> | null>(null)
   const synchronizedRef = useRef(false)
   const pendingRef = useRef<Operation | null>(null)
   const flowRef = useRef<Flow | null>(null)
@@ -60,6 +61,9 @@ export default function MacTradingPanel({ confirmationHost }: { confirmationHost
     const started = beginMacThsStateRead(cursor.current, notification)
     if (!started) return null
     cursor.current = started
+    let finishRead!: (value: MacThsProductState | null) => void
+    let completedState: MacThsProductState | null = null
+    latestStateRead.current = new Promise(resolve => { finishRead = resolve })
     synchronizedRef.current = false
     setReading(true); setSynchronized(false)
     try {
@@ -72,6 +76,7 @@ export default function MacTradingPanel({ confirmationHost }: { confirmationHost
         return null
       }
       cursor.current = accepted
+      completedState = accepted.state
       synchronizedRef.current = true
       setState(accepted.state); setSynchronized(true)
       const operation = pendingRef.current
@@ -88,6 +93,7 @@ export default function MacTradingPanel({ confirmationHost }: { confirmationHost
       return null
     } finally {
       if (mounted.current && cursor.current.epoch === started.epoch) setReading(false)
+      finishRead(completedState)
     }
   }, [changeFlow, changeOperation])
 
@@ -138,7 +144,19 @@ export default function MacTradingPanel({ confirmationHost }: { confirmationHost
         setNotice('本次调用回报未知，原操作 ID 保留，禁止重试；先读取权威状态并逐条核对。')
       }
     } finally {
-      const authoritative = await readState()
+      let authoritative = await readState()
+      // A notice/focus read may supersede this read. Await those existing reads;
+      // do not discard the offered ticket solely because our epoch lost the race.
+      // No extra IPC read or execute is issued, and failed latest reads stay closed.
+      let latestRead = latestStateRead.current
+      while (mounted.current && latestRead) {
+        const latestState = await latestRead
+        if (latestRead === latestStateRead.current) {
+          authoritative = synchronizedRef.current ? latestState : null
+          break
+        }
+        latestRead = latestStateRead.current
+      }
       if (mounted.current) {
         if (response?.code === 'CONFIRMATION_REQUIRED' && response.confirmation && authoritative
           && macThsConfirmationMatches(authoritative, response.confirmation, Date.now(), operation.request)) {

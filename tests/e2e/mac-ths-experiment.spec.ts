@@ -7,7 +7,50 @@ import type { MacThsProductState } from '../../electron/shared/macThsTypes'
 
 async function openPanel(application: ElectronApplication) {
   const page = await application.firstWindow()
-  await page.getByTestId('quant-onboarding-open').click()
+  try {
+    await page.getByTestId('quant-onboarding-open').click()
+  } catch (error) {
+    let diagnosticTimer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const windows = application.windows()
+      const metadata = windows.map((window, index) => {
+        const url = window.url()
+        return { index, selected: window === page, closed: window.isClosed(),
+          urlType: url.startsWith('file:') ? 'file' : url.startsWith('app:') ? 'app' : 'other' }
+      })
+      console.error('[Mac installed startup] Missing onboarding entry', {
+        windowCount: windows.length, windows: metadata,
+      })
+      // Emit classifications only; never URLs, titles, page content, or exception details.
+      await Promise.race([
+        Promise.all(windows.map(async (window, index) => {
+          try {
+            const detail = await window.evaluate(() => ({
+              readyState: document.readyState,
+              titleMatches: document.title === 'RT-ResearchFlow',
+              hasStartupDiagnostic: ['应用启动失败', '本地数据目录初始化失败'].some(title =>
+                document.title === title || document.querySelector('h1')?.textContent?.trim() === title),
+              entryCount: document.querySelectorAll('[data-testid="quant-onboarding-open"]').length,
+            }))
+            console.error('[Mac installed startup] Window detail', { index, ...detail })
+          } catch {
+            console.error('[Mac installed startup] Window detail unavailable', { index })
+          }
+        })),
+        new Promise<void>(resolve => {
+          diagnosticTimer = setTimeout(() => {
+            console.error('[Mac installed startup] Window detail collection timed out')
+            resolve()
+          }, 1000)
+        }),
+      ])
+    } catch {
+      console.error('[Mac installed startup] Window diagnostics unavailable')
+    } finally {
+      if (diagnosticTimer !== undefined) clearTimeout(diagnosticTimer)
+    }
+    throw error
+  }
   await page.getByTestId('quant-onboarding-step-4').click()
   await expect(page.getByTestId('mac-trading-panel')).toBeVisible()
   await expect(page.getByTestId('mac-ths-diagnostic')).toContainText('"loaded": true')
