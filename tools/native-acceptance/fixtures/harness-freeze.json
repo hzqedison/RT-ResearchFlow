@@ -19,13 +19,13 @@
     },
     {
       "path": "tools/native-acceptance/README.md",
-      "size": 9298,
-      "sha256": "d0af1dc8e14aebcb3580c38270cf486fc77d73b2634b6256f1b54051c7f6e6bb"
+      "size": 11875,
+      "sha256": "0ba333ee15dad72bb06d55e42c13f83293c96233b5a77bfbd9d1b24a12cee574"
     },
     {
       "path": "tools/native-acceptance/evidence.mjs",
-      "size": 40217,
-      "sha256": "2f8c3442f8707a55df4d0b142f3f5cc609cac86639440aa4812906050475184b"
+      "size": 47013,
+      "sha256": "00e079a3a7bdc6e07b657aaf6be124e4c549f9a8738de832b89d4098428cdae0"
     },
     {
       "path": "tools/native-acceptance/fixtures/version-contract.json",
@@ -34,8 +34,8 @@
     },
     {
       "path": "tools/native-acceptance/harness.ts",
-      "size": 32523,
-      "sha256": "8d27e36a97c3b9c4d67f4cf6987039e2b841afecdf3066f3d005fce9e462a80a"
+      "size": 34476,
+      "sha256": "28b95e005e6abaa219def399f460dbce7a6575f0a7a97d5b97e0db9e524cc8dc"
     },
     {
       "path": "tools/native-acceptance/native-upgrade.spec.ts",
@@ -44,8 +44,8 @@
     },
     {
       "path": "tools/native-acceptance/offline.test.mjs",
-      "size": 35735,
-      "sha256": "985dd204e4dd7eb2cace69cf617e7fb57d632a056e739721752fe76a525dc7ee"
+      "size": 45956,
+      "sha256": "22600ff4397bf30f4f486375cd1bd8168b593dc45500ee343b284a3a7adeab47"
     },
     {
       "path": "tools/native-acceptance/package.json",
@@ -54,8 +54,8 @@
     },
     {
       "path": "tools/native-acceptance/platform/macos.mjs",
-      "size": 9486,
-      "sha256": "0d4cd7edeabd1bab839bb8a864c2aa11e57ce6ce0c693f4b96688a5d14eb0a90"
+      "size": 9894,
+      "sha256": "dc371cf619740c3700454e85a21634478db316b9ba7cdfb220f90d505c4b2a0b"
     },
     {
       "path": "tools/native-acceptance/platform/macos.sh",
@@ -83,5 +83,5 @@
       "sha256": "671af518c48fde83548d51fc3a27bf2d85d9fd3ff326b1ff04a08dafaa067945"
     }
   ],
-  "combinedSha256": "8fef94360d98b7be394def53a2f455794a8ac12707136a42971c7dbff67a6795"
+  "combinedSha256": "398039814a6ad00dd665a4256a26f2d37754df03b4fb674c6662c67de5ffa6f8"
 }

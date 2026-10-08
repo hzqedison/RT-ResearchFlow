@@ -4,7 +4,7 @@ import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
-import { spawn } from 'node:child_process'
+import { spawn, ChildProcess } from 'node:child_process'
 
 export const toolsRoot = path.dirname(fileURLToPath(import.meta.url))
 export const repoRoot = path.resolve(toolsRoot, '../..')
@@ -33,6 +33,8 @@ const ERRNOS = new Set(['EACCES', 'EPERM', 'ENOENT', 'EEXIST', 'EISDIR', 'ENOTDI
   'ENOSPC', 'EADDRINUSE', 'EINVAL', 'EIO', 'ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'ERR_REQUIRE_ESM',
   'ERR_INVALID_ARG_TYPE', 'ERR_UNKNOWN_FILE_EXTENSION', 'ERR_DLOPEN_FAILED'])
 const SIGNALS = new Set(['SIGTERM', 'SIGKILL', 'SIGABRT', 'SIGSEGV', 'SIGINT', 'SIGBUS'])
+const SYSCALLS = new Set(['spawn', 'execve', 'posix_spawn', 'connect', 'open', 'access', 'stat', 'lstat', 'read', 'write', 'kill'])
+const PROCESS_ROLES = new Set(['test-runner', 'launcher-process', 'wrapper', 'shell', 'sandbox-exec', 'original-executable', 'codesign', 'platform-helper'])
 const safeKeys = new Set(('schemaVersion kind harnessSha contractSha256 manifestSha256 caseId runId runAttempt platform arch status reasonCode startedAt endedAt phases assertions cleanup complete sanitization scope products version tag sourceSha basename sha256 size path installers phase launchId pid uidHash exitCode exited launchTime exitTime packaged runtimeName packageName appId appUserModelId exeRelative exePathHash appRelative appPathHash userDataRelative userDataPathHash sessionDataRelative sessionDataPathHash markerMatches sqliteReadonly sqliteModuleInsidePackage settingsSha256 aiSha256 providerSha256 sourceSha256 sourceId migrations cipherSha256 cipherBytes encryptionAvailable decryptMatches rejectsPrevious otherKeysEmpty apiNoPlaintext dbFiles fileClass absent plaintextAbsent name passed installed registrationSha256 installRelative policy policySha256 enabledAt disabledAt controls transport loopback externalDenied denialCode denialEvidence inherited descendantsCovered blockedAttempts credentialRequestObserved requestCount observationCount verification cleanupSucceeded finalized beforeSha256 afterSha256 durationMs events moduleName moduleVersion exceptionCode faultOffset sanitizedInMemory fixtureScan passwordScan forbiddenFieldsScan records').split(' '))
 
 export class AcceptanceError extends Error {
@@ -41,7 +43,9 @@ export class AcceptanceError extends Error {
 export function requireCondition(value, kind, code) { if (!value) throw new AcceptanceError(kind, code) }
 export function hash(value) { return createHash('sha256').update(value).digest('hex') }
 for (const key of ['stage', 'checkpoints', 'diagnostics', 'errorClass', 'errno', 'signal', 'description', 'role', 'line', 'column',
-  'cleanupEvidence', 'attempts', 'time', 'frozenSource', 'freezeSha256', 'combinedSha256', 'fileCount', 'files']) safeKeys.add(key)
+  'cleanupEvidence', 'attempts', 'time', 'frozenSource', 'freezeSha256', 'combinedSha256', 'fileCount', 'files',
+  'syscall', 'errnoNumber', 'processRole', 'targetRole', 'launchDiagnostics', 'processEvents', 'exists', 'executable',
+  'mode', 'regularFile', 'codesign', 'debugConnection', 'identityVerified', 'observation', 'probeComplete']) safeKeys.add(key)
 
 // Never return the message, stack, arguments, arbitrary error properties, or an
 // arbitrary error name. Even Playwright errors can contain complete IPC inputs.
@@ -60,6 +64,13 @@ export function safeDiagnostic(error, stage, code) {
           : 'An exception was observed; raw message, stack and arguments are suppressed.' }
   if (Number.isInteger(error?.exitCode) && error.exitCode >= -2147483648 && error.exitCode <= 2147483647) diagnostic.exitCode = error.exitCode
   if (SIGNALS.has(error?.signal)) diagnostic.signal = error.signal
+  // A spawn syscall often includes an absolute path. Keep only its known verb.
+  const syscall = typeof error?.syscall === 'string' ? error.syscall.split(/\s/, 1)[0]
+    : raw.match(/\b(spawn|execve|posix_spawn|connect|open|access|stat|lstat|read|write|kill)\b(?=[^\n]{0,512}\b(?:EPERM|EACCES|ENOENT|EINVAL)\b)/)?.[1]
+  if (SYSCALLS.has(syscall)) diagnostic.syscall = syscall
+  if (Number.isInteger(error?.errno) && error.errno < 0 && error.errno >= -65535) diagnostic.errnoNumber = error.errno
+  if (PROCESS_ROLES.has(error?.processRole)) diagnostic.processRole = error.processRole
+  if (PROCESS_ROLES.has(error?.targetRole)) diagnostic.targetRole = error.targetRole
   const location = error?.location
   const candidates = [typeof location?.file === 'string' ? location.file.replaceAll('\\', '/') : '', stack.replaceAll('\\', '/'), raw.replaceAll('\\', '/')]
   for (const file of FROZEN_PATHS) {
@@ -98,7 +109,7 @@ function caseState() {
 }
 function saveState(state) {
   scanEvidence(state.value)
-  fs.writeFileSync(state.file, JSON.stringify(state.value), { mode: 0o600 })
+  atomicJson(state.file, state.value)
   return state.value
 }
 export function checkpoint(stage, phase) {
@@ -107,7 +118,9 @@ export function checkpoint(stage, phase) {
   state.value.stage = stage
   state.value.checkpoints = [...(state.value.checkpoints || []), { stage, time: new Date().toISOString(),
     ...(['A', 'B', 'C', 'D'].includes(phase) ? { phase } : {}) }].slice(-128)
-  return saveState(state)
+  const value = saveState(state)
+  if (fs.existsSync(path.join(state.root, 'evidence/acceptance-result.json'))) writeEvidence('acceptance-result.json', value)
+  return value
 }
 export function currentStage() { return caseState().value.stage || 'unknown' }
 export function recordFailure(error, stage, code) {
@@ -254,7 +267,7 @@ export async function command(executable, args, options = {}) {
     child.on('error', error => {
       clearTimeout(timer)
       const failure = new AcceptanceError('BLOCKED_ENVIRONMENT', 'NATIVE_COMMAND_UNAVAILABLE')
-      failure.nativeError = { name: error.name, code: error.code }
+      failure.nativeError = { name: error.name, code: error.code, errno: error.errno, syscall: error.syscall }
       reject(failure)
     })
     child.on('close', (code, signal) => {
@@ -281,7 +294,10 @@ export async function platformCommand(action, args = [], options = {}) {
   if (result.code !== 0 || value.ok !== true) {
     const failure = new AcceptanceError(value.kind || options.kind || 'BLOCKED_ENVIRONMENT',
       /^[A-Z0-9_]+$/.test(value.code || '') ? value.code : 'NATIVE_PLATFORM_FAILED')
-    failure.nativeError = { name: result.diagnostic.errorClass, code: result.diagnostic.errno, exitCode: result.code, signal: result.signal,
+    const diagnostic = value.diagnostic ? safeDiagnostic({ name: value.diagnostic.errorClass, code: value.diagnostic.errno,
+      errno: value.diagnostic.errnoNumber, syscall: value.diagnostic.syscall, targetRole: value.diagnostic.targetRole }, 'unknown', 'NATIVE_PLATFORM_FAILED') : result.diagnostic
+    failure.nativeError = { name: diagnostic.errorClass, code: diagnostic.errno, errno: diagnostic.errnoNumber,
+      syscall: diagnostic.syscall, targetRole: diagnostic.targetRole, processRole: 'platform-helper', exitCode: result.code, signal: result.signal,
       location: { file: result.diagnostic.path, line: result.diagnostic.line, column: result.diagnostic.column } }
     throw failure
   }
@@ -351,8 +367,95 @@ export function writeEvidence(file, value, secrets = []) {
   const stateFile = path.join(root, 'run-state.json')
   if (file === 'acceptance-result.json' && fs.existsSync(stateFile)) value = mergeRunState(value, JSON.parse(fs.readFileSync(stateFile, 'utf8')))
   scanEvidence(value, secrets)
-  fs.writeFileSync(path.join(root, 'evidence', file), JSON.stringify(value, null, 2) + '\n', { mode: 0o600 })
-  if (file === 'acceptance-result.json') fs.writeFileSync(stateFile, JSON.stringify(value), { mode: 0o600 })
+  atomicJson(path.join(root, 'evidence', file), value, secrets)
+  if (file === 'acceptance-result.json') atomicJson(stateFile, value, secrets)
+}
+// Scan before touching disk. Readers see the old complete JSON or the new one,
+// never a truncated document. Only this call's exclusive temporary file is removed.
+export function atomicJson(file, value, secrets = [], io = fs) {
+  scanEvidence(value, secrets)
+  const bytes = JSON.stringify(value, null, 2) + '\n'
+  const temporary = file + '.' + randomUUID() + '.partial'
+  let descriptor, owned = false
+  try {
+    descriptor = io.openSync(temporary, 'wx', 0o600); owned = true
+    io.writeFileSync(descriptor, bytes); io.fsyncSync(descriptor)
+    io.closeSync(descriptor); descriptor = undefined
+    io.renameSync(temporary, file); owned = false
+  } finally {
+    if (descriptor !== undefined) io.closeSync(descriptor)
+    if (owned) io.unlinkSync(temporary)
+  }
+}
+
+// Read-only checks, never a product probe. Tests inject all OS operations.
+export async function inspectMacLaunch(root, emit, io = {
+  stat: file => fs.statSync(file), access: file => fs.accessSync(file, fs.constants.X_OK), hashFile, command,
+}) {
+  const records = []
+  for (const [targetRole, file] of [
+    ['wrapper', path.join(root, 'launch-app.sh')], ['shell', '/bin/bash'], ['sandbox-exec', '/usr/bin/sandbox-exec'],
+    ['original-executable', path.join(root, 'install/RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow')],
+  ]) {
+    const record = { targetRole, exists: null, regularFile: null, executable: null, mode: null, sha256: null,
+      time: new Date().toISOString(), diagnostics: [] }
+    try {
+      const stat = io.stat(file)
+      record.exists = true; record.regularFile = stat.isFile(); record.mode = stat.mode & 0o777
+      try { io.access(file); record.executable = true } catch (error) {
+        record.executable = false; record.diagnostics.push(safeDiagnostic({ ...error, name: error.name, targetRole }, 'app-launch', 'LAUNCH_EXEC_ACCESS_FAILED'))
+      }
+      if (record.regularFile) record.sha256 = await io.hashFile(file)
+    } catch (error) {
+      if (error.code === 'ENOENT') record.exists = false
+      record.diagnostics.push(safeDiagnostic({ name: error.name, code: error.code, errno: error.errno, syscall: error.syscall, targetRole }, 'app-launch', 'LAUNCH_FILE_INSPECTION_UNAVAILABLE'))
+    }
+    records.push(record); emit({ records: structuredClone(records), codesign: null })
+  }
+  let codesign
+  try {
+    const result = await io.command('/usr/bin/codesign', ['--verify', '--deep', '--strict', path.join(root, 'install/RT-ResearchFlow.app')], { timeout: 30000 })
+    codesign = { exitCode: result.code, signal: result.signal || null, processRole: 'codesign',
+      diagnostics: result.code === 0 ? [] : [safeDiagnostic({ ...result.diagnostic, name: result.diagnostic?.errorClass,
+        code: result.diagnostic?.errno, exitCode: result.code, signal: result.signal, processRole: 'codesign' }, 'app-launch', 'CODESIGN_INSPECTION_NONZERO')] }
+  } catch (error) {
+    codesign = { exitCode: null, signal: null, processRole: 'codesign', diagnostics: [safeDiagnostic(error, 'app-launch', 'CODESIGN_INSPECTION_UNAVAILABLE')] }
+  }
+  emit({ records, codesign })
+}
+
+// Observe the ONE existing Playwright launch, including failure before it returns
+// an ElectronApplication. No argv/env/stderr is retained. Matching uses the exact
+// owned wrapper path; the original spawn receiver/options/result are untouched.
+export async function observeMacLaunch(launcher, emit, operation, prototype = ChildProcess.prototype) {
+  const original = prototype.spawn
+  let observationFailure
+  const publish = value => { try { emit(value) } catch (error) { observationFailure ||= error } }
+  function observed(options) {
+    if (options.file !== launcher) return Reflect.apply(original, this, arguments)
+    const child = this
+    const event = (observation, extra = {}) => publish({ observation, processRole: 'launcher-process',
+      time: new Date().toISOString(), ...(Number.isInteger(child.pid) && child.pid > 0 ? { pid: child.pid } : {}), ...extra })
+    event('spawn-requested')
+    child.once('spawn', () => event('spawn-observed'))
+    child.once('error', error => event('spawn-error', { diagnostics: [safeDiagnostic({ name: error.name, code: error.code,
+      errno: error.errno, syscall: error.syscall, targetRole: 'wrapper', processRole: 'launcher-process' }, 'app-launch', 'LAUNCH_PROCESS_ERROR')] }))
+    child.once('exit', (exitCode, signal) => event('exit-observed', {
+      ...(Number.isInteger(exitCode) ? { exitCode } : {}), ...(SIGNALS.has(signal) ? { signal } : {}),
+    }))
+    try { return Reflect.apply(original, child, arguments) }
+    catch (error) {
+      event('spawn-threw', { diagnostics: [safeDiagnostic({ name: error.name, code: error.code, errno: error.errno,
+        syscall: error.syscall, targetRole: 'wrapper', processRole: 'launcher-process' }, 'app-launch', 'LAUNCH_PROCESS_ERROR')] })
+      throw error
+    }
+  }
+  prototype.spawn = observed
+  try {
+    const result = await operation()
+    if (observationFailure) throw observationFailure
+    return result
+  } finally { if (prototype.spawn === observed) prototype.spawn = original }
 }
 export function minimalResult(owner, kind, code) {
   return { schemaVersion: 1, kind: 'acceptance-result', harnessSha: owner.harnessSha,
@@ -458,7 +561,7 @@ async function runRunner() {
     const result = await command(process.execPath, [cli, 'test'], { timeout: 680000, env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1', DEBUG: '', PWDEBUG: '' } })
     if (result.code !== 0) {
       const error = new AcceptanceError('BLOCKED_ENVIRONMENT', 'RUNNER_EXIT_NONZERO')
-      error.nativeError = { name: result.diagnostic.errorClass, code: result.diagnostic.errno, exitCode: result.code, signal: result.signal,
+      error.nativeError = { name: result.diagnostic.errorClass, code: result.diagnostic.errno, exitCode: result.code, signal: result.signal, processRole: 'test-runner',
         location: { file: result.diagnostic.path, line: result.diagnostic.line, column: result.diagnostic.column } }
       recordFailure(error, currentStage(), 'RUNNER_EXIT_NONZERO')
     }

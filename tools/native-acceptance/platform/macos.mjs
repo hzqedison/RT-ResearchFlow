@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import { safeDiagnostic } from '../evidence.mjs'
 import path from 'node:path'
 import { command, controlledRoot, requireCondition as need, AcceptanceError, hashFile } from '../evidence.mjs'
 
@@ -14,7 +15,12 @@ let state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, 'ut
 const save = () => fs.writeFileSync(stateFile, JSON.stringify(state), { mode: 0o600 })
 async function run(exe, args, options = {}) {
   const result = await command(exe, args, options)
-  need(result.code === 0, options.kind || 'BLOCKED_ENVIRONMENT', options.code || 'MAC_NATIVE_COMMAND_FAILED')
+  if (result.code !== 0) {
+    const failure = new AcceptanceError(options.kind || 'BLOCKED_ENVIRONMENT', options.code || 'MAC_NATIVE_COMMAND_FAILED')
+    failure.nativeError = { name: result.diagnostic?.errorClass, code: result.diagnostic?.errno,
+      errno: result.diagnostic?.errnoNumber, syscall: result.diagnostic?.syscall, exitCode: result.code, signal: result.signal }
+    throw failure
+  }
   return result.stdout.trim()
 }
 function quotedPaths(value) {
@@ -128,6 +134,6 @@ async function main() {
   throw new AcceptanceError('BLOCKED_INPUT', 'UNKNOWN_MAC_ACTION')
 }
 main().then(value => process.stdout.write(JSON.stringify(value))).catch(error => {
-  process.stdout.write(JSON.stringify({ ok: false, kind: error.kind || 'BLOCKED_ENVIRONMENT', code: error.code && /^[A-Z0-9_]+$/.test(error.code) ? error.code : 'MAC_CONTROL_FAILED' }))
+  process.stdout.write(JSON.stringify({ ok: false, diagnostic: safeDiagnostic(error, 'unknown', 'MAC_PLATFORM_FAILURE'), kind: error.kind || 'BLOCKED_ENVIRONMENT', code: error.code && /^[A-Z0-9_]+$/.test(error.code) ? error.code : 'MAC_CONTROL_FAILED' }))
   process.exitCode = 1
 })

@@ -6,6 +6,7 @@ import path from 'node:path'
 import vm from 'node:vm'
 import { spawnSync } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
+import { EventEmitter } from 'node:events'
 import * as evidence from './evidence.mjs'
 import { scanEvidence, hash, relative, safeEnvironment, assertHosted, validateManifest, minimalResult, contract } from './evidence.mjs'
 const require = createRequire(import.meta.url)
@@ -81,9 +82,9 @@ const expectedJsonHash = value => createHash('sha256').update(JSON.stringify(val
 
 function offlineHarness({ programs = ['C:\\offline-case\\install\\RT-ResearchFlow.exe'],
   registration = { key: 'HKEY_CURRENT_USER\\offline-uninstall-key', location: 'C:\\offline-case\\install' },
-  freezeFailure, installFailure, cleanupFailure, archiveFailure } = {}) {
+  freezeFailure, installFailure, cleanupFailure, archiveFailure, mac = false, electronLaunch, beforeCleanup } = {}) {
   const root = path.join(path.parse(process.cwd()).root, 'native-offline-never-created')
-  const owner = { root, caseId: 'offline-case', harnessSha: 'a'.repeat(40), runId: '1', runAttempt: '1', platform: 'windows', arch: 'x64' }
+  const owner = { root, caseId: 'offline-case', harnessSha: 'a'.repeat(40), runId: '1', runAttempt: '1', platform: mac ? 'macOS' : 'windows', arch: 'x64' }
   const assets = contract.versions.map(version => ({ version, absolute: path.join(root, 'synthetic-' + version + '.exe'), sha256: 'b'.repeat(64) }))
   const writes = [], platformCalls = [], documents = new Map()
   const journal = { ...minimalResult(owner, 'BLOCKED_ENVIRONMENT', 'RUN_IN_PROGRESS'), diagnostics: [], checkpoints: [] }
@@ -91,6 +92,7 @@ function offlineHarness({ programs = ['C:\\offline-case\\install\\RT-ResearchFlo
   const dependencies = {
     'node:fs': {
       existsSync: () => false,
+      mkdirSync: () => {}, readdirSync: () => [],
       writeFileSync: (file, value) => { assert.ok(file.startsWith(root + path.sep)); writes.push({ file, value }) },
       readFileSync: forbidden('readFileSync'),
     },
@@ -103,7 +105,7 @@ function offlineHarness({ programs = ['C:\\offline-case\\install\\RT-ResearchFlo
     },
     'node:http': { createServer: forbidden('listen') },
     'node:crypto': { randomBytes },
-    '@playwright/test': { _electron: { launch: forbidden('electron.launch') } },
+    '@playwright/test': { _electron: { launch: electronLaunch || forbidden('electron.launch') } },
     './evidence.mjs': {
       ...evidence,
       checkpoint: (stage, phase) => { journal.stage = stage; journal.checkpoints.push({ stage, phase: phase || 'A' }); return journal },
@@ -119,6 +121,8 @@ function offlineHarness({ programs = ['C:\\offline-case\\install\\RT-ResearchFlo
       controlledRoot: () => ({ root, owner }),
       validatedInputs: async () => ({ root, owner, assets }),
       hashFile: async () => 'b'.repeat(64),
+      inspectMacLaunch: async (_root, emit) => emit({ records: [{ targetRole: 'wrapper', exists: true, executable: true,
+        mode: 448, sha256: 'c'.repeat(64), diagnostics: [] }], codesign: { exitCode: 0 } }),
       platformCommand: async (action, args) => {
         platformCalls.push({ action, args })
         if (action === 'setup') return { uid: 'offline-user', programs, policy: 'offline-app-policy' }
@@ -129,11 +133,15 @@ function offlineHarness({ programs = ['C:\\offline-case\\install\\RT-ResearchFlo
         if (action === 'processes') return { processes: [] }
         throw new Error('OFFLINE_FORBIDDEN_PLATFORM_ACTION:' + action)
       },
-      command: forbidden('command'), cleanup: async () => { if (cleanupFailure) throw cleanupFailure },
+      command: forbidden('command'), cleanup: async () => {
+        if (beforeCleanup) beforeCleanup(documents)
+        if (cleanupFailure) throw cleanupFailure
+      },
       writeEvidence: (name, value, secrets) => {
-        if (archiveFailure && name === 'network-isolation.json') throw archiveFailure
+        if (archiveFailure && journal.stage === 'archive' && name === 'network-isolation.json') throw archiveFailure
         if (name === 'acceptance-result.json') value = evidence.mergeRunState(value, journal)
         scanEvidence(value, secrets); documents.set(name, structuredClone(value))
+        if (name === 'acceptance-result.json') Object.assign(journal, structuredClone(value))
       },
     },
   }
@@ -147,7 +155,7 @@ function offlineHarness({ programs = ['C:\\offline-case\\install\\RT-ResearchFlo
   }, { filename: 'offline-compiled-harness.cjs', timeout: 2000 })
   const harness = new module.exports.NativeUpgrade()
   harness.assets = assets; harness.uid = 'offline-user'
-  return { harness, root, writes, platformCalls, documents }
+  return { harness, root, writes, platformCalls, documents, journal }
 }
 
 async function runThroughWindowsSetup(programs, requestCount = 0) {
@@ -578,4 +586,154 @@ test('original all-platform collector still requires and validates Windows along
   const complete = runCollection('collect', [['macOS', 'arm64'], ['macOS', 'x64'], ['windows', 'x64']])
   assert.equal(complete.status, 0, complete.output)
   assert.match(complete.output, /All-platform machine evidence complete/)
+})
+
+test('atomic scanned JSON preserves the previous complete document on rename failure and rejects secrets before writing', () => {
+  const base = fs.realpathSync(process.cwd())
+  const root = fs.mkdtempSync(path.join(base, '.offline-atomic-'))
+  const file = path.join(root, 'acceptance-result.json'), operations = []
+  try {
+    evidence.atomicJson(file, { stage: 'platform-install', assertions: [{ name: 'actual', passed: true }] })
+    const before = fs.readFileSync(file, 'utf8')
+    const io = { ...fs,
+      fsyncSync: fd => { operations.push('fsync'); return fs.fsyncSync(fd) },
+      renameSync: () => {
+        operations.push('rename'); assert.equal(fs.readFileSync(file, 'utf8'), before)
+        throw Object.assign(new Error('synthetic rename failure'), { code: 'EIO' })
+      },
+    }
+    assert.throws(() => evidence.atomicJson(file, { stage: 'app-launch' }, [], io), error => error.code === 'EIO')
+    assert.deepEqual(operations, ['fsync', 'rename'])
+    assert.equal(fs.readFileSync(file, 'utf8'), before)
+    assert.deepEqual(fs.readdirSync(root), ['acceptance-result.json'])
+    assert.throws(() => evidence.atomicJson(file, { description: 'NA_KEYCHAIN_PASSWORD:must-not-write' }), /SENSITIVE_EVIDENCE/)
+    assert.equal(fs.readFileSync(file, 'utf8'), before)
+    evidence.atomicJson(file, { stage: 'app-launch' })
+    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).stage, 'app-launch')
+  } finally {
+    assert.equal(path.dirname(fs.realpathSync(root)), base)
+    assert.ok(path.basename(root).startsWith('.offline-atomic-'))
+    fs.rmSync(root, { recursive: true })
+  }
+})
+
+test('real Mac harness persists input, setup, install, phase and assertions before cleanup; cleanup failure preserves EPERM', async () => {
+  let launches = 0, cleanups = 0
+  const launchError = Object.assign(new Error('spawn /private/NA_KEYCHAIN_PASSWORD:secret EPERM'), {
+    code: 'EPERM', errno: -1, syscall: 'spawn /private/owned/launch-app.sh',
+  })
+  const context = offlineHarness({ mac: true,
+    electronLaunch: async () => { launches++; throw launchError },
+    cleanupFailure: Object.assign(new Error('secret cleanup'), { code: 'EACCES' }),
+    beforeCleanup(documents) {
+      cleanups++
+      for (const name of evidence.FILES) assert.ok(documents.has(name), 'Missing actual pre-cleanup fact: ' + name)
+      const result = documents.get('acceptance-result.json'), network = documents.get('network-isolation.json')
+      assert.equal(result.phases.length, 1); assert.equal(result.phases[0].phase, 'A')
+      assert.equal(result.phases[0].debugConnection, 'not-observed')
+      assert.equal(result.phases[0].identityVerified, false)
+      assert.equal(result.phases[0].exited, false); assert.equal(Object.hasOwn(result.phases[0], 'exitCode'), false)
+      assert.ok(result.assertions.some(item => item.name === 'A:INSTALLER_BYTES_0' && item.passed))
+      assert.equal(result.diagnostics[0].errno, 'EPERM'); assert.equal(result.diagnostics[0].syscall, 'spawn')
+      assert.equal(result.diagnostics[0].errnoNumber, -1)
+      assert.equal(documents.get('installer-events.json').events[0].version, '1.0.0')
+      assert.ok(network.enabledAt); assert.equal(network.controls.length, 0)
+      assert.equal(network.inherited, false); assert.equal(network.probeComplete, false)
+      assert.equal(network.cleanupSucceeded, false)
+      for (const value of documents.values()) scanEvidence(value)
+    },
+  })
+  context.harness.loopback = async () => {}
+  await assert.rejects(context.harness.execute(), error => error.code === 'NATIVE_EXECUTION_FAILED')
+  assert.equal(launches, 1); assert.equal(cleanups, 1)
+  const result = context.documents.get('acceptance-result.json')
+  assert.equal(result.diagnostics[0].errno, 'EPERM')
+  assert.equal(result.diagnostics[1].stage, 'cleanup')
+  assert.equal(result.complete, false)
+  assert.equal(result.assertions.some(item => item.name.includes('NETWORK_')), false)
+})
+
+test('worker/runner exit after launch failure keeps durable phase facts without inventing an app exit or requiring finally', async () => {
+  const context = offlineHarness({ mac: true, electronLaunch: async () => {
+    throw Object.assign(new Error('EPERM'), { code: 'EPERM', syscall: 'spawn /private/wrapper' })
+  } })
+  await context.harness.install(0)
+  await assert.rejects(context.harness.launch('A', '1.0.0'), error => error.code === 'EPERM')
+  // Model reporter/outer runner operating on the already persisted worker state;
+  // neither NativeUpgrade.execute() nor its finally block is invoked here.
+  const durable = structuredClone(context.documents.get('acceptance-result.json'))
+  evidence.applyFailure(durable, Object.assign(new Error('EPERM'), { code: 'EPERM', syscall: 'spawn' }), 'app-launch', 'TEST_FAILED')
+  evidence.applyFailure(durable, Object.assign(new Error('runner stopped'), {
+    exitCode: 1, signal: 'SIGTERM', processRole: 'test-runner',
+  }), 'app-launch', 'RUNNER_EXIT_NONZERO')
+  assert.ok(durable.assertions.some(item => item.name === 'A:INSTALLER_EXIT_0' && item.passed))
+  assert.equal(durable.phases.length, 1); assert.equal(durable.phases[0].exited, false)
+  assert.equal(Object.hasOwn(durable.phases[0], 'exitCode'), false)
+  assert.equal(durable.diagnostics[0].errno, 'EPERM')
+  assert.equal(durable.diagnostics[1].processRole, 'test-runner')
+  assert.equal(durable.diagnostics[1].exitCode, 1)
+  scanEvidence(durable)
+})
+
+test('single-launch observer delegates unchanged options, persists actual PID/exit, and restores its hook on failure', async () => {
+  const launcher = '/owned/launch-app.sh', records = [], options = { file: launcher, args: ['NA_KEYCHAIN_PASSWORD:secret'], envPairs: ['TOKEN=private'] }
+  let calls = 0
+  class FakeChild extends EventEmitter {
+    spawn(input) { calls++; assert.equal(input, options); this.pid = 4321; this.emit('spawn'); return 17 }
+  }
+  const original = FakeChild.prototype.spawn
+  const error = Object.assign(new Error('NOT-A-REAL-CREDENTIAL:hidden'), { code: 'EPERM', syscall: 'spawn ' + launcher, errno: -1 })
+  await assert.rejects(evidence.observeMacLaunch(launcher, value => records.push(value), async () => {
+    const child = new FakeChild()
+    assert.equal(child.spawn(options), 17)
+    child.emit('error', error); child.emit('exit', null, 'SIGKILL')
+    throw error
+  }, FakeChild.prototype), value => value === error)
+  assert.equal(calls, 1); assert.equal(FakeChild.prototype.spawn, original)
+  assert.deepEqual(records.map(item => item.observation), ['spawn-requested', 'spawn-observed', 'spawn-error', 'exit-observed'])
+  assert.equal(Object.hasOwn(records[0], 'pid'), false)
+  assert.equal(records[1].pid, 4321)
+  assert.equal(records[2].diagnostics[0].errno, 'EPERM'); assert.equal(records[2].diagnostics[0].syscall, 'spawn')
+  assert.equal(records[3].signal, 'SIGKILL'); assert.equal(Object.hasOwn(records[3], 'exitCode'), false)
+  assert.equal(records.every(item => item.processRole === 'launcher-process'), true)
+  scanEvidence(records, ['TOKEN=private', launcher])
+  assert.equal(JSON.stringify(records).includes('envPairs'), false)
+})
+
+test('read-only Mac launch inspection emits incremental roles, missing/access facts and codesign result without native calls', async () => {
+  const snapshots = [], calls = []
+  await evidence.inspectMacLaunch('/owned', value => snapshots.push(structuredClone(value)), {
+    stat(file) {
+      calls.push(['stat', file])
+      if (file === '/bin/bash') throw Object.assign(new Error('private'), { code: 'ENOENT', syscall: 'stat' })
+      return { mode: 0o100700, isFile: () => true }
+    },
+    access(file) { if (file.endsWith('launch-app.sh')) throw Object.assign(new Error('private'), { code: 'EPERM', errno: -1, syscall: 'access' }) },
+    hashFile: async () => 'd'.repeat(64),
+    command: async (file, args, options) => {
+      assert.equal(file, '/usr/bin/codesign'); assert.equal(args[0], '--verify'); assert.equal(options.timeout, 30000)
+      calls.push(['codesign'])
+      return { code: 1, signal: null, diagnostic: { errorClass: 'Error', errno: null }, stdout: 'secret', stderr: '/private/raw' }
+    },
+  })
+  assert.deepEqual(snapshots.map(item => item.records.length), [1, 2, 3, 4, 4])
+  const final = snapshots.at(-1)
+  assert.equal(final.records[0].exists, true); assert.equal(final.records[0].executable, false)
+  assert.equal(final.records[0].diagnostics[0].syscall, 'access')
+  assert.equal(final.records[1].exists, false); assert.equal(final.records[1].sha256, null)
+  assert.equal(final.codesign.exitCode, 1)
+  assert.equal(calls.filter(item => item[0] === 'codesign').length, 1)
+  scanEvidence(final, ['secret', '/private/raw', '/owned'])
+})
+
+test('safe diagnostics retain known syscall and numeric errno, rejecting arbitrary target roles and leaked arguments', () => {
+  const projected = evidence.safeDiagnostic({ name: 'Error', code: 'EPERM', errno: -1,
+    syscall: 'spawn /private/NOT-A-REAL-CREDENTIAL:hidden', targetRole: 'wrapper', processRole: 'launcher-process',
+    message: 'Bearer hidden-token', parameters: ['NA_KEYCHAIN_PASSWORD:hidden'] }, 'app-launch', 'LAUNCH_PROCESS_ERROR')
+  assert.equal(projected.errno, 'EPERM'); assert.equal(projected.errnoNumber, -1); assert.equal(projected.syscall, 'spawn')
+  assert.equal(projected.targetRole, 'wrapper')
+  scanEvidence(projected, ['hidden-token'])
+  const unknown = evidence.safeDiagnostic({ syscall: 'secret-call', errno: 'secret', targetRole: 'secret' }, 'app-launch', 'TEST_FAILED')
+  for (const field of ['syscall', 'errnoNumber', 'targetRole']) assert.equal(Object.hasOwn(unknown, field), false)
+  assert.throws(() => scanEvidence({ ...projected, description: 'Bearer hidden-token' }))
 })

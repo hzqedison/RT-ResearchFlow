@@ -110,6 +110,45 @@ If no terminal test result was recorded, publication reports that observed lack
 of terminal evidence as BLOCKED; it does not infer that no installer ever ran.
 Failed early runs may legitimately publish only their actual failure record.
 
+### Partial facts and the Mac launch boundary (F4/F5)
+
+Validated input, returned setup policy, returned installer result, every assertion,
+and each started phase are scanned and written immediately. Evidence and private
+run state use exclusive same-directory temporary files, flush, then atomic rename.
+They are also checkpointed before cleanup is awaited. An interrupted worker no
+longer needs to reach final archival to preserve facts already observed. Cleanup
+and outer-runner failures append diagnostics; they do not replace the primary
+failure or assign their exit code to the application. Unfinished phases remain
+`exited: false`, without an invented application exit code or network PASS.
+
+Before the single existing Mac launch, read-only inspection records wrapper,
+shell, sandbox-exec and original executable roles, existence, execution access,
+mode bits, file SHA-256 and the bounded codesign verification result. Partial
+inspection results are checkpointed individually. Paths, argv, environment,
+codesign output and stderr are never included. A scoped ChildProcess spawn
+observer delegates the original options unchanged and observes only the exact
+owned wrapper; it does not launch a second process or retry. Actual spawn/error/
+exit events retain only role, observed PID, time, recognized errno/syscall and
+observed exit code or signal. The prototype hook is restored when launch settles;
+listeners on that one child can still persist its later exit.
+
+`spawn-requested` alone proves no PID. `spawn-observed` proves only that the
+wrapper process was spawned, not that sandbox-exec or the product binary was
+reached. `debugConnection: connected` requires Playwright launch to return;
+`identityVerified` requires the installed executable/identity assertions. The
+intermediate shell-to-sandbox-to-binary exec boundary is not directly observed
+when debugging never connects. File access and codesign facts are not evidence
+of that transition, Gatekeeper approval, or a root cause for EPERM. Unknown
+values remain null/not-observed. No quarantine, signing, sandbox or Keychain
+policy is changed by these diagnostics.
+
+`probeComplete` describes the twelve actual A/B/C/D transport controls only.
+Setup policy installation is not successful inheritance or network-denial proof.
+An early launch failure leaves controls absent/incomplete and cannot pass either
+collector. The Mac-only matrix and original strict three-platform collector are
+unchanged. Run 37729682202 remains failed; these tool changes need a new byte
+freeze and Astra review before any native execution.
+
 Run 37726873605 attempt 1 remains failed. The old Windows 1.0 installer exit
 `0xC0000005` in System.dll has no confirmed root cause or proven invocation bug.
 This change preserves the existing NSIS invocation and event evidence, protection,

@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto'
 import { _electron, type ElectronApplication, type Page } from '@playwright/test'
 import { AcceptanceError, requireCondition as need, controlledRoot, validatedInputs, contract, toolsRoot,
   manifestPath, hash, hashFile, relative, safeEnvironment, command, platformCommand, writeEvidence, minimalResult, cleanup,
-  checkpoint, recordFailure, requireFrozenExecution } from './evidence.mjs'
+  checkpoint, recordFailure, requireFrozenExecution, inspectMacLaunch, observeMacLaunch } from './evidence.mjs'
 
 type Phase = 'A' | 'B' | 'C' | 'D'
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -45,7 +45,15 @@ export class NativeUpgrade {
       inherited: false, descendantsCovered: false, credentialRequestObserved: false, requestCount: 0, cleanupSucceeded: false })
   }
   get mac() { return this.owner.platform === 'macOS' }
-  mark(stage: string) { this.stage = stage; checkpoint(stage, this.phase) }
+  mark(stage: string) { this.stage = stage; checkpoint(stage, this.phase); this.persistResult() }
+  persistResult() { writeEvidence('acceptance-result.json', this.result, this.secretValues) }
+  persistNetwork() {
+    this.network.credentialRequestObserved = this.credentialRequest; this.network.requestCount = this.requestCount
+    this.network.records = [{ phase: this.phase, requestCount: this.requestCount, credentialRequestObserved: this.credentialRequest,
+      scope: 'cumulative-loopback-since-observer-start', verification: 'phase-is-collection-end-not-request-stage' }]
+    writeEvidence('network-isolation.json', this.network, this.secretValues)
+  }
+  persistInstallers() { writeEvidence('installer-events.json', this.envelope('installer-events', { events: this.installEvents }), this.secretValues) }
   envelope(kind: string, fields: any) {
     return { schemaVersion: 1, kind, harnessSha: this.owner.harnessSha, caseId: this.owner.caseId,
       runId: this.owner.runId, runAttempt: Number(this.owner.runAttempt), platform: this.owner.platform, arch: this.owner.arch,
@@ -53,6 +61,7 @@ export class NativeUpgrade {
   }
   check(name: string, value: any, kind = 'FAIL_DATA', code = name) {
     this.result.assertions.push({ name: this.phase + ':' + name, passed: !!value })
+    this.persistResult()
     need(value, kind, code)
   }
   async timed<T>(promise: Promise<T>, code = 'IPC_TIMEOUT'): Promise<T> {
@@ -88,11 +97,12 @@ export class NativeUpgrade {
     const asset = this.assets[index]
     const args = this.mac ? [asset.absolute, asset.version] : ['-Installer', asset.absolute, '-Version', asset.version]
     const event = await platformCommand('install', args, { timeout: 180000, kind: 'FAIL_INSTALL' })
+    this.installEvents.push({ version: asset.version, exitCode: event.exitCode, durationMs: event.durationMs, events: event.events,
+      installRelative: 'install', ...(event.registration ? { registrationSha256: hash(JSON.stringify({ key: event.registration.key, location: event.registration.location })) } : { appId: event.appId }) })
+    this.persistInstallers()
     this.check('INSTALLER_EXIT_' + index, event.exitCode === 0, 'FAIL_INSTALL')
     this.check('INSTALLER_BYTES_' + index, await hashFile(asset.absolute) === asset.sha256, 'BLOCKED_INPUT')
     this.check('SYSTEM_USER_' + index, event.uid === this.uid, 'BLOCKED_ENVIRONMENT')
-    this.installEvents.push({ version: asset.version, exitCode: event.exitCode, durationMs: event.durationMs, events: event.events,
-      installRelative: 'install', ...(event.registration ? { registrationSha256: hash(JSON.stringify({ key: event.registration.key, location: event.registration.location })) } : { appId: event.appId }) })
     this.check('NO_INSTALLER_AUTOSTART_' + index, (await platformCommand('processes')).processes.length === 0, 'FAIL_INSTALL')
   }
   async descendants(expectEmpty = false) {
@@ -111,6 +121,9 @@ export class NativeUpgrade {
   }
   async launch(phase: Phase, version: string) {
     this.phase = phase
+    const partial: any = { phase, version, launchId: this.owner.caseId + '-' + phase, startedAt: new Date().toISOString(),
+      exited: false, debugConnection: 'not-observed', identityVerified: false, processEvents: [] }
+    this.result.phases.push(partial)
     this.mark('app-launch')
     await this.descendants(true)
     const trap = path.join(this.root, 'legacy-trap')
@@ -121,8 +134,13 @@ export class NativeUpgrade {
         || (fs.lstatSync(this.userData).isDirectory() && !fs.lstatSync(this.userData).isSymbolicLink() && fs.readdirSync(this.userData).length === 0), 'BLOCKED_ENVIRONMENT')
     } else this.check('PRELAUNCH_MARKER', fs.readFileSync(path.join(this.userData, contract.markerBasename), 'utf8') === this.marker)
     const args = ['--user-data-dir=' + (this.mac ? this.userData : trap)]
-    this.app = await deadline(_electron.launch({ executablePath: this.launcher, args, timeout: contract.timeoutsMs.launch,
+    if (this.mac) await inspectMacLaunch(this.root, (facts: any) => { partial.launchDiagnostics = facts; this.persistResult() })
+    const launchOnce = () => deadline(_electron.launch({ executablePath: this.launcher, args, timeout: contract.timeoutsMs.launch,
       env: safeEnvironment({ DEBUG: '', PWDEBUG: '' }) }), contract.timeoutsMs.launch + 5000, 'BLOCKED_ENVIRONMENT', 'PACKAGED_LAUNCH_FAILED')
+    this.app = this.mac ? await observeMacLaunch(this.launcher, (event: any) => {
+      partial.processEvents.push(event); this.persistResult()
+    }, launchOnce) : await launchOnce()
+    partial.debugConnection = 'connected'; this.persistResult()
     const child = this.app.process()
     this.check('INDEPENDENT_MAIN_PROCESS', !!child.pid && !this.launchedPids.has(child.pid), 'FAIL_LIFECYCLE')
     this.launchedPids.add(child.pid!); this.ownedPids.add(child.pid!)
@@ -147,7 +165,7 @@ export class NativeUpgrade {
     if (this.mac) this.check('NATIVE_USER_ID', identity.uid === this.uid, 'BLOCKED_ENVIRONMENT')
     if (phase === 'A') fs.writeFileSync(path.join(this.userData, contract.markerBasename), this.marker, { flag: 'wx', mode: 0o600 })
     this.check('CASE_MARKER', fs.readFileSync(path.join(this.userData, contract.markerBasename), 'utf8') === this.marker)
-    this.result.phases.push({ phase, launchId: this.owner.caseId + '-' + phase, pid: identity.pid, version,
+    Object.assign(partial, { phase, launchId: this.owner.caseId + '-' + phase, pid: identity.pid, version, identityVerified: true,
       launchTime: new Date().toISOString(), packaged: true, runtimeName: identity.runtimeName, packageName: identity.packageName,
       uidHash: hash(this.uid), arch: identity.arch, appId: contract.builderAppId,
       // Electron has no public AppUserModelID getter. Record the frozen source fact,
@@ -158,6 +176,7 @@ export class NativeUpgrade {
       appRelative: relative(this.root, identity.appPath), appPathHash: hash(identity.appPath),
       userDataRelative: relative(this.root, identity.userData), userDataPathHash: hash(identity.userData),
       sessionDataRelative: relative(this.root, identity.sessionData), sessionDataPathHash: hash(identity.sessionData), markerMatches: true, exited: false })
+    this.persistResult()
     this.page = await deadline(this.app.firstWindow(), 30000, 'BLOCKED_ENVIRONMENT', 'APP_WINDOW_UNAVAILABLE')
     await this.page.waitForLoadState('domcontentloaded', { timeout: 15000 })
     await this.descendants()
@@ -204,10 +223,13 @@ export class NativeUpgrade {
       }
       this.network.controls.push({ phase: this.phase, transport, loopback: probe.loopback.success === true,
         externalDenied: probe.external.success === false && observedDeny, denialCode: /^[A-Z0-9_]+$/.test(probe.external.code) ? probe.external.code : 'UNKNOWN', denialEvidence })
+      this.persistNetwork()
       this.check('NETWORK_' + transport, probe.loopback.success === true && probe.external.success === false && observedDeny,
         'BLOCKED_ENVIRONMENT', 'OS_NETWORK_DENIAL_NOT_PROVEN')
     }
     this.network.inherited = true
+    this.network.probeComplete = this.network.controls.length === 12 && this.network.controls.every((item: any) => item.loopback && item.externalDenied)
+    this.persistNetwork()
   }
   async apiCheck() {
     const result: any = await this.timed(this.page!.evaluate(async ({ settings, keys, provider, expected }) => {
@@ -328,6 +350,7 @@ export class NativeUpgrade {
     this.check('DISK_NO_PLAINTEXT_EXITED', read.snapshot.dbFiles.every((item: any) => item.plaintextAbsent), 'FAIL_CREDENTIAL')
     this.result.phases.at(-1).records.push(read.snapshot)
     Object.assign(this.result.phases.at(-1), { exited: true, exitCode: ended.code, exitTime: new Date().toISOString() })
+    this.persistResult()
     await this.descendants(true)
   }
   async execute() {
@@ -338,6 +361,7 @@ export class NativeUpgrade {
       this.input = this.envelope('input-manifest', { frozenSource, manifestSha256: await hashFile(manifestPath),
         contractSha256: await hashFile(path.join(toolsRoot, 'fixtures/version-contract.json')),
         installers: this.assets.map(({ absolute, ...item }) => item) })
+      writeEvidence('input-manifest.json', this.input, this.secretValues)
       this.check('PUBLIC_PROBE_REACHABLE_BEFORE_ISOLATION', await publicReachable(contract.probeUrl), 'BLOCKED_ENVIRONMENT')
       await this.loopback()
       this.password = this.mac ? 'NA_KEYCHAIN_PASSWORD:' + randomBytes(32).toString('hex') : ''
@@ -345,7 +369,10 @@ export class NativeUpgrade {
       this.mark('platform-setup')
       const setup = await platformCommand('setup', [], { timeout: 60000, input: this.password })
       this.uid = setup.uid; this.network.enabledAt = new Date().toISOString(); this.network.policy = setup.policy
+      this.network.probeComplete = false
+      this.persistNetwork()
       this.network.policySha256 = this.mac ? await hashFile(path.join(this.root, 'network.sb')) : hash(JSON.stringify(setup.programs))
+      this.persistNetwork()
       await this.install(0)
       await this.launch('A', '1.0.0'); await this.seed(); this.baseline = await this.readState(this.k0); await this.quit(this.k0)
       await this.launch('B', '1.0.0'); this.compare(await this.readState(this.k0), this.baseline); await this.quit(this.k0)
@@ -374,9 +401,16 @@ export class NativeUpgrade {
       this.result.reasonCode = failure.reasonCode
       this.result.complete = false
     } finally {
-      this.network.credentialRequestObserved = this.credentialRequest; this.network.requestCount = this.requestCount
-      this.network.records.push({ phase: this.phase, requestCount: this.requestCount, credentialRequestObserved: this.credentialRequest,
-        scope: 'cumulative-loopback-since-observer-start', verification: 'phase-is-collection-end-not-request-stage' })
+      // Preserve completed facts BEFORE the first cleanup await. Cleanup/worker
+      // termination must not be the only path to the evidence directory.
+      try {
+        this.persistResult()
+        if (this.network.enabledAt) this.persistNetwork()
+        if (this.installEvents.length) this.persistInstallers()
+      } catch (error) {
+        const failure = recordFailure(error, this.stage, 'EVIDENCE_CHECKPOINT_FAILED')
+        this.result.status = failure.status; this.result.reasonCode = failure.reasonCode; this.result.complete = false
+      }
       try { await cleanup(); this.result.cleanup = true; this.network.cleanupSucceeded = true; this.network.disabledAt = new Date().toISOString() }
       catch (error) {
         const failure = recordFailure(error, 'cleanup', 'OWNED_CLEANUP_FAILED')
@@ -384,7 +418,6 @@ export class NativeUpgrade {
       }
       if (this.server) { this.server.closeAllConnections(); await deadline(new Promise<void>(resolve => this.server!.close(() => resolve())), 3000, 'BLOCKED_ENVIRONMENT', 'LOOPBACK_CLEANUP_TIMEOUT').catch(() => {}) }
       this.result.endedAt = new Date().toISOString()
-      this.mark('archive')
       // Installer errors may have been recorded before the platform command returned nonzero.
       if (!this.mac) for (const version of contract.versions) {
         const file = path.join(this.root, 'installer-event-' + version + '.json')
@@ -394,9 +427,10 @@ export class NativeUpgrade {
         }
       }
       try {
+        this.mark('archive')
         if (this.input) writeEvidence('input-manifest.json', this.input, this.secretValues)
-        writeEvidence('network-isolation.json', this.network, this.secretValues)
-        writeEvidence('installer-events.json', this.envelope('installer-events', { events: this.installEvents }), this.secretValues)
+        this.persistNetwork()
+        this.persistInstallers()
         writeEvidence('acceptance-result.json', this.result, this.secretValues)
       } catch (error) {
         const failure = recordFailure(error, 'archive', 'EVIDENCE_ARCHIVE_FAILED')
