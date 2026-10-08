@@ -1,127 +1,144 @@
+import { nativeTestBinding, nativeTestTempRoot } from '../fixtures/macThsNativeTestRuntime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { createNativeObservationFixture } from '../../electron/shared/macThsNativeProtocol'
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
-import type { MacThsRequest, MacThsResult } from '../../electron/shared/macThsTypes'
+import type { MacThsProductState, MacThsResult, MacThsRequest } from '../../electron/shared/macThsTypes'
+import { MacThsOrderService } from '../../electron/main/services/macThsOrderService'
 
-type Handler = (event: IpcMainInvokeEvent, request: MacThsRequest) => Promise<MacThsResult>
+type Handler = (event: IpcMainInvokeEvent, payload?: unknown) => unknown
 const hooks = vi.hoisted(() => ({
-  directory: '', handler: undefined as Handler | undefined, nativeOutput: 'READY', humanResponse: 1,
-  trusted: true, execute: vi.fn(), review: vi.fn(),
+  handlers: new Map<string, Handler>(), response: 1, dialog: vi.fn(), permission: vi.fn(),
+  pending: null as null | ((value: { response: number }) => void),
+  defer: false, nativeEnabled: false,
 }))
 vi.mock('electron', () => ({
-  app: { getPath: () => hooks.directory },
-  ipcMain: { handle: (_name: string, handler: Handler) => { hooks.handler = handler } },
-  systemPreferences: { isTrustedAccessibilityClient: () => hooks.trusted },
+  ipcMain: { handle: (name: string, handler: Handler) => hooks.handlers.set(name, handler),
+    removeHandler: (name: string) => hooks.handlers.delete(name) },
+  systemPreferences: { isTrustedAccessibilityClient: (...args: unknown[]) => { hooks.permission(...args); return true } },
   dialog: { showMessageBox: (...args: unknown[]) => {
-    hooks.review(...args)
-    return Promise.resolve({ response: hooks.humanResponse, checkboxChecked: false })
+    hooks.dialog(...args)
+    return hooks.defer ? new Promise(resolve => { hooks.pending = resolve }) : Promise.resolve({ response: hooks.response })
   } },
 }))
-vi.mock('node:child_process', async importOriginal => {
-  const actual = await importOriginal<typeof import('node:child_process')>()
-  return { ...actual, execFile: (...args: unknown[]) => {
-    hooks.execute(...args.slice(0, 3))
-    const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void
-    callback(null, hooks.nativeOutput, '')
-  } }
-})
-import { registerMacThsHandlers } from '../../electron/main/ipc/macThsHandlers'
+import { createMacThsNativeConfirmation, registerMacThsHandlers } from '../../electron/main/ipc/macThsHandlers'
+const binding = nativeTestBinding
+let service: MacThsOrderService
+let window: BrowserWindow | null
+let event: IpcMainInvokeEvent
+let send: ReturnType<typeof vi.fn>
+let unregister: () => void
+const invoke = (name: string, payload?: unknown, from = event) => hooks.handlers.get('macThs:' + name)!(from, payload)
 
-const frame = {}
-const sender = { id: 1, mainFrame: frame }
-const window = { isDestroyed: () => false, webContents: sender } as unknown as BrowserWindow
-const event = { sender, senderFrame: frame } as unknown as IpcMainInvokeEvent
-const order = { requestId: '00000000-0000-4000-8000-000000000001', mode: 'live' as const,
-  side: 'buy' as const, symbol: '600000', price: '10.00', quantity: 100, maxNotional: '1000.00' }
-let descriptor: PropertyDescriptor
-let directory: string
-async function invoke(request: MacThsRequest) { return hooks.handler!(event, request) }
-async function confirm(request: MacThsRequest) {
-  const offered = await invoke(request)
-  expect(offered.code).toBe('CONFIRMATION_REQUIRED')
-  return invoke({ ...request, confirmationToken: offered.confirmation!.token })
-}
-async function enable() {
-  hooks.nativeOutput = 'READY'
-  expect((await confirm({ action: 'authorizeLive', mode: 'live', liveRiskAcknowledged: true })).code).toBe('LIVE_ENABLED')
-}
-describe('isolated real-trade IPC: no broker or real orders', () => {
-  beforeEach(() => {
-    directory = mkdtempSync(join(tmpdir(), 'rt-ths-handler-test-'))
-    hooks.directory = directory
-    hooks.nativeOutput = 'READY'
-    hooks.humanResponse = 1
-    hooks.trusted = true
-    hooks.execute.mockClear()
-    hooks.review.mockClear()
-    descriptor = Object.getOwnPropertyDescriptor(process, 'platform')!
-    Object.defineProperty(process, 'platform', { ...descriptor, value: 'darwin' })
-    registerMacThsHandlers(() => window)
+describe('product IPC with a real isolated order database', () => {
+  beforeEach(async () => {
+    hooks.handlers.clear(); hooks.response = 1; hooks.defer = false; hooks.pending = null
+    hooks.dialog.mockClear(); hooks.permission.mockClear(); hooks.nativeEnabled = false
+    send = vi.fn()
+    const frame = {}
+    const sender = { id: 21, mainFrame: frame, isDestroyed: () => false, send }
+    window = { isDestroyed: () => false, webContents: sender } as unknown as BrowserWindow
+    event = { sender, senderFrame: frame } as unknown as IpcMainInvokeEvent
+    const directory = mkdtempSync(join(nativeTestTempRoot, 'rt-i13-ipc-'))
+    service = new MacThsOrderService({ directory, confirm: createMacThsNativeConfirmation(() => window),
+      accessibility: () => true, testHooks: { platform: 'darwin', adapter: { platform: 'darwin',
+        command: (request, script) => {
+          if (!hooks.nativeEnabled) throw new Error('Unexpected native launch in boundary test')
+          expect(script).toContain(request.nonce)
+          const packet = createNativeObservationFixture(request, {
+            account: { kind: 'fund_account', value: 'HANDLER00001234', broker: 'citics', selected: true },
+            clientVersion: '9.0.0', tradingDate: '2026-10-08',
+            ...(request.action === 'execute' ? { target: { symbol: '600000', market: 'SH' as const,
+              side: 'buy' as const, priceCents: 1000, quantity: 100, contractNo: 'IPC-NEW', tradingDate: '2026-10-08',
+              observation: 'accepted' as const, filledQuantity: null, cancelledQuantity: null } } : {}),
+          })
+          return { executable: process.execPath, args: ['-e', 'process.stdout.write(' + JSON.stringify(JSON.stringify(packet)) + ')'] }
+        } },
+        store: { nativeBinding: binding } } })
+    await service.start()
+    unregister = registerMacThsHandlers(() => window, service)
+    console.info('IPC fixture retained:', directory)
   })
-  afterEach(() => {
-    Object.defineProperty(process, 'platform', descriptor)
-    rmSync(directory, { recursive: true, force: true })
+  afterEach(async () => { unregister(); await service.shutdown() })
+  it('registers fixed methods, initializes explicitly and sends notice-only events', async () => {
+    expect([...hooks.handlers.keys()].sort()).toEqual(['macThs:execute', 'macThs:recover', 'macThs:reviewIntent', 'macThs:status'])
+    expect((invoke('status') as MacThsProductState).serviceState).toBe('NOT_INITIALIZED')
+    expect(hooks.dialog).not.toHaveBeenCalled()
+    const state = await invoke('recover', { kind: 'initialize' }) as MacThsProductState
+    expect(state).toMatchObject({ serviceState: 'READY_DISABLED', liveEnabled: false, canPrepare: true })
+    expect(hooks.dialog.mock.calls[0][1]).toMatchObject({ defaultId: 0, cancelId: 0, noLink: true })
+    expect(send).toHaveBeenCalled()
+    for (const [channel, notice] of send.mock.calls) {
+      expect(channel).toBe('macThs:stateChanged')
+      expect(Object.keys(notice).sort()).toEqual(['sessionId', 'stateSequence'])
+    }
   })
-  it('cannot trade from registration, without session opt-in or from another sender', async () => {
-    expect((await invoke({ action: 'submitLive', mode: 'live', order })).code).toBe('LIVE_NOT_ENABLED')
-    expect((await invoke({ action: 'authorizeLive', mode: 'live', liveRiskAcknowledged: false })).code).toBe('INVALID_ORDER')
-    const foreign = { sender: {}, senderFrame: frame } as unknown as IpcMainInvokeEvent
-    expect((await hooks.handler!(foreign, { action: 'probe', mode: 'live' })).code).toBe('INVALID_ORDER')
-    expect(hooks.execute).not.toHaveBeenCalled()
-    expect(hooks.review).not.toHaveBeenCalled()
+  it.each(['status', 'execute', 'recover', 'reviewIntent'])('rejects foreign senders and subframes on %s', async channel => {
+    for (const foreign of [{ ...event, sender: {} }, { ...event, senderFrame: {} }]) {
+      await expect(Promise.resolve().then(() => invoke(channel, undefined, foreign as IpcMainInvokeEvent))).rejects.toThrow('UNAUTHORIZED')
+    }
+    expect(hooks.dialog).not.toHaveBeenCalled()
   })
-  it('requires a native human confirmation with Cancel as default', async () => {
-    await enable()
-    const before = hooks.execute.mock.calls.length
-    const offered = await invoke({ action: 'submitLive', mode: 'live', order })
-    expect(offered.code).toBe('CONFIRMATION_REQUIRED')
-    expect(hooks.execute.mock.calls.length).toBe(before)
-    hooks.humanResponse = 0
-    const cancelled = await invoke({ action: 'submitLive', mode: 'live', order, confirmationToken: offered.confirmation!.token })
-    expect(cancelled.code).toBe('USER_CANCELLED')
-    expect(hooks.review).toHaveBeenCalledWith(window, expect.objectContaining({ defaultId: 0, cancelId: 0 }))
-    expect(hooks.execute.mock.calls.length).toBe(before)
+  it('rejects arbitrary status payloads and renderer initialization flags', async () => {
+    expect(() => invoke('status', { nativeBinding: binding })).toThrow('INVALID_REQUEST')
+    expect(await invoke('recover', { kind: 'initialize', initialize: true, directory: 'OTHER' }))
+      .toMatchObject({ serviceState: 'NOT_INITIALIZED', canInitialize: true })
+    expect(hooks.dialog).not.toHaveBeenCalled()
   })
-  it('binds a one-use ticket to exact parameters and supports cancelling the review', async () => {
-    await enable()
-    const offered = await invoke({ action: 'submitLive', mode: 'live', order })
-    const changed = await invoke({ action: 'submitLive', mode: 'live',
-      order: { ...order, price: '9.00' }, confirmationToken: offered.confirmation!.token })
-    expect(changed.code).toBe('CONFIRMATION_EXPIRED')
-    const next = await invoke({ action: 'submitLive', mode: 'live', order })
-    expect((await invoke({ action: 'dismissConfirmation', mode: 'live' })).code).toBe('USER_CANCELLED')
-    expect((await invoke({ action: 'submitLive', mode: 'live', order, confirmationToken: next.confirmation!.token })).code).toBe('CONFIRMATION_EXPIRED')
-    expect(hooks.review).not.toHaveBeenCalled()
+  it('does not accept a response after the trusted frame changes while native confirmation waits', async () => {
+    hooks.defer = true
+    const pending = invoke('recover', { kind: 'initialize' }) as Promise<unknown>
+    expect(hooks.pending).not.toBeNull()
+    window = null
+    hooks.pending!({ response: 1 })
+    await expect(pending).rejects.toThrow('UNAUTHORIZED')
+    expect(service.getState().serviceState).toBe('NOT_INITIALIZED')
   })
-  it('does not replay an accepted real request and reset never grants a live session', async () => {
-    await enable()
-    hooks.nativeOutput = 'LIVE_ACCEPTED|TEST123'
-    const accepted = await confirm({ action: 'submitLive', mode: 'live', order })
-    expect(accepted.code).toBe('LIVE_ACCEPTED')
-    expect(accepted.contractNo).toBe('TEST123')
-    expect(accepted.unknownPending).toBe(false)
-    expect((await invoke({ action: 'submitLive', mode: 'live', order })).code).toBe('DUPLICATE_REQUEST')
-    registerMacThsHandlers(() => window)
-    expect((await invoke({ action: 'submitLive', mode: 'live', order })).code).toBe('LIVE_NOT_ENABLED')
+  it('does not expose a generic UNKNOWN reset or honor raw evidence', async () => {
+    const result = await invoke('execute', { action: 'resolveUnknown', mode: 'live' }) as MacThsResult
+    expect(result.code).toBe('REVIEW_REQUIRED')
+    const rejected = await invoke('execute', { action: 'submitLive', mode: 'live',
+      accountDigest: '0'.repeat(64), claimed: true }) as MacThsResult
+    expect(rejected.code).toBe('INVALID_REQUEST')
+    expect(hooks.dialog).not.toHaveBeenCalled()
   })
-  it('native broker confirmation or a missing receipt locks new requests across restart', async () => {
-    await enable()
-    hooks.nativeOutput = 'NATIVE_CONFIRMATION_REQUIRED'
-    expect((await confirm({ action: 'submitLive', mode: 'live', order })).unknownPending).toBe(true)
-    expect((await invoke({ action: 'submitLive', mode: 'live',
-      order: { ...order, requestId: '00000000-0000-4000-8000-000000000002' } })).code).toBe('UNKNOWN_PENDING')
-    registerMacThsHandlers(() => window)
-    await enable()
-    expect((await invoke({ action: 'submitLive', mode: 'live',
-      order: { ...order, requestId: '00000000-0000-4000-8000-000000000003' } })).code).toBe('UNKNOWN_PENDING')
+  it('keeps status readable during confirmation and rejects a second write instead of queueing', async () => {
+    hooks.defer = true
+    const pending = invoke('recover', { kind: 'initialize' }) as Promise<MacThsProductState>
+    expect((invoke('status') as MacThsProductState).canInitialize).toBe(false)
+    await invoke('recover', { kind: 'initialize' })
+    expect(hooks.dialog).toHaveBeenCalledTimes(1)
+    hooks.pending!({ response: 0 })
+    expect((await pending).serviceState).toBe('NOT_INITIALIZED')
   })
-  it('only permits exact real cancellation after session opt-in and native review', async () => {
-    await enable()
-    expect((await invoke({ action: 'cancelLive', mode: 'live', requestId: order.requestId, contractNo: 'bad" code' })).code).toBe('INVALID_ORDER')
-    hooks.nativeOutput = 'LIVE_CANCELLED'
-    expect((await confirm({ action: 'cancelLive', mode: 'live', requestId: order.requestId, contractNo: 'TEST123' })).code).toBe('LIVE_CANCELLED')
-    expect(hooks.review).toHaveBeenCalledTimes(1)
+  it('runs a confirmed IPC order through the real service, store, adapter decoder and owned child', async () => {
+    hooks.nativeEnabled = true
+    await invoke('recover', { kind: 'initialize' })
+    async function confirmed(request: MacThsRequest) {
+      const offered = await invoke('execute', request) as MacThsResult
+      expect(offered.code).toBe('CONFIRMATION_REQUIRED')
+      expect(offered.confirmation).toMatchObject({ sessionId: service.sessionId })
+      expect(offered.confirmation!.expiresAt).toBeGreaterThan(Date.now())
+      return await invoke('execute', { ...request, confirmationToken: offered.confirmation!.token,
+        ...(offered.confirmation!.intentBinding ? { intentBinding: offered.confirmation!.intentBinding } : {}) }) as MacThsResult
+    }
+    expect((await confirmed({ action: 'authorizeLive', mode: 'live', liveRiskAcknowledged: true })).code).toBe('LIVE_ENABLED')
+    const requestId = randomUUID()
+    const request: MacThsRequest = { action: 'submitLive', mode: 'live', requestId,
+      order: { requestId, mode: 'live', side: 'buy', symbol: '600000', price: '10.00', quantity: 100, maxNotional: '1000.00' } }
+    const result = await confirmed(request)
+    expect(result.code).toBe('ACCEPTED_OBSERVED')
+    expect((invoke('status') as MacThsProductState).intents[0]).toMatchObject({ requestId, state: 'ACCEPTED_OBSERVED' })
+    expect((await invoke('execute', request) as MacThsResult).code).toBe('DUPLICATE_REQUEST')
+    expect(hooks.dialog.mock.calls.every(call => call[1].defaultId === 0 && call[1].cancelId === 0)).toBe(true)
+  })
+  it('removes only its own listeners and handlers on unregistration', () => {
+    unregister()
+    const count = send.mock.calls.length
+    service.revokeCaller(21)
+    expect(send).toHaveBeenCalledTimes(count)
+    expect(hooks.handlers.size).toBe(0)
   })
 })

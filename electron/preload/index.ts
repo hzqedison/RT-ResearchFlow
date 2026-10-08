@@ -3,7 +3,7 @@ import type { ConceptSource, DiagnosticReadiness, EvaluationCounts, FactSyncRece
 import type { SupportDiagnosticPreview, SupportFeedbackResult, SupportFeedbackSaveOutcome } from '../shared/supportDiagnostics'
 import type { AppUpdateCheck, AppUpdateDownload, AppUpdateInfo, AppUpdateProgress, AppUpdateResult } from '../shared/appUpdateTypes'
 import type { DailyDataProvider, DataProbeProvider, DataSourcePreference, SaveDataSourcePreference, DataSourceProbeResult, ResearchReportResult, WencaiResult } from '../shared/dataSourceTypes'
-import type { MacThsRequest, MacThsResult } from '../shared/macThsTypes'
+import type { MacThsRequest, MacThsResult, MacThsProductState, RecoveryCommand, ReviewCommand } from '../shared/macThsTypes'
 import type { IpcRendererEvent } from 'electron'
 import type {
   BriefingListOptions,
@@ -1554,6 +1554,14 @@ const api = {
   },
   macThs: {
     execute: (payload: MacThsRequest) => ipcRenderer.invoke('macThs:execute', payload) as Promise<MacThsResult>,
+    getState: () => ipcRenderer.invoke('macThs:status') as Promise<MacThsProductState>,
+    recover: (payload: RecoveryCommand) => ipcRenderer.invoke('macThs:recover', payload) as Promise<MacThsProductState>,
+    reviewIntent: (payload: ReviewCommand) => ipcRenderer.invoke('macThs:reviewIntent', payload) as Promise<MacThsProductState>,
+    onStateChanged: (listener: (notice: { sessionId: string; stateSequence: number }) => void) => {
+      const handler = (_event: unknown, notice: { sessionId: string; stateSequence: number }) => listener(notice)
+      ipcRenderer.on('macThs:stateChanged', handler)
+      return () => { ipcRenderer.removeListener('macThs:stateChanged', handler) }
+    },
   },
   researchAgent: {
     preflight: (sessionId: number) => (

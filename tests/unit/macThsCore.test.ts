@@ -20,12 +20,12 @@ describe('Mac THS experimental bridge boundary', () => {
     expect(validateMacThsOrder({ ...valid, ...changes })).toBeNull()
   })
   it('does not export local order identifiers or injected private fields', () => {
-    const raw = { schemaVersion: 1, component: 'mac-ths-ui-experiment', adapterVersion: '2',
+    const raw = { schemaVersion: 1, component: 'mac-ths-ui-experiment', adapterVersion: '3',
       runtime: 'macos', architecture: 'arm64', action: 'submitSimulation', mode: 'simulation',
       outcome: 'passed', code: 'SIMULATION_ACCEPTED', unknownPending: false, canSubmitLiveOrders: false,
       canRunUnattended: false, contractNo: 'SENSITIVE_ID', account: 'SENSITIVE_ACCOUNT',
       password: 'SENSITIVE_PASSWORD', symbol: 'SENSITIVE_SYMBOL', rawLog: 'SENSITIVE_LOG',
-      confirmation: { token: 'SENSITIVE_TOKEN', title: 'SENSITIVE_TITLE', message: 'SENSITIVE_ORDER', confirmLabel: 'SENSITIVE_LABEL' } } as MacThsResult
+      confirmation: { token: 'SENSITIVE_TOKEN', title: 'SENSITIVE_TITLE', message: 'SENSITIVE_ORDER', confirmLabel: 'SENSITIVE_LABEL' } } as unknown as MacThsResult
     expect(JSON.stringify(safeMacThsDiagnostic(raw))).not.toContain('SENSITIVE')
     expect(safeMacThsDiagnostic(raw)).toMatchObject({ canSubmitLiveOrders: false, canRunUnattended: false })
   })

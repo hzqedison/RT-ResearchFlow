@@ -20,7 +20,9 @@ import { registerMarketOverviewHandlers } from './ipc/marketOverviewHandlers'
 import { registerScreenerHandlers } from './ipc/screenerHandlers'
 import { registerSectorFlowHandlers } from './ipc/sectorFlowHandlers'
 import { registerTradeCalHandlers } from './ipc/tradeCalHandlers'
-import { registerMacThsHandlers } from './ipc/macThsHandlers'
+import { registerMacThsHandlers, createMacThsNativeConfirmation, macThsAccessibility } from './ipc/macThsHandlers'
+import { MacThsOrderService } from './services/macThsOrderService'
+import { createMacThsOrderDirectoryPreparation } from './services/macThsOrderDirectory'
 import { registerAppUpdateHandlers } from './ipc/appUpdateHandlers'
 import { registerSupportDiagnosticsHandlers } from './ipc/supportDiagnosticsHandlers'
 import { registerTrendHandlers } from './ipc/trendHandlers'
@@ -81,6 +83,8 @@ let applicationStarted = false
 let applicationStopping = false
 let shutdownComplete = false
 let shutdownTask: Promise<void> | null = null
+let macThsOrderService: MacThsOrderService | null = null
+let restartRequested = false
 let bootstrapTask: Promise<void> | null = null
 let networkMonitor: ReturnType<typeof setInterval> | null = null
 const startupTasks = new Set<Promise<unknown>>()
@@ -101,6 +105,7 @@ async function waitForScanIdle(timeoutMs: number): Promise<void> {
 
 async function stopApplication(): Promise<void> {
   applicationStopping = true
+  macThsOrderService?.beginStop()
   stopHeartbeat()
   stopScheduler()
   stopDailyCleanup()
@@ -131,10 +136,10 @@ async function stopApplication(): Promise<void> {
     ])
   } finally {
     if (deadlineTimer) clearTimeout(deadlineTimer)
-    // Legacy background jobs are not all owned by a common registry yet. Keep
-    // SQLite open until process exit rather than closing it under active work.
-    shutdownComplete = true
+    // The research-task grace period is not an order-executor exit proof.
   }
+  await macThsOrderService?.shutdown()
+  shutdownComplete = true
 }
 
 /**
@@ -239,6 +244,19 @@ function createWindow(): void {
   createdWindow.once('ready-to-show', () => {
     if (!createdWindow.isDestroyed()) createdWindow.show()
   })
+  const callerId = createdWindow.webContents.id
+  createdWindow.on('close', event => {
+    macThsOrderService?.revokeCaller(callerId)
+    if (!shutdownComplete && (applicationStopping || process.platform !== 'darwin')) {
+      event.preventDefault()
+      if (!applicationStopping) app.quit()
+    }
+  })
+  createdWindow.webContents.on('render-process-gone', () => macThsOrderService?.revokeCaller(callerId))
+  createdWindow.webContents.on('destroyed', () => macThsOrderService?.revokeCaller(callerId))
+  createdWindow.webContents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => {
+    if (isMainFrame) macThsOrderService?.revokeCaller(callerId)
+  })
   createdWindow.on('closed', () => {
     if (mainWindow === createdWindow) mainWindow = null
   })
@@ -312,9 +330,24 @@ async function bootstrap(): Promise<void> {
     }
   })
   registerTrustedIpcHandler('app:relaunch', getTrustedWindow, () => {
-    app.relaunch()
+    restartRequested = true
     app.quit()
   })
+
+  // A single order service owns the existing execution domain, separately from the research DB.
+  // Native/ABI/storage failures become trading state instead of fatal research-app startup.
+  macThsOrderService = new MacThsOrderService({ directory: app.getPath('userData'),
+    prepareDirectory: directory => {
+      try { prepareMacThsOrderDirectory(directory) }
+      catch (error) {
+        const code = (error as { code?: string })?.code
+        console.warn('[MacTHS] Order directory unavailable:', code ?? 'ORDER_DIRECTORY_IO')
+        throw error
+      }
+    },
+    confirm: createMacThsNativeConfirmation(() => mainWindow), accessibility: macThsAccessibility })
+  await macThsOrderService.start()
+  if (applicationStopping) { macThsOrderService.beginStop(); return }
 
   // 1. Initialize database
   await initDb()
@@ -345,7 +378,7 @@ async function bootstrap(): Promise<void> {
   registerScreenerHandlers()
   registerSectorFlowHandlers()
   registerTradeCalHandlers()
-  registerMacThsHandlers(getTrustedWindow)
+  registerMacThsHandlers(() => mainWindow, macThsOrderService)
   registerAppUpdateHandlers(getTrustedWindow)
   registerSupportDiagnosticsHandlers(getTrustedWindow)
   registerTrendHandlers()
@@ -461,6 +494,9 @@ async function bootstrap(): Promise<void> {
   applicationStarted = true
 }
 
+// Capture Electron's app-specific default before configureApplicationDataPaths can change it.
+// This is read-only capture; permission work runs inside the nonfatal order-service start gate.
+const prepareMacThsOrderDirectory = createMacThsOrderDirectoryPreparation(app)
 let applicationDataReady = true
 let applicationDataFailure: string | null = null
 try {
@@ -528,8 +564,14 @@ app.on('before-quit', (event) => {
   if (shutdownComplete || !ownsApplicationInstance) return
   event.preventDefault()
   if (shutdownTask) return
-  shutdownTask = stopApplication().catch(() => {
-    console.warn('[Shutdown] Cleanup failed; allowing process teardown.')
-    shutdownComplete = true
-  }).finally(() => app.quit())
+  macThsOrderService?.beginStop()
+  shutdownTask = stopApplication().then(() => {
+    if (restartRequested) app.relaunch()
+    app.quit()
+  }).catch(() => {
+    // Retain the order owner and visible failure state. Never treat timeout/kill as a clean exit.
+    console.warn('[Shutdown] Order shutdown is unproven; process teardown was not authorized.')
+    shutdownTask = null
+    if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus() }
+  })
 })
