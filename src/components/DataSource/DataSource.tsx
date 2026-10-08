@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { HistoricalDailyProgressCard } from './HistoricalDailyProgressCard'
 import type {
   DailyDataProvider, DataProbeProvider, DataSourcePreference, ReportDataProvider,
   ResearchReportResult, WencaiResult,
@@ -22,6 +23,7 @@ export function DataSource() {
   const [token, setToken] = useState('')
   const [cookie, setCookie] = useState('')
   const [stockCode, setStockCode] = useState('000001')
+  const [limitPoolDate, setLimitPoolDate] = useState(() => new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
@@ -80,10 +82,10 @@ export function DataSource() {
     })
   }
 
-  async function probe(provider: DataProbeProvider) {
+  async function probe(provider: DataProbeProvider, tradeDate?: string) {
     await run('检测连接', async () => {
       await save()
-      const result = await window.api.datasource.probe(provider, stockCode)
+      const result = await window.api.datasource.probe(provider, stockCode, tradeDate)
       setProbeMessages(current => ({ ...current, [provider]: (result.ok ? '已取得样本：' : '未完成：') + result.message }))
     })
   }
@@ -95,6 +97,7 @@ export function DataSource() {
 
   return (
     <div className="flex-1 overflow-y-auto p-6 max-w-4xl space-y-6">
+      <HistoricalDailyProgressCard />
       <header>
         <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">数据源配置</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
@@ -142,6 +145,28 @@ export function DataSource() {
         </div>
       </section>
 
+      <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-5 space-y-3">
+        <h3 className="font-medium text-sm">短线数据候选来源：东方财富涨停池</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          通过本地 AKShare 扩展读取近期涨停池，检查连板、封板时间、炸板次数与封板资金。先勾选上方 AKShare 并安装扩展；检测只读取样本。核对后保存会写入独立研究缓存，不会混入原有 Tushare 涨停表，也不代表竞价、筹码或历史回测已经可用。
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-xs" htmlFor="limit-pool-date">请求日期</label>
+          <input id="limit-pool-date" type="date" className={inputClass + ' max-w-44'} value={limitPoolDate}
+            disabled={disabled} onChange={event => setLimitPoolDate(event.target.value)} />
+          <button className={buttonClass} disabled={disabled || !daily.includes('akshare') || !limitPoolDate}
+            onClick={() => void probe('akshare-limit-pool', limitPoolDate.replaceAll('-', ''))}>检测免费涨停池</button>
+          <button className={buttonClass} disabled={disabled || !daily.includes('akshare') || !limitPoolDate}
+            onClick={() => void run('核对并保存涨停池', async () => {
+              await save()
+              const result = await window.api.datasource.syncPublicLimitPool(limitPoolDate.replaceAll('-', ''))
+              if (!result.ok) throw new Error(result.message)
+              setMessage(result.message)
+            })}>核对后存入研究缓存</button>
+        </div>
+        {probeMessages['akshare-limit-pool'] && <p role="status" className="text-xs text-gray-600 dark:text-gray-300">{probeMessages['akshare-limit-pool']}</p>}
+      </section>
+
       <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-5 space-y-4">
         <h3 className="font-medium text-sm">研报来源（可多选）</h3>
         {(['eastmoney', 'akshare'] as const).map(provider => (
@@ -184,7 +209,7 @@ export function DataSource() {
 
       {needsPython && <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-5 space-y-3">
         <h3 className="text-sm font-medium">可选本地扩展</h3>
-        <p className="text-xs text-gray-500">需要 Python 3.10+。点击安装才会下载所选开源依赖，最长10分钟；虚拟环境、下载缓存和临时文件均放在应用的数据目录，Windows安装版随你的安装目录走，不默认装到系统 Python。</p>
+        <p className="text-xs text-gray-500">AKShare 需要 Python 3.11+；其他本地扩展需要 Python 3.10+。点击安装才会下载所选开源依赖，最长10分钟；虚拟环境、下载缓存和临时文件均放在应用的数据目录，Windows安装版随你的安装目录走，不默认装到系统 Python。</p>
         <input className={inputClass} value={pythonPath} disabled={disabled} onChange={event => setPythonPath(event.target.value)}
           placeholder="留空自动寻找 Python；也可选择本机解释器的绝对路径" />
         <div className="flex flex-wrap gap-2">

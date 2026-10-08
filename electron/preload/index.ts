@@ -1,8 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { HistoricalDailyProgressResult } from '../shared/historicalDailyProgress'
 import type { ConceptSource, DiagnosticReadiness, EvaluationCounts, FactSyncReceipt } from '../shared/dataReadiness'
 import type { SupportDiagnosticPreview, SupportFeedbackResult, SupportFeedbackSaveOutcome } from '../shared/supportDiagnostics'
 import type { AppUpdateCheck, AppUpdateDownload, AppUpdateInfo, AppUpdateProgress, AppUpdateResult } from '../shared/appUpdateTypes'
-import type { DailyDataProvider, DataProbeProvider, DataSourcePreference, SaveDataSourcePreference, DataSourceProbeResult, ResearchReportResult, WencaiResult } from '../shared/dataSourceTypes'
+import type { DailyDataProvider, DataProbeProvider, DataSourcePreference, SaveDataSourcePreference, DataSourceProbeResult, ResearchReportResult, WencaiResult, PublicLimitPoolObservationSnapshot } from '../shared/dataSourceTypes'
 import type { MacThsRequest, MacThsResult, MacThsProductState, RecoveryCommand, ReviewCommand } from '../shared/macThsTypes'
 import type { IpcRendererEvent } from 'electron'
 import type {
@@ -1924,8 +1925,15 @@ const api = {
     saveConfig: (data: SaveDataSourcePreference) =>
       ipcRenderer.invoke('datasource:saveConfig', data),
     validateTushare: (token: string) => ipcRenderer.invoke('datasource:validateTushare', { token }),
-    probe: (provider: DataProbeProvider, stockCode = '000001') =>
-      ipcRenderer.invoke('datasource:probe', { provider, stockCode }) as Promise<DataSourceProbeResult>,
+    probe: (provider: DataProbeProvider, stockCode = '000001', tradeDate?: string) =>
+      ipcRenderer.invoke('datasource:probe', { provider, stockCode, tradeDate }) as Promise<DataSourceProbeResult>,
+    syncPublicLimitPool: (tradeDate: string) =>
+      ipcRenderer.invoke('datasource:syncPublicLimitPool', { tradeDate }) as Promise<{
+        ok: boolean; tradeDate: string; rows: number;
+        quality: 'available' | 'partial' | 'blocked'; message: string
+      }>,
+    listVerifiedPublicLimitPool: () =>
+      ipcRenderer.invoke('datasource:listVerifiedPublicLimitPool') as Promise<PublicLimitPoolObservationSnapshot>,
     choosePython: () => ipcRenderer.invoke('datasource:choosePython') as Promise<string | null>,
     bridgeStatus: () => ipcRenderer.invoke('datasource:bridgeStatus') as Promise<
       { ok: true; data: unknown } | { ok: false; message: string }
@@ -2847,6 +2855,7 @@ const api = {
   },
 
   diagnostics: {
+    getHistoricalDailyProgress: () => ipcRenderer.invoke('diagnostics:getHistoricalDailyProgress') as Promise<HistoricalDailyProgressResult>,
     getHealth: () => ipcRenderer.invoke('diagnostics:getHealth') as Promise<
       | {
           ok: true

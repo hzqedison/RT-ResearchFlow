@@ -1,0 +1,251 @@
+name: Data source native verification (Windows and Mac, no installers)
+
+on:
+  push:
+    branches: [codex/verify-1.6]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-source-native-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+  RT_PUBLIC_LIMIT_LIVE: '0'
+
+jobs:
+  native:
+    name: data-source-${{ matrix.platform }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: win32
+            arch: x64
+          - runner: macos-15
+            platform: darwin
+            arch: arm64
+          - runner: macos-15-intel
+            platform: darwin
+            arch: x64
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      DATA_SOURCE_NATIVE_PYTHON_VERSION: '3.13'
+      DATA_SOURCE_NATIVE_ARCH: ${{ matrix.arch }}
+
+    steps:
+      - name: Check out the exact source commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Initialize evidence without guessing a test result
+        id: evidence
+        run: |
+          $env:NATIVE_EVIDENCE = Join-Path $env:RUNNER_TEMP 'rt-data-source-native-evidence'
+          New-Item -ItemType Directory -Path $env:NATIVE_EVIDENCE -Force | Out-Null
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "NATIVE_EVIDENCE=$env:NATIVE_EVIDENCE" -Encoding utf8NoBOM
+          @{
+            commit = $env:GITHUB_SHA
+            runner = '${{ matrix.runner }}'
+            expectedPlatform = '${{ matrix.platform }}'
+            expectedArch = '${{ matrix.arch }}'
+            status = 'not-yet-verified'
+          } | ConvertTo-Json | Set-Content -LiteralPath "$env:NATIVE_EVIDENCE/initial-context.json" -Encoding utf8NoBOM
+
+      - name: Set up pnpm 10.14.0
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+          run_install: false
+
+      - name: Set up native Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          architecture: ${{ matrix.arch }}
+          cache: pnpm
+
+      - name: Set up native system Python 3.13
+        id: python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: ${{ matrix.arch }}
+
+      - name: Record and require actual runtime platform and architecture
+        id: runtime
+        env:
+          DATA_SOURCE_NATIVE_PYTHON: ${{ steps.python.outputs.python-path }}
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+        run: |
+          $program = @'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const { spawnSync } = require('node:child_process');
+          const probe = spawnSync(process.env.DATA_SOURCE_NATIVE_PYTHON, ['-I', '-X', 'utf8', '-c',
+            'import json, platform, sys; print(json.dumps({"version": platform.python_version(), "platform": sys.platform, "machine": platform.machine(), "isolated": sys.flags.isolated, "utf8Mode": sys.flags.utf8_mode}))'],
+            { encoding: 'utf8', shell: false, windowsHide: true, timeout: 10000 });
+          if (probe.error || probe.status !== 0) throw new Error('Native Python probe failed');
+          const python = JSON.parse(probe.stdout);
+          const pythonArch = /^(arm64|aarch64)$/i.test(python.machine) ? 'arm64' :
+            /^(amd64|x86_64|x64)$/i.test(python.machine) ? 'x64' : python.machine;
+          const evidence = { commit: process.env.GITHUB_SHA, platform: process.platform,
+            arch: process.arch, node: process.version, python, pythonArch };
+          fs.writeFileSync(path.join(process.env.NATIVE_EVIDENCE, 'runtime.json'), JSON.stringify(evidence, null, 2));
+          console.log(JSON.stringify(evidence, null, 2));
+          if (process.platform !== process.env.EXPECTED_PLATFORM || python.platform !== process.platform ||
+              process.arch !== process.env.DATA_SOURCE_NATIVE_ARCH || pythonArch !== process.arch ||
+              !process.versions.node.startsWith('20.') || !python.version.startsWith('3.13.') ||
+              python.isolated !== 1 || python.utf8Mode !== 1) throw new Error('Native runtime mismatch');
+          '@
+          & node -e $program 2>&1 | Tee-Object -FilePath "$env:NATIVE_EVIDENCE/runtime.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Native runtime check failed.' }
+
+      - name: Install frozen dependencies
+        id: install
+        env:
+          npm_config_python: ${{ steps.python.outputs.python-path }}
+        run: |
+          & pnpm install --frozen-lockfile 2>&1 | Tee-Object -FilePath "$env:NATIVE_EVIDENCE/dependencies.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
+
+      - name: Rebuild native dependencies for this Electron platform and architecture
+        id: rebuild
+        env:
+          npm_config_python: ${{ steps.python.outputs.python-path }}
+        run: |
+          & pnpm exec electron-builder install-app-deps --arch '${{ matrix.arch }}' 2>&1 | Tee-Object -FilePath "$env:NATIVE_EVIDENCE/native-rebuild.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Electron native dependency rebuild failed.' }
+
+      - name: Run this iteration's isolated data-source tests (target at least 132)
+        id: current
+        if: ${{ !cancelled() && steps.rebuild.outcome == 'success' }}
+        run: |
+          $files = @(
+            'tests/unit/publicLimitPoolAdapter.test.ts',
+            'tests/unit/verifiedPublicLimitPoolCache.test.ts',
+            'tests/unit/publicLimitPoolObservation.test.tsx',
+            'tests/unit/pythonDataSourceBridge.encoding.test.ts',
+            'tests/unit/pythonSourceRequirements.test.ts'
+          )
+          & pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run @files --reporter=default --reporter=json "--outputFile=$env:NATIVE_EVIDENCE/current-tests.json" 2>&1 | Tee-Object -FilePath "$env:NATIVE_EVIDENCE/current-tests.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Current iteration tests failed.' }
+
+      - name: Run 1.5 progress regression tests (target at least 47)
+        id: progress
+        if: ${{ !cancelled() && steps.rebuild.outcome == 'success' }}
+        run: |
+          $files = @('tests/unit/historicalDailyProgress.service.test.ts', 'tests/unit/historicalDailyProgressCard.test.tsx')
+          & pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run @files --reporter=default --reporter=json "--outputFile=$env:NATIVE_EVIDENCE/progress-tests.json" 2>&1 | Tee-Object -FilePath "$env:NATIVE_EVIDENCE/progress-tests.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Progress regression tests failed.' }
+
+      - name: Run offline native system-Python bridge tests
+        id: subprocess
+        if: ${{ !cancelled() && steps.rebuild.outcome == 'success' }}
+        env:
+          DATA_SOURCE_NATIVE_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          & pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/pythonDataSourceBridge.native.test.ts --reporter=default --reporter=json "--outputFile=$env:NATIVE_EVIDENCE/native-tests.json" 2>&1 | Tee-Object -FilePath "$env:NATIVE_EVIDENCE/native-tests.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Native Python bridge tests failed.' }
+
+      - name: Typecheck without changing order or account safety requirements
+        id: typecheck
+        if: ${{ !cancelled() && steps.rebuild.outcome == 'success' }}
+        run: |
+          & pnpm run typecheck 2>&1 | Tee-Object -FilePath "$env:NATIVE_EVIDENCE/typecheck.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Typecheck failed.' }
+
+      - name: Build application only (no packaging, publishing or installed-app tests)
+        id: build
+        if: ${{ !cancelled() && steps.rebuild.outcome == 'success' }}
+        run: |
+          & pnpm run build 2>&1 | Tee-Object -FilePath "$env:NATIVE_EVIDENCE/build.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Application build failed.' }
+
+      - name: Summarize actual tests and enforce the requested coverage floors
+        if: ${{ always() && steps.evidence.outcome == 'success' }}
+        env:
+          NATIVE_PHASE_RUNTIME: ${{ steps.runtime.outcome }}
+          NATIVE_PHASE_INSTALL: ${{ steps.install.outcome }}
+          NATIVE_PHASE_REBUILD: ${{ steps.rebuild.outcome }}
+          NATIVE_PHASE_CURRENT: ${{ steps.current.outcome }}
+          NATIVE_PHASE_PROGRESS: ${{ steps.progress.outcome }}
+          NATIVE_PHASE_SUBPROCESS: ${{ steps.subprocess.outcome }}
+          NATIVE_PHASE_TYPECHECK: ${{ steps.typecheck.outcome }}
+          NATIVE_PHASE_BUILD: ${{ steps.build.outcome }}
+          NATIVE_EXPECTED_PLATFORM: ${{ matrix.platform }}
+        run: |
+          $program = @'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const directory = process.env.NATIVE_EVIDENCE;
+          const errors = [];
+          const phases = Object.fromEntries(['runtime', 'install', 'rebuild', 'current', 'progress', 'subprocess', 'typecheck', 'build']
+            .map(phase => [phase, process.env[`NATIVE_PHASE_${phase.toUpperCase()}`] || 'not-run']));
+          for (const [phase, outcome] of Object.entries(phases)) if (outcome !== 'success') errors.push(`${phase}: ${outcome}`);
+          function readReport(name, minimum) {
+            const filename = path.join(directory, `${name}-tests.json`);
+            if (!fs.existsSync(filename)) {
+              errors.push(`${name}: missing actual test report`);
+              return { status: 'not-reported', actualTests: null, requiredMinimum: minimum };
+            }
+            try {
+              const report = JSON.parse(fs.readFileSync(filename, 'utf8').replace(/^\uFEFF/, ''));
+              const tests = (report.testResults || []).flatMap(suite => (suite.assertionResults || [])
+                .map(test => ({ file: suite.name, name: test.fullName || test.title, status: test.status, duration: test.duration })));
+              const result = { status: report.success === true ? 'passed' : 'failed', requiredMinimum: minimum,
+                actualTests: report.numTotalTests, passed: report.numPassedTests, failed: report.numFailedTests,
+                pending: report.numPendingTests, tests };
+              if (!Number.isInteger(result.actualTests) || result.actualTests < minimum ||
+                  result.passed !== result.actualTests || result.failed !== 0 || result.pending !== 0 ||
+                  tests.length !== result.actualTests || tests.some(test => test.status !== 'passed') || report.success !== true) {
+                errors.push(`${name}: incomplete, failed, skipped or below required test coverage`);
+              }
+              return result;
+            } catch {
+              errors.push(`${name}: unreadable actual test report`);
+              return { status: 'invalid-report', actualTests: null, requiredMinimum: minimum };
+            }
+          }
+          const reports = { current: readReport('current', 132), progress: readReport('progress', 47), native: readReport('native', 7) };
+          const counts = Object.values(reports).map(report => report.actualTests);
+          const summary = { commit: process.env.GITHUB_SHA, platform: process.env.NATIVE_EXPECTED_PLATFORM,
+            arch: process.env.DATA_SOURCE_NATIVE_ARCH, phases, reports,
+            actualTotalTests: counts.every(Number.isInteger) ? counts.reduce((sum, count) => sum + count, 0) : null,
+            status: errors.length ? 'failed' : 'passed', errors, installerPublished: false };
+          fs.writeFileSync(path.join(directory, 'verification-summary.json'), JSON.stringify(summary, null, 2));
+          const text = `Commit: ${summary.commit}\nPlatform: ${summary.platform}\nArchitecture: ${summary.arch}\n` +
+            Object.entries(reports).map(([name, report]) => `${name}: actual=${report.actualTests ?? 'unreported'}, minimum=${report.requiredMinimum}, status=${report.status}`).join('\n') +
+            `\nTypecheck: ${phases.typecheck}\nApp build: ${phases.build}\nResult: ${summary.status}\n` + errors.join('\n');
+          fs.writeFileSync(path.join(directory, 'verification-summary.txt'), text + '\n');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '```text\n' + text + '\n```\n');
+          console.log(text);
+          if (errors.length) process.exitCode = 1;
+          '@
+          & node -e $program 2>&1 | Tee-Object -FilePath "$env:NATIVE_EVIDENCE/summary.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Native verification incomplete or failed; inspect the evidence artifact.' }
+
+      - name: Upload only verification logs and actual reports, including failures
+        if: ${{ always() && steps.evidence.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-source-native-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ env.NATIVE_EVIDENCE }}/initial-context.json
+            ${{ env.NATIVE_EVIDENCE }}/runtime.json
+            ${{ env.NATIVE_EVIDENCE }}/*.log
+            ${{ env.NATIVE_EVIDENCE }}/*-tests.json
+            ${{ env.NATIVE_EVIDENCE }}/verification-summary.json
+            ${{ env.NATIVE_EVIDENCE }}/verification-summary.txt

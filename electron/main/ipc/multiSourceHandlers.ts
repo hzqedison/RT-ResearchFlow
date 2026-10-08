@@ -5,6 +5,8 @@ import { getMultiSourcePreference, updateMultiSourcePreference } from '../databa
 import { fetchSelectedStockDaily } from '../services/multiSourceMarketService'
 import { getSelectedResearchReports, queryWencai } from '../services/multiSourceResearchService'
 import { callPythonDataSource, dataBridgeMessage, installSelectedDataSourceExtensions } from '../services/pythonDataSourceBridge'
+import { fetchPublicLimitUpPool } from '../services/publicLimitPoolAdapter'
+import { readVerifiedPublicLimitPool, syncVerifiedPublicLimitPool } from '../services/verifiedPublicLimitPoolCache'
 import { DAILY_DATA_PROVIDERS, type DataProbeProvider, type DataSourceProbeResult } from '../../shared/dataSourceTypes'
 
 export function registerMultiSourceHandlers(getWindow: TrustedWindowGetter): void {
@@ -32,10 +34,28 @@ export function registerMultiSourceHandlers(getWindow: TrustedWindowGetter): voi
     try { return { ok: true, ...await queryWencai(getDb(), String(data?.query ?? '')) } }
     catch (error) { return { ok: false, message: error instanceof Error ? error.message : '问财查询未完成。' } }
   })
-  registerTrustedIpcHandler('datasource:probe', getWindow, async (_event, data: { provider?: unknown; stockCode?: unknown }): Promise<DataSourceProbeResult> => {
+  registerTrustedIpcHandler('datasource:probe', getWindow, async (_event, data: { provider?: unknown; stockCode?: unknown; tradeDate?: unknown }): Promise<DataSourceProbeResult> => {
     const provider = String(data?.provider ?? '') as DataProbeProvider
     const stockCode = String(data?.stockCode ?? '000001')
     try {
+      if (provider === 'akshare-limit-pool') {
+        const tradeDate = String(data?.tradeDate ?? '')
+        if (!/^\d{8}$/.test(tradeDate)) {
+          return { ok: false, provider, message: '请选择有效的交易日期。' }
+        }
+        const config = getMultiSourcePreference(getDb())
+        if (!config.dailyProviders.includes('akshare')) {
+          return { ok: false, provider, message: '请先选择 AKShare 并安装所选本地扩展。' }
+        }
+        const result = await fetchPublicLimitUpPool(config, tradeDate)
+        const detail = result.missingFields.length > 0 ? `；缺失字段：${result.missingFields.join('、')}` : ''
+        return {
+          ok: result.state === 'available', provider, rows: result.rows.length,
+          message: result.state === 'unavailable'
+            ? `请求日期 ${tradeDate} 未取得近期涨停池；不代表当天没有涨停股票。`
+            : `请求日期 ${tradeDate}，取得 ${result.rows.length} 条，拒收 ${result.rejectedRows} 条${detail}。仅为公开源样本，未写入策略库或核验实际交易日。`,
+        }
+      }
       if (provider === 'iwencai') {
         const result = await queryWencai(getDb(), stockCode)
         return { ok: result.rows.length > 0, provider, rows: result.rows.length, message: '取得问财样本结果；不代表交易已开通。' }
@@ -53,6 +73,17 @@ export function registerMultiSourceHandlers(getWindow: TrustedWindowGetter): voi
         ? error.message : dataBridgeMessage(error) }
     }
   })
+  registerTrustedIpcHandler('datasource:syncPublicLimitPool', getWindow, async (_event, data: { tradeDate?: unknown }) => {
+    try {
+      return await syncVerifiedPublicLimitPool(
+        getDb(), getMultiSourcePreference(getDb()), String(data?.tradeDate ?? ''),
+      )
+    } catch (error) {
+      return { ok: false, tradeDate: typeof data?.tradeDate === 'string' && /^\d{8}$/.test(data.tradeDate) ? data.tradeDate : '', quality: 'blocked' as const, rows: 0, message: dataBridgeMessage(error) }
+    }
+  })
+  registerTrustedIpcHandler('datasource:listVerifiedPublicLimitPool', getWindow, () =>
+    readVerifiedPublicLimitPool(getDb()))
   registerTrustedIpcHandler('datasource:openSourceLink', getWindow, async (_event, input: unknown) => {
     try {
       const url = new URL(String(input))

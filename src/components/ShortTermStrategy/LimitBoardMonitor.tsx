@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNod
 import { useAppStore } from '../../store/appStore'
 import { StockKlineChipDrawer } from '../shared/StockMiniChart'
 import { SHORT_TERM_WORKBENCH_ACTION_CLASS, ShortTermCombobox, type ShortTermComboboxOption } from './ShortTermDecisionControls'
+import { PublicLimitPoolObservation } from './PublicLimitPoolObservation'
+import type { PublicLimitPoolFilters, PublicLimitPoolObservationSnapshot } from './publicLimitPoolViewModel'
 
 type LimitTimeWindow = 'before1030' | 'between1030_1130' | 'after1300' | 'unknown'
 type QualityTier = 'focus' | 'watch' | 'fragile'
@@ -180,6 +182,11 @@ interface LimitBoardMonitorProps {
 export function LimitBoardMonitor({ dataTools, onOpenHistory }: LimitBoardMonitorProps): JSX.Element {
   const navigateToStock = useAppStore((state) => state.navigateToStock)
   const [snapshot, setSnapshot] = useState<LimitBoardSnapshot | null>(null)
+  const [publicPool, setPublicPool] = useState<PublicLimitPoolObservationSnapshot | null>(null)
+  const [publicPoolError, setPublicPoolError] = useState(false)
+  const [publicPoolLoading, setPublicPoolLoading] = useState(true)
+  const [publicFilters, setPublicFilters] = useState<PublicLimitPoolFilters>({ minBoards: null, maxOpens: null })
+  const publicRequestRef = useRef(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>('all')
@@ -210,6 +217,25 @@ export function LimitBoardMonitor({ dataTools, onOpenHistory }: LimitBoardMonito
   }, [])
 
   useEffect(() => { void loadSnapshot(false) }, [loadSnapshot])
+
+  const loadPublicPool = useCallback(async (): Promise<void> => {
+    const requestId = ++publicRequestRef.current
+    setPublicPoolLoading(true)
+    try {
+      const result = await window.api.datasource.listVerifiedPublicLimitPool()
+      if (publicRequestRef.current !== requestId) return
+      setPublicPool(result)
+      setPublicPoolError(false)
+    } catch {
+      if (publicRequestRef.current === requestId) setPublicPoolError(true)
+    } finally {
+      if (publicRequestRef.current === requestId) setPublicPoolLoading(false)
+    }
+  }, [])
+  useEffect(() => {
+    void loadPublicPool()
+    return () => { publicRequestRef.current++ }
+  }, [loadPublicPool])
 
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current)
@@ -300,6 +326,11 @@ export function LimitBoardMonitor({ dataTools, onOpenHistory }: LimitBoardMonito
           <button type="button" onClick={() => void loadSnapshot(true)} className="h-11 px-3 font-medium underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30">重试</button>
         </div>
       )}
+
+      <PublicLimitPoolObservation snapshot={publicPool} loading={publicPoolLoading} readFailed={publicPoolError}
+        defaultExpanded={!snapshot?.stocks.length}
+        filters={publicFilters} onFiltersChange={setPublicFilters} onRefresh={() => void loadPublicPool()}
+        onOpenStock={row => setDrawerStock({ tsCode: row.tsCode, stockCode: row.tsCode.slice(0, 6), stockName: row.name ?? row.tsCode })} />
 
       {snapshot && (
         <section data-testid="limit-board-conclusion" className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">

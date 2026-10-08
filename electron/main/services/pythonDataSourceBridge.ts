@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import { mkdir } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import type { MultiSourcePreference } from '../../shared/dataSourceTypes'
+import { minimumDataSourcePythonMinor, supportsDataSourcePython } from '../../shared/pythonSourceRequirements'
 
 // Packages are optional, installed into a private venv, never the system Python.
 // JSON travels through stdin, not command arguments. Raw package logs are discarded.
@@ -28,6 +29,16 @@ def execute():
         frame = ak.stock_zh_a_hist(symbol=request["stockCode"], period="daily",
             start_date=request["startDate"], end_date=request["endDate"], adjust="", timeout=12)
         return records(frame, 481)
+    if op == "akshare-limit-pool":
+        import akshare as ak
+        date = request["tradeDate"]
+        if not isinstance(date, str) or len(date) != 8 or not date.isdigit():
+            raise ValueError("invalid trade date")
+        datetime.datetime.strptime(date, "%Y%m%d")
+        frame = ak.stock_zt_pool_em(date=date)
+        if frame is not None and len(frame) > 2500:
+            raise ValueError("limit pool exceeds safe response size")
+        return records(frame, 2500)
     if op == "akshare-reports":
         import akshare as ak
         frame = ak.stock_research_report_em(symbol=request["stockCode"])
@@ -65,7 +76,8 @@ interface BridgeEnvelope {
 }
 
 const bridgeMessages: Record<string, string> = {
-  PYTHON_UNAVAILABLE: '未找到可运行的 Python。请安装 Python 3.10 或以上，或在扩展设置中选择解释器。',
+  PYTHON_UNAVAILABLE: '未找到可运行的 Python。AKShare 需要 Python 3.11+，其他本地扩展需要 Python 3.10+；请在扩展设置中选择解释器。',
+  AKSHARE_PYTHON_VERSION_UNSUPPORTED: '所选 AKShare 扩展需要 Python 3.11 或以上。请先选择符合要求的解释器，原有数据源和数据保持不变。',
   DEPENDENCY_NOT_INSTALLED: '本地扩展依赖未安装。请点击“安装所选扩展”，腾讯和东财不受影响。',
   SOURCE_REQUEST_FAILED: '扩展未取得数据，可能是网络、上游接口、登录权限或 Node.js 运行时问题；不会重试绕过验证码。',
   BRIDGE_TIMEOUT: '本地数据扩展请求超时，已停止本次请求。',
@@ -86,7 +98,8 @@ function pythonExecutable(config: MultiSourcePreference): string {
 
 function runPython(executable: string, args: string[], input = '', timeoutMs = 25_000, collect = true): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, {
+    // Isolated mode ignores PYTHONUTF8. Explicit UTF-8 also protects Chinese stdin/JSON on Windows.
+    const child = spawn(executable, ['-X', 'utf8', ...args], {
       shell: false,
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -164,8 +177,9 @@ export function installSelectedDataSourceExtensions(config: MultiSourcePreferenc
     await mkdir(join(root, 'tmp'), { recursive: true })
     const envDir = join(root, 'python-venv')
     const status = await callPythonDataSource(config, { operation: 'status' }) as { python?: string }
-    const version = String(status.python ?? '').split('.').map(Number)
-    if (version[0] !== 3 || version[1] < 10) throw new Error('PYTHON_UNAVAILABLE')
+    if (!supportsDataSourcePython(String(status.python ?? ''), config)) {
+      throw new Error(minimumDataSourcePythonMinor(config) === 11 ? 'AKSHARE_PYTHON_VERSION_UNSUPPORTED' : 'PYTHON_UNAVAILABLE')
+    }
     await runPython(pythonExecutable(config), ['-I', '-m', 'venv', envDir], '', 90_000, false)
     const managed = process.platform === 'win32' ? join(envDir, 'Scripts', 'python.exe') : join(envDir, 'bin', 'python')
     await runPython(managed, ['-I', '-m', 'pip', 'install', '--disable-pip-version-check',

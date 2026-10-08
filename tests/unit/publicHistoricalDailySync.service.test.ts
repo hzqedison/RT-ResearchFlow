@@ -61,6 +61,21 @@ describe('public historical daily sync', () => {
     for (const db of databases.splice(0)) db.close()
   })
 
+  it('uses the injected network client when the stock universe is empty', async () => {
+    const db = createDb()
+    databases.push(db)
+    db.prepare('DELETE FROM stock_basic_cache').run()
+    let requests = 0
+    const fetchImpl: typeof fetch = async () => {
+      requests += 1
+      return new Response('unavailable', { status: 503 })
+    }
+
+    await expect(runPublicHistoricalDailySync(db, '20260814', { fetchImpl }))
+      .rejects.toMatchObject({ code: 'PUBLIC_STOCK_UNIVERSE_HTTP_503' })
+    expect(requests).toBe(1)
+  })
+
   it('falls back to Tencent only for failed Shanghai/Shenzhen stocks and resumes from checkpoints', async () => {
     const db = createDb()
     databases.push(db)

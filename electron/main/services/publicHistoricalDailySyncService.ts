@@ -25,6 +25,7 @@ import {
   type PersistentPublicMarketRequestGovernor,
 } from './publicMarketRequestGovernor'
 import type { DailyRow } from './tushareService'
+import { runPublicStockUniverseSync } from './publicStockUniverseService'
 
 const PUBLIC_DAILY_JOB_KEY = 'historical_daily_public'
 const TARGET_TRADE_DAYS = 480
@@ -262,7 +263,11 @@ export function runPublicHistoricalDailySync(
 
   let promise: Promise<PublicHistoricalDailySyncResult>
   promise = (async () => {
-    const activeStocks = queryAllActive(db)
+    let activeStocks = queryAllActive(db)
+    if (activeStocks.length === 0) {
+      await runPublicStockUniverseSync(db, dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {})
+      activeStocks = queryAllActive(db)
+    }
     if (activeStocks.length === 0) throw errorWithCode('PUBLIC_STOCK_UNIVERSE_NOT_READY')
     const pendingCodes = listPendingPublicDailyCodes(db, targetEndDate, TARGET_TRADE_DAYS)
     const activeStockByCode = new Map(activeStocks.map(stock => [stock.tsCode, stock]))
@@ -437,7 +442,10 @@ export function runStartupPublicHistoricalDailySyncIfNeeded(
   dependencies: PublicHistoricalDailyDependencies = {},
 ): Promise<PublicHistoricalDailySyncResult | null> {
   const job = getPublicMarketSyncJob(db, PUBLIC_DAILY_JOB_KEY)
-  if (!job || !['running', 'partial', 'cooldown'].includes(job.status)) return Promise.resolve(null)
+  if (!job) return Promise.resolve(null)
+  const failedBeforeUniverseReady = job.status === 'failed' && job.message === 'PUBLIC_STOCK_UNIVERSE_NOT_READY'
+  if (failedBeforeUniverseReady && queryAllActive(db).length === 0) return Promise.resolve(null)
+  if (!failedBeforeUniverseReady && !['running', 'partial', 'cooldown'].includes(job.status)) return Promise.resolve(null)
   if (job.status === 'cooldown') {
     const now = dependencies.now?.() ?? Date.now()
     const resumeAt = Math.max(

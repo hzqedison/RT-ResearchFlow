@@ -5,6 +5,8 @@ import { getDiagnosticsHealth, runDiagnosticAction, type DiagnosticRunAction } f
 import { recordSupportFailure } from '../services/supportDiagnosticsService'
 import type { SupportErrorCode } from '../../shared/supportDiagnostics'
 import { FACT_REASON_MESSAGES } from '../../shared/dataReadiness'
+import { getHistoricalDailyProgress } from '../services/historicalDailyProgressService'
+import { isPublicHistoricalDailySyncRunning } from '../services/publicHistoricalDailySyncService'
 
 const ALLOWED_ACTIONS: DiagnosticRunAction[] = [
   'refreshHealth',
@@ -96,6 +98,14 @@ function toSupportErrorCode(code: string): SupportErrorCode {
 }
 
 export function registerDiagnosticsHandlers(getWindow: TrustedWindowGetter): void {
+  registerTrustedIpcHandler('diagnostics:getHistoricalDailyProgress', getWindow, () => {
+    try {
+      return { ok: true as const, data: getHistoricalDailyProgress(getDb(), isPublicHistoricalDailySyncRunning()) }
+    } catch {
+      return { ok: false as const, message: '暂时无法读取日线任务进度，后台任务不会因此重启或停止。' }
+    }
+  })
+
   registerTrustedIpcHandler('diagnostics:getHealth', getWindow, () => {
     try {
       return { ok: true as const, data: getDiagnosticsHealth(getDb()) }

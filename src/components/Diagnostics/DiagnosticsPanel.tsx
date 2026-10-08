@@ -3,6 +3,7 @@ import type { ConfigDrawerTab } from '../ConfigDrawer/ConfigDrawer'
 import { getFlowProgress, INITIALIZATION_SCOPE_MESSAGE, type InitializationFlowState } from '../Onboarding/initializationTaskModel'
 import type { ConceptSource, DiagnosticReadiness, EvaluationCounts } from '../../../electron/shared/dataReadiness'
 import { AIQualityEvaluation } from './AIQualityEvaluation'
+import { HistoricalDailyProgressCard } from '../DataSource/HistoricalDailyProgressCard'
 import { SupportFeedbackPanel } from './SupportFeedbackPanel'
 import { DATA_SAFETY_STATUS_META, exportScopeLabel, formatBytes, formatDateTime, type DataBackupResult, type DataExportResult, type DataExportScope, type DataSafetyStatus } from './dataSafetyModel'
 
@@ -411,6 +412,7 @@ export function DiagnosticsPanel({ onNavigateConfig, onOpenGuide, initialization
   return (
     <div data-testid="diagnostics-panel" className="h-full overflow-y-auto bg-gray-50 dark:bg-gray-950 p-5">
       <div className="mx-auto max-w-5xl space-y-4">
+        <HistoricalDailyProgressCard />
         <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
           <div>
             <div className="flex items-center gap-2">
