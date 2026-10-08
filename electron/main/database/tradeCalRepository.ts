@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3'
 import { TradeCalRow } from './types'
+import { isOfficialSseTradingDay, getPreviousOfficialSseTradingDay } from '../../shared/officialSseTradingCalendar'
 
 /**
  * 批量写入/更新交易日历（幂等，INSERT OR REPLACE）
@@ -20,21 +21,13 @@ export function upsertTradeCal(db: Database.Database, rows: TradeCalRow[]): void
 
 /**
  * 查询指定日期是否为交易日。
- * 返回 true/false；trade_cal 表为空或无该日记录时返回 null（触发 fallback）
+ * 优先返回本地记录，缺失时查官方已公布范围；范围外返回 null（未知）
  */
 export function isTradeDay(db: Database.Database, calDate: string): boolean | null {
   const row = db
     .prepare('SELECT is_open FROM trade_cal WHERE cal_date = ?')
     .get(calDate) as { is_open: number } | undefined
-  if (row === undefined) {
-    // 检查表是否完全为空
-    const count = (
-      db.prepare('SELECT COUNT(*) as cnt FROM trade_cal').get() as { cnt: number }
-    ).cnt
-    if (count === 0) return null
-    // 表有数据但无该日期记录：该日为非交易日（节假日补录缺失，保守返回 false）
-    return false
-  }
+  if (row === undefined) return isOfficialSseTradingDay(calDate)
   return row.is_open === 1
 }
 
@@ -46,7 +39,7 @@ export function getPrevTradeDay(db: Database.Database, calDate: string): string 
   const row = db
     .prepare('SELECT pretrade_date FROM trade_cal WHERE cal_date = ?')
     .get(calDate) as { pretrade_date: string | null } | undefined
-  return row?.pretrade_date ?? null
+  return row === undefined ? getPreviousOfficialSseTradingDay(calDate) : row.pretrade_date
 }
 
 /**
@@ -107,4 +100,77 @@ export function getLatestCalDate(db: Database.Database): string | null {
     .prepare('SELECT MAX(cal_date) as latest FROM trade_cal')
     .get() as { latest: string | null }
   return row?.latest ?? null
+}
+
+function parseCalendarDate(ymd: string): Date | null {
+  if (!/^\d{8}$/.test(ymd)) return null
+  const date = new Date(Date.UTC(Number(ymd.slice(0, 4)), Number(ymd.slice(4, 6)) - 1, Number(ymd.slice(6, 8))))
+  return formatCalendarDate(date) === ymd ? date : null
+}
+
+function formatCalendarDate(date: Date): string {
+  return date.toISOString().slice(0, 10).replace(/-/g, '')
+}
+
+/** Every calendar date must have an explicit valid open/closed fact. */
+export function hasTradeCalCoverage(db: Database.Database, startDate: string, endDate: string): boolean {
+  const date = parseCalendarDate(startDate)
+  if (!date || !parseCalendarDate(endDate) || startDate > endDate) return false
+  const rows = db.prepare('SELECT cal_date, is_open FROM trade_cal WHERE cal_date BETWEEN ? AND ?')
+    .all(startDate, endDate) as { cal_date: string; is_open: number }[]
+  const facts = new Map(rows.map((row) => [row.cal_date, row.is_open]))
+  while (formatCalendarDate(date) <= endDate) {
+    const status = facts.get(formatCalendarDate(date))
+    if (status !== 0 && status !== 1) return false
+    date.setUTCDate(date.getUTCDate() + 1)
+  }
+  return true
+}
+
+/** Do not bridge a missing or invalid daily fact with an assumed predecessor. */
+function getVerifiedPredecessor(facts: Map<string, number>, calDate: string): string | null {
+  const date = parseCalendarDate(calDate)
+  if (!date) return null
+  for (;;) {
+    date.setUTCDate(date.getUTCDate() - 1)
+    const ymd = formatCalendarDate(date)
+    const status = facts.get(ymd)
+    if (status === 1) return ymd
+    if (status !== 0) return null
+  }
+}
+
+/** Only fill absent dates; retain existing facts and report schedule differences. */
+export function insertTradeCalIfMissing(
+  db: Database.Database,
+  rows: TradeCalRow[],
+): { insertedRows: number; conflictRows: number; firstConflictDate: string | null } {
+  const existing = db.prepare('SELECT is_open, pretrade_date FROM trade_cal WHERE cal_date = ?')
+  const insert = db.prepare('INSERT OR IGNORE INTO trade_cal (cal_date, is_open, pretrade_date) VALUES (?, ?, ?)')
+  return db.transaction(() => {
+    const stored = db.prepare('SELECT cal_date, is_open FROM trade_cal').all() as { cal_date: string; is_open: number }[]
+    const facts = new Map(stored.map((row) => [row.cal_date, row.is_open]))
+    let insertedRows = 0
+    let conflictRows = 0
+    let firstConflictDate: string | null = null
+    for (const row of [...rows].sort((a, b) => a.calDate.localeCompare(b.calDate))) {
+      if (!parseCalendarDate(row.calDate) || (row.isOpen !== 0 && row.isOpen !== 1)) {
+        throw new Error('INVALID_CALENDAR_ROW')
+      }
+      const previous = getVerifiedPredecessor(facts, row.calDate)
+      const current = existing.get(row.calDate) as { is_open: number; pretrade_date: string | null } | undefined
+      if (current) {
+        const differs = current.is_open !== row.isOpen
+          || (current.pretrade_date !== null && previous !== null && current.pretrade_date !== previous)
+        if (differs) {
+          conflictRows += 1
+          firstConflictDate ??= row.calDate
+        }
+        continue
+      }
+      insertedRows += insert.run(row.calDate, row.isOpen, previous).changes
+      facts.set(row.calDate, row.isOpen)
+    }
+    return { insertedRows, conflictRows, firstConflictDate }
+  })()
 }

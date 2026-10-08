@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { AppUpdates } from '../AppUpdates/AppUpdates'
 import { SourceManager } from '../SourceManager/SourceManager'
 import { Settings } from '../Settings/Settings'
 import { AIConfig } from '../AIConfig/AIConfig'
@@ -9,7 +10,7 @@ import { PriorityNewsPreviewDevPanel } from './PriorityNewsPreviewDevPanel'
 import type { InitializationFlowState } from '../Onboarding/initializationTaskModel'
 import type { PriorityNewsPreviewState } from '../DecisionSignalToast/useDecisionSignalToastPreview'
 
-export type ConfigDrawerTab = 'sources' | 'settings' | 'appearance' | 'ai-config' | 'datasource' | 'diagnostics' | 'user-tier-dev' | 'notification-preview-dev'
+export type ConfigDrawerTab = 'sources' | 'settings' | 'appearance' | 'ai-config' | 'datasource' | 'app-updates' | 'diagnostics' | 'user-tier-dev' | 'notification-preview-dev'
 
 interface ConfigDrawerProps {
   open: boolean
@@ -33,6 +34,7 @@ const CONFIG_TABS: Array<{ key: ConfigDrawerTab; label: string }> = [
   { key: 'appearance', label: '外观' },
   { key: 'ai-config', label: 'AI配置' },
   { key: 'datasource', label: '数据源' },
+  { key: 'app-updates', label: '应用更新' },
   { key: 'diagnostics', label: '诊断' },
   ...(import.meta.env.DEV ? [
     { key: 'user-tier-dev' as const, label: '用户层级' },
@@ -61,9 +63,9 @@ export function ConfigDrawer({ open, activeTab, onTabChange, onClose, onOpenGuid
         onClick={onClose}
       />
       <aside className="electron-no-drag relative z-[71] flex h-full w-[min(920px,92vw)] flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl animate-[slideInFromRight_180ms_ease-out]">
-        <div className="electron-no-drag flex items-center gap-3 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
+        <div className="electron-no-drag flex flex-wrap items-center gap-3 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
           <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">配置中心</div>
-          <div className="electron-no-drag flex rounded border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="electron-no-drag flex max-w-full flex-wrap rounded border border-gray-200 dark:border-gray-700 overflow-hidden">
             {CONFIG_TABS.map(tab => (
               <button
                 key={tab.key}
@@ -168,6 +170,11 @@ export function ConfigDrawer({ open, activeTab, onTabChange, onClose, onOpenGuid
           {activeTab === 'datasource' && (
             <div data-testid="config-panel-datasource" className="h-full overflow-y-auto">
               <DataSource />
+            </div>
+          )}
+          {activeTab === 'app-updates' && (
+            <div data-testid="config-panel-app-updates" className="h-full overflow-hidden">
+              <AppUpdates />
             </div>
           )}
           {activeTab === 'diagnostics' && (

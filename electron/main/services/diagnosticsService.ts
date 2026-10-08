@@ -28,14 +28,18 @@ import {
   type DataQualitySnapshot,
 } from './dataQualityService'
 import { syncTradeCalFull } from './tradeCalSyncService'
+import { OFFICIAL_SSE_CALENDAR_LABEL } from '../../shared/officialSseTradingCalendar'
 import { fetchIndexDailyForCodes, getTushareAccessErrorCode } from './tushareService'
 import { getPublicMarketSyncJob } from '../database/publicMarketDataRepository'
 import { runPublicHistoricalDailySync } from './publicHistoricalDailySyncService'
+import { readKnownCalendar, resolveCompletedTradeDate, resolveFactDates, tradingDayAge } from './dataReadinessService'
+import { getReadinessAttempt, syncDiagnosticFacts } from './diagnosticFactSyncService'
+import { evaluationCounts, factReceiptMessage, type ConceptSource, type DiagnosticReadiness, type EvaluationCounts, type FactSyncReceipt } from '../../shared/dataReadiness'
 
 export type DiagnosticStatus = 'ok' | 'warning' | 'error'
 export type DiagnosticGroupKey = 'config' | 'freshness' | 'sync' | 'database'
-export type DiagnosticActionKey = 'open-datasource' | 'open-ai-config' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals'
-export type DiagnosticRunAction = 'refreshHealth' | 'refreshDataQuality' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals'
+export type DiagnosticActionKey = 'open-datasource' | 'open-ai-config' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals' | 'syncAuctionSnapshot' | 'syncLimitList'
+export type DiagnosticRunAction = 'refreshHealth' | 'refreshDataQuality' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals' | 'syncAuctionSnapshot' | 'syncLimitList'
 
 export interface DiagnosticAction {
   key: DiagnosticActionKey
@@ -43,7 +47,7 @@ export interface DiagnosticAction {
   kind: 'navigate' | 'run'
 }
 
-export interface DiagnosticItem {
+export interface DiagnosticItem extends DiagnosticReadiness {
   key: string
   title: string
   status: DiagnosticStatus
@@ -64,7 +68,8 @@ export interface DiagnosticGroup {
 export interface DiagnosticsHealthSnapshot {
   status: DiagnosticStatus
   checkedAt: number
-  summary: Record<DiagnosticStatus, number>
+  summary: Record<DiagnosticStatus, number> & Partial<EvaluationCounts>
+  selectedConceptSource?: ConceptSource
   groups: DiagnosticGroup[]
   dailyCloseQuality?: DailyCloseQuality
   dataQuality?: DataQualitySnapshot
@@ -94,7 +99,7 @@ export interface DailyCloseQuality {
   cleanup: DailyCloseCleanupState
 }
 
-export interface DiagnosticRunResult {
+export interface DiagnosticRunResult extends Partial<FactSyncReceipt> {
   action: DiagnosticRunAction
   status: 'completed' | 'started'
   message: string
@@ -181,8 +186,9 @@ function rankStatus(statuses: DiagnosticStatus[]): DiagnosticStatus {
 }
 
 function getHistoricalDailyCoverage(db: Database.Database): { covered: number; target: number; hasTradeCal: boolean } {
-  const endDate = getHistoricalDailyDefaultEndDate()
-  const tradeDays = getLastNTradingDays(db, HISTORICAL_DAILY_TARGET_TRADE_DAYS, endDate)
+  let endDate: string | null = null
+  try { endDate = resolveCompletedTradeDate(readKnownCalendar(db), Date.now()) } catch { /* no inferred trading date */ }
+  const tradeDays = endDate ? getLastNTradingDays(db, HISTORICAL_DAILY_TARGET_TRADE_DAYS, endDate) : []
   if (tradeDays.length > 0) {
     const counts = countDailyCloseByTradeDates(db, tradeDays)
     const covered = tradeDays.filter((tradeDate) => (counts.get(tradeDate) ?? 0) >= HISTORICAL_DAILY_COMPLETE_ROW_THRESHOLD).length
@@ -207,7 +213,7 @@ function buildConfigGroup(db: Database.Database, checkedAt: number): DiagnosticG
     title: 'Tushare 配置',
     status: hasTushare ? 'ok' : 'warning',
     message: hasTushare ? 'Tushare 已启用且 Token 已保存' : '尚未启用或保存 Tushare Token',
-    detail: '股票搜索、行情同步、短线策略、筹码和趋势评分依赖该配置。',
+    detail: '基础证券、历史日线和已公布交易日历可走免 Key 路径；竞价、专业题材、筹码等接口仍需相应数据权限。',
     checkedAt,
     actions: hasTushare ? [] : [{ key: 'open-datasource', label: '打开数据源配置', kind: 'navigate' }]
   })
@@ -236,6 +242,17 @@ function buildConfigGroup(db: Database.Database, checkedAt: number): DiagnosticG
 }
 
 function buildFreshnessItem(db: Database.Database, spec: TableFreshnessSpec, checkedAt: number): DiagnosticItem {
+  const selectedSource = getConceptSource()
+  const source = ({ kplConcept: 'kpl', thsConcept: 'ths', dcConcept: 'dc' } as const)[spec.key as 'kplConcept' | 'thsConcept' | 'dcConcept']
+  if (source && source !== selectedSource) {
+    return {
+      key: `freshness.${spec.key}`, title: spec.title, status: 'warning', displayStatus: 'neutral',
+      message: `未选择 ${source.toUpperCase()}；当前使用 ${selectedSource.toUpperCase()}，本项不参与健康评价，不表示已就绪。`,
+      recordCount: tableExists(db, spec.table) ? countRows(db, spec.table) : null, checkedAt,
+      evidence: { applicability: 'not_selected', readiness: 'not_applicable', reasonCode: 'NOT_SELECTED', selectedSource },
+      actions: [{ key: 'open-datasource', label: '选择题材源', kind: 'navigate' }],
+    }
+  }
   if (!tableExists(db, spec.table)) {
     return {
       key: `freshness.${spec.key}`,
@@ -263,7 +280,7 @@ function buildFreshnessItem(db: Database.Database, spec: TableFreshnessSpec, che
   }
   if (spec.key === 'dailyClose' && recordCount > 0) {
     const coverage = getHistoricalDailyCoverage(db)
-    const sufficient = coverage.covered >= coverage.target
+    const sufficient = coverage.hasTradeCal && coverage.covered >= coverage.target
     if (sufficient) {
       message = `近 2 年日线底座已覆盖 ${coverage.covered}/${coverage.target} 个交易日, 可用于全市场扫描。`
     } else {
@@ -274,19 +291,77 @@ function buildFreshnessItem(db: Database.Database, spec: TableFreshnessSpec, che
   }
   if (recordCount === 0) {
     status = 'warning'
-  } else if (spec.staleDays && latestDate) {
+  } else if (spec.staleDays && latestDate && ['stockBasic', 'decisionSignals'].includes(spec.key)) {
     const age = daysSince(latestDate)
     if (age !== null && age > spec.staleDays) {
       status = 'warning'
-      message = `${message} 最近数据为 ${latestDate}, 可能偏旧。`
+      message = `${message} 最近数据为 ${latestDate}, 超过自然日维护 TTL，可能偏旧；这不是市场交易日缺口。`
     }
   }
 
   const actions: DiagnosticAction[] = []
+  let displayStatus: 'neutral' | undefined
+  let evidence: DiagnosticReadiness['evidence'] = {
+    applicability: source ? 'selected' : ['chipResults', 'trendScores', 'decisionSignals'].includes(spec.key) ? 'derived' : spec.key === 'minute' ? 'on_demand' : 'required',
+    readiness: recordCount === 0 ? 'missing' : status === 'ok' ? 'ready' : 'partial',
+    reasonCode: recordCount === 0 ? 'LOCAL_DATA_MISSING' : 'LOCAL_FACTS_PRESENT',
+  }
+  if (spec.dateColumn === 'trade_date' && recordCount > 0 && latestDate) {
+    try {
+      const age = tradingDayAge(readKnownCalendar(db), latestDate, checkedAt)
+      evidence = { ...evidence, ...age, latestTradeDate: latestDate.replace(/-/g, ''), calendarBasis: 'local_verified' }
+      if (spec.staleDays && age.missingTradeDays > spec.staleDays) {
+        status = 'warning'; evidence.readiness = 'partial'; evidence.reasonCode = 'STALE_TRADING_DAYS'
+        message += ` 距最近应有交易日 ${age.expectedTradeDate} 缺少 ${age.missingTradeDays} 个交易日，需更新。`
+      }
+    } catch (error) {
+      status = 'warning'; evidence.readiness = 'unknown'; evidence.calendarBasis = 'unknown'
+      evidence.reasonCode = error instanceof Error && error.message === 'FACT_INVALID' ? 'FACT_INVALID' : 'CALENDAR_UNAVAILABLE'
+      message += ' 日期或交易日历无法核验，不能判定新鲜度正常；请检查并补齐交易日历。'
+      actions.push({ key: 'syncTradeCalendar', label: '补齐交易日历', kind: 'run' })
+    }
+  }
+  if (spec.key === 'minute' && recordCount === 0) {
+    displayStatus = 'neutral'
+    message = '尚无分钟缓存；按需打开个股分时/分钟图后采集。是否请求过及既往失败情况未知，不表示数据已齐备。'
+    evidence.readiness = 'unknown'; evidence.reasonCode = 'ON_DEMAND_EMPTY'
+  }
+  if (['chipResults', 'trendScores', 'decisionSignals'].includes(spec.key) && recordCount === 0) {
+    evidence.readiness = 'unknown'; evidence.reasonCode = 'DERIVED_EXECUTION_UNKNOWN'
+    message = spec.key === 'chipResults' ? '尚无筹码结果；请在筹码监控中选择目标并按需运行。执行历史及接口权限未知。'
+      : spec.key === 'trendScores' ? '尚无趋势评分；请在趋势看板选择范围并运行。没有执行证据，不能称未运行或成功。'
+        : '尚无本地看板信号；派生输入与执行历史未知。策略评估 0/0 表示没有可计算样本，不代表运行成功或胜率 0%。'
+  }
+  if (spec.key === 'limitList') {
+    actions.push({ key: 'syncLimitList', label: '补齐竞价前一交易日涨跌停', kind: 'run' })
+    try {
+      const dates = resolveFactDates(readKnownCalendar(db), checkedAt)
+      const targetRows = (db.prepare('SELECT COUNT(*) AS count FROM limit_list_daily WHERE trade_date = ? AND close > 0').get(dates.previousTradeDate) as { count: number }).count
+      evidence = { ...evidence, expectedTradeDate: dates.previousTradeDate, targetScope: 'auction-previous-session', calendarBasis: 'local_verified', readiness: targetRows > 0 ? 'partial' : 'missing', reasonCode: targetRows > 0 ? 'COVERAGE_UNKNOWN' : 'EXPECTED_DATE_MISSING' }
+      message = `${dates.auctionDate} 竞价分池需要 ${dates.previousTradeDate} 涨跌停事实；该日已有 ${targetRows} 条有效价格记录，覆盖与分池就绪仍需核验。`
+      status = 'warning'
+    } catch {
+      status = 'warning'; evidence = { ...evidence, readiness: 'unknown', reasonCode: 'CALENDAR_UNAVAILABLE', calendarBasis: 'unknown' }
+      message += ' 日历未知，无法确定精确前一交易日；请先补齐交易日历。'
+      if (!actions.some(action => action.key === 'syncTradeCalendar')) actions.push({ key: 'syncTradeCalendar', label: '补齐交易日历', kind: 'run' })
+    }
+    evidence.lastAttempt = getReadinessAttempt(db, 'syncLimitList')
+  }
+  if (source) {
+    const attempt = getReadinessAttempt(db, `concept/${source}`)
+    let expectedTradeDate: string | null = null
+    try { expectedTradeDate = resolveCompletedTradeDate(readKnownCalendar(db), checkedAt) } catch { /* unknown is not ready */ }
+    const currentSuccess = attempt?.outcome === 'success' && attempt.source === source && recordCount > 0
+      && (source === 'ths' ? checkedAt >= attempt.checkedAt && checkedAt - attempt.checkedAt <= 7 * 86_400_000 : expectedTradeDate !== null && attempt.targetDate === expectedTradeDate && (source !== 'dc' || latestDate?.replace(/-/g, '') === expectedTradeDate))
+    evidence = { applicability: 'selected', selectedSource, readiness: currentSuccess ? 'ready' : recordCount === 0 ? 'missing' : 'unknown', reasonCode: currentSuccess ? 'FACTS_SAVED' : recordCount === 0 ? 'SELECTED_SOURCE_EMPTY' : 'SYNC_SCOPE_UNKNOWN', expectedTradeDate, calendarBasis: expectedTradeDate ? 'local_verified' : 'unknown', targetScope: source === 'ths' ? 'complete-directory-members' : 'selected-source-session', access: attempt?.access ?? 'unknown', lastAttempt: attempt }
+    status = currentSuccess ? 'ok' : 'warning'
+    message = `当前题材源 ${source.toUpperCase()}，已有 ${recordCount} 条；${currentSuccess ? '本次目标范围已核验并保存' : recordCount === 0 ? '尚缺题材事实，初始化可能延后此项；Token 不证明接口权限' : '既有同步日期/完整范围未知，请按当前源核验同步'}。`
+    if (attempt && attempt.outcome !== 'success') message += ` 最近尝试：${factReceiptMessage(attempt)}`
+  }
   if (spec.key === 'stockBasic') actions.push({ key: 'syncStockBasic', label: '同步股票基础数据', kind: 'run' })
   if (spec.key === 'dailyClose') actions.push({ key: 'syncHistoricalDaily', label: '同步全市场历史日线', kind: 'run' })
   if (spec.key === 'kplConcept' || spec.key === 'thsConcept' || spec.key === 'dcConcept') {
-    actions.push({ key: 'syncConceptMembers', label: '同步题材成分', kind: 'run' })
+    actions.push({ key: 'syncConceptMembers', label: `同步当前 ${selectedSource.toUpperCase()} 题材`, kind: 'run' })
   }
   if (spec.key === 'decisionSignals') actions.push({ key: 'backfillDecisionSignals', label: '刷新今日看板信号', kind: 'run' })
 
@@ -299,7 +374,9 @@ function buildFreshnessItem(db: Database.Database, spec: TableFreshnessSpec, che
     recordCount,
     latestDate,
     checkedAt,
-    actions
+    actions,
+    displayStatus,
+    evidence,
   }
 }
 
@@ -352,6 +429,15 @@ function buildSyncGroup(db: Database.Database, checkedAt: number): DiagnosticGro
       detail: '零Key路径按单股保存检查点，新浪主源、腾讯仅按需兜底沪深，不阻断基础入口。',
       checkedAt,
       actions: [{ key: 'syncHistoricalDaily', label: '立即同步', kind: 'run' }]
+    },
+    {
+      key: 'sync.tradeCalendar',
+      title: '交易日历同步',
+      status: 'ok',
+      message: '可直接补齐已公布的交易日历，无需 Token',
+      detail: '内置上交所 2024 至 2026 年年度安排，只补缺失日期；启用 Tushare 时保留其同步路线，范围外不猜测。',
+      checkedAt,
+      actions: [{ key: 'syncTradeCalendar', label: '补齐交易日历', kind: 'run' }],
     },
     {
       key: 'sync.conceptMembers',
@@ -429,8 +515,10 @@ function buildDailyCloseQuality(
 
 export function getDiagnosticsHealth(db: Database.Database): DiagnosticsHealthSnapshot {
   const checkedAt = Date.now()
+  let completedDate: string | undefined
+  try { completedDate = resolveCompletedTradeDate(readKnownCalendar(db), checkedAt) } catch { /* quality remains conservative */ }
   const dailyCloseSummary = tableExists(db, 'daily_close_cache')
-    ? getDailyCloseQualitySummary(db, getHistoricalDailyDefaultEndDate(checkedAt))
+    ? getDailyCloseQualitySummary(db, completedDate)
     : undefined
   const groups = [
     buildConfigGroup(db, checkedAt),
@@ -439,12 +527,13 @@ export function getDiagnosticsHealth(db: Database.Database): DiagnosticsHealthSn
     buildDatabaseGroup(db, checkedAt)
   ]
   const items = groups.flatMap((group) => group.items)
-  const summary: Record<DiagnosticStatus, number> = { ok: 0, warning: 0, error: 0 }
-  for (const item of items) summary[item.status] += 1
+  const summary = evaluationCounts(items, ['ok', 'warning', 'error']) as Record<DiagnosticStatus, number> & EvaluationCounts
+  const evaluated = items.filter(item => item.displayStatus !== 'neutral')
   return {
-    status: rankStatus(items.map((item) => item.status)),
+    status: evaluated.length ? rankStatus(evaluated.map((item) => item.status)) : 'warning',
     checkedAt,
     summary,
+    selectedConceptSource: getConceptSource(),
     groups,
     dailyCloseQuality: buildDailyCloseQuality(db, dailyCloseSummary),
     dataQuality: getDataQualitySnapshot(db, checkedAt, dailyCloseSummary),
@@ -507,12 +596,30 @@ export async function runDiagnosticAction(db: Database.Database, action: Diagnos
       }
     }
     case 'syncTradeCalendar': {
-      const token = ensureTushareConfigured(db)
+      const config = getDataSourceConfig(db)
+      let token: string | null = null
+      if (config.tushareEnabled && config.tushareTokenEncrypted) {
+        try {
+          token = decryptApiKey(config.tushareTokenEncrypted)
+        } catch {
+          console.warn('[Diagnostics] Saved Token unavailable; calendar can still use the no-Key route')
+        }
+      }
       const result = await syncTradeCalFull(db, token)
       persistDataQualitySnapshot(db)
       if (result.status === 'empty') throw new Error('TRADE_CAL_SYNC_EMPTY')
       if (result.status === 'failed') throw new Error('TRADE_CAL_SYNC_FAILED')
-      return { action, status: 'completed', message: `交易日历同步完成，写入 ${result.rowCount} 条并重新检查` }
+      const source = result.source === 'official-sse' ? OFFICIAL_SSE_CALENDAR_LABEL : 'Tushare'
+      const coverage = result.coverageStart && result.coverageEnd
+        ? `，范围 ${result.coverageStart} 至 ${result.coverageEnd}` : ''
+      const preserved = result.source === 'official-sse'
+        ? `，新增 ${result.insertedRows ?? 0} 条，已有数据未覆盖` : ''
+      const conflicts = result.conflictRows
+        ? `；${result.conflictRows} 条已有记录与年度安排不同，已保留，请查看质量说明` : ''
+      return {
+        action, status: 'completed',
+        message: `交易日历处理完成：${source}，${result.rowCount} 条${coverage}${preserved}${conflicts}`,
+      }
     }
     case 'syncHistoricalDaily': {
       const config = getDataSourceConfig(db)
@@ -579,11 +686,16 @@ export async function runDiagnosticAction(db: Database.Database, action: Diagnos
       persistDataQualitySnapshot(db)
       return { action, status: 'completed', message: `核心基准同步完成，写入 ${rows.length} 条指数日线` }
     }
-    case 'syncConceptMembers':
-      ensureTushareConfigured(db)
-      await runConceptMembersSyncJob()
-      persistDataQualitySnapshot(db)
-      return { action, status: 'completed', message: '题材成分同步已结束并重新检查' }
+    case 'syncAuctionSnapshot':
+    case 'syncLimitList': {
+      const receipt = await syncDiagnosticFacts(db, action)
+      return { action, status: 'completed', ...receipt, message: factReceiptMessage(receipt) }
+    }
+    case 'syncConceptMembers': {
+      const receipt = await runConceptMembersSyncJob()
+      if (!receipt) throw new Error('CONCEPT_PARTIAL')
+      return { action, status: 'completed', ...receipt, message: factReceiptMessage(receipt) }
+    }
     case 'backfillDecisionSignals':
       await ensureTodayDecisionSignalsBackfilled(db, true)
       return { action, status: 'completed', message: '今日看板信号已刷新' }

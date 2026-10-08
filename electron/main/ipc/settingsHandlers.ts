@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registerTrustedIpcHandler, type TrustedWindowGetter } from '../security/trustedIpc'
 import {
   getDecisionCenterFilters,
   getMarketHeatmapProvider,
@@ -12,12 +12,12 @@ import {
 import { reschedule } from '../services/schedulerService'
 import type { AppSettingsRow } from '../database/types'
 
-export function registerSettingsHandlers(): void {
-  ipcMain.handle('settings:get', () => {
+export function registerSettingsHandlers(getWindow: TrustedWindowGetter): void {
+  registerTrustedIpcHandler('settings:get', getWindow, () => {
     return getSettings()
   })
 
-  ipcMain.handle('settings:update', (_e, data: Partial<Omit<AppSettingsRow, 'id'>>) => {
+  registerTrustedIpcHandler('settings:update', getWindow, (_e, data: Partial<Omit<AppSettingsRow, 'id'>>) => {
     const updated = updateSettings(data)
     // If scan interval changed, reschedule
     if (data.scanIntervalMinutes !== undefined) {
@@ -26,25 +26,25 @@ export function registerSettingsHandlers(): void {
     return updated
   })
 
-  ipcMain.handle('settings:getDecisionCenterFilters', () => getDecisionCenterFilters())
+  registerTrustedIpcHandler('settings:getDecisionCenterFilters', getWindow, () => getDecisionCenterFilters())
 
-  ipcMain.handle('settings:setDecisionCenterFilters', (_e, filters: unknown) => (
+  registerTrustedIpcHandler('settings:setDecisionCenterFilters', getWindow, (_e, filters: unknown) => (
     setDecisionCenterFilters(filters)
   ))
 
-  ipcMain.handle('settings:getTheme', () => {
+  registerTrustedIpcHandler('settings:getTheme', getWindow, () => {
     return getTheme()
   })
 
-  ipcMain.handle('settings:setTheme', (_e, theme: 'light' | 'dark') => {
+  registerTrustedIpcHandler('settings:setTheme', getWindow, (_e, theme: 'light' | 'dark') => {
     setTheme(theme)
   })
 
-  ipcMain.handle('settings:getMarketHeatmapProvider', () => {
+  registerTrustedIpcHandler('settings:getMarketHeatmapProvider', getWindow, () => {
     return getMarketHeatmapProvider()
   })
 
-  ipcMain.handle('settings:setMarketHeatmapProvider', (_e, provider: 'sina' | 'eastmoney' | 'tushare') => {
+  registerTrustedIpcHandler('settings:setMarketHeatmapProvider', getWindow, (_e, provider: 'sina' | 'eastmoney' | 'tushare') => {
     setMarketHeatmapProvider(provider)
     return 'ok'
   })

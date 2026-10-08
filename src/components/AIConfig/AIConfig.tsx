@@ -277,7 +277,7 @@ export function AIConfig() {
       <section className="mb-6">
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">AI 厂商配置</label>
         <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
-          ChatGPT 行支持 OpenAI 兼容接口，可选择 gpt-5.6-sol 或 gpt-5.5，并填写自定义 Base URL。
+          厂商设置填写后，请点击该行最右侧的“保存”；底部“保存全局设置”不会保存厂商密钥。ChatGPT 行支持 OpenAI 兼容接口。
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
@@ -289,7 +289,7 @@ export function AIConfig() {
                 <th className="text-left px-3 py-2 font-medium border-b">Base URL</th>
                 <th className="text-left px-3 py-2 font-medium border-b">最大输出</th>
                 <th className="text-left px-3 py-2 font-medium border-b">提示词</th>
-                <th className="text-left px-3 py-2 font-medium border-b">操作</th>
+                <th className="sticky right-0 z-10 bg-gray-50 dark:bg-gray-800 text-left px-3 py-2 font-medium border-b">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -310,10 +310,16 @@ export function AIConfig() {
                         className="w-full min-w-[160px] border border-gray-200 dark:border-gray-700 rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-300"
                       >
                         <option value="">请选择模型</option>
+                        {row.model && !models.includes(row.model) && (
+                          <option value={row.model}>{row.model}（旧版或自定义，请核实服务支持）</option>
+                        )}
                         {models.map((m) => (
                           <option key={m} value={m}>{m}</option>
                         ))}
                       </select>
+                      {p === 'deepseek' && ['deepseek-chat', 'deepseek-reasoner'].includes(row.model) && (
+                        <p className="mt-1 max-w-[220px] text-xs text-amber-700 dark:text-amber-200">官方已停用此旧模型，请重新选择 deepseek-flash 或 deepseek-v4-pro。</p>
+                      )}
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2">
@@ -366,7 +372,7 @@ export function AIConfig() {
                         {(pc?.presetPrompt || pc?.trendForecastPrompt || pc?.trendForecastMorrowPrompt) ? '已配置 ✎' : '配置'}
                       </button>
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="sticky right-0 z-10 bg-white dark:bg-gray-900 px-3 py-2.5">
                       <button
                         onClick={() => handleSaveRow(p)}
                         disabled={saving}

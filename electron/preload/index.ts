@@ -1,4 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { ConceptSource, DiagnosticReadiness, EvaluationCounts, FactSyncReceipt } from '../shared/dataReadiness'
+import type { SupportDiagnosticPreview, SupportFeedbackResult, SupportFeedbackSaveOutcome } from '../shared/supportDiagnostics'
+import type { AppUpdateCheck, AppUpdateDownload, AppUpdateInfo, AppUpdateProgress, AppUpdateResult } from '../shared/appUpdateTypes'
+import type { DailyDataProvider, DataProbeProvider, DataSourcePreference, SaveDataSourcePreference, DataSourceProbeResult, ResearchReportResult, WencaiResult } from '../shared/dataSourceTypes'
+import type { MacThsRequest, MacThsResult, MacThsProductState, RecoveryCommand, ReviewCommand } from '../shared/macThsTypes'
 import type { IpcRendererEvent } from 'electron'
 import type {
   BriefingListOptions,
@@ -1534,6 +1539,30 @@ interface StrategyEffectivenessResult {
 
 // Expose a typed API to the renderer via window.api
 const api = {
+  appUpdates: {
+    info: () => ipcRenderer.invoke('appUpdates:info') as Promise<AppUpdateResult<AppUpdateInfo>>,
+    check: (includePrereleases: boolean) => ipcRenderer.invoke('appUpdates:check', includePrereleases) as Promise<AppUpdateResult<AppUpdateCheck>>,
+    chooseDirectory: () => ipcRenderer.invoke('appUpdates:chooseDirectory') as Promise<AppUpdateResult<AppUpdateInfo>>,
+    download: (version: string) => ipcRenderer.invoke('appUpdates:download', version) as Promise<AppUpdateResult<AppUpdateDownload>>,
+    cancel: () => ipcRenderer.invoke('appUpdates:cancel') as Promise<AppUpdateResult<void>>,
+    showInstaller: () => ipcRenderer.invoke('appUpdates:showInstaller') as Promise<AppUpdateResult<void>>,
+    onProgress: (listener: (value: AppUpdateProgress) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, value: AppUpdateProgress) => listener(value)
+      ipcRenderer.on('appUpdates:progress', handler)
+      return () => { ipcRenderer.removeListener('appUpdates:progress', handler) }
+    },
+  },
+  macThs: {
+    execute: (payload: MacThsRequest) => ipcRenderer.invoke('macThs:execute', payload) as Promise<MacThsResult>,
+    getState: () => ipcRenderer.invoke('macThs:status') as Promise<MacThsProductState>,
+    recover: (payload: RecoveryCommand) => ipcRenderer.invoke('macThs:recover', payload) as Promise<MacThsProductState>,
+    reviewIntent: (payload: ReviewCommand) => ipcRenderer.invoke('macThs:reviewIntent', payload) as Promise<MacThsProductState>,
+    onStateChanged: (listener: (notice: { sessionId: string; stateSequence: number }) => void) => {
+      const handler = (_event: unknown, notice: { sessionId: string; stateSequence: number }) => listener(notice)
+      ipcRenderer.on('macThs:stateChanged', handler)
+      return () => { ipcRenderer.removeListener('macThs:stateChanged', handler) }
+    },
+  },
   researchAgent: {
     preflight: (sessionId: number) => (
       ipcRenderer.invoke('researchAgent:preflight', { sessionId }) as Promise<ResearchAgentPreflightResponse>
@@ -1891,10 +1920,26 @@ const api = {
 
   // ── Data Sources ───────────────────────────────────────
   datasource: {
-    getConfig: () => ipcRenderer.invoke('datasource:getConfig'),
-    saveConfig: (data: { tushareToken?: string; tushareEnabled?: boolean }) =>
+    getConfig: () => ipcRenderer.invoke('datasource:getConfig') as Promise<DataSourcePreference>,
+    saveConfig: (data: SaveDataSourcePreference) =>
       ipcRenderer.invoke('datasource:saveConfig', data),
     validateTushare: (token: string) => ipcRenderer.invoke('datasource:validateTushare', { token }),
+    probe: (provider: DataProbeProvider, stockCode = '000001') =>
+      ipcRenderer.invoke('datasource:probe', { provider, stockCode }) as Promise<DataSourceProbeResult>,
+    choosePython: () => ipcRenderer.invoke('datasource:choosePython') as Promise<string | null>,
+    bridgeStatus: () => ipcRenderer.invoke('datasource:bridgeStatus') as Promise<
+      { ok: true; data: unknown } | { ok: false; message: string }
+    >,
+    installExtensions: () => ipcRenderer.invoke('datasource:installExtensions') as Promise<
+      { ok: true; pythonPath: string; message: string } | { ok: false; message: string }
+    >,
+    reports: (stockCode: string) => ipcRenderer.invoke('datasource:reports', { stockCode }) as Promise<
+      ({ ok: true } & ResearchReportResult) | { ok: false; message: string }
+    >,
+    wencai: (query: string) => ipcRenderer.invoke('datasource:wencai', { query }) as Promise<
+      ({ ok: true } & WencaiResult) | { ok: false; message: string }
+    >,
+    openSourceLink: (url: string) => ipcRenderer.invoke('datasource:openSourceLink', url) as Promise<{ ok: boolean }>,
     listStocks: () => ipcRenderer.invoke('datasource:listStocks') as Promise<{ stockCode: string; stockName: string }[]>,
     getStockPrices: (stockCode: string) => ipcRenderer.invoke('datasource:getStockPrices', { stockCode }),
     getStockPricePage: (stockCode: string, beforeTradeDate?: string, limit = 149) =>
@@ -1926,7 +1971,7 @@ const api = {
       ipcRenderer.invoke('datasource:refreshStock', { stockCode, force }) as Promise<
         | {
             ok: true
-            provider: 'tushare' | 'eastmoney'
+            provider: DailyDataProvider
             latestTradeDate: string | null
             rowsWritten: number
             totalRows: number
@@ -1942,7 +1987,7 @@ const api = {
             stockCode: string
             stockName: string
             added: true
-            provider: 'tushare' | 'eastmoney' | 'local-cache'
+            provider: DailyDataProvider | 'local-cache'
             latestTradeDate: string | null
             rowsWritten: number
             totalRows: number
@@ -2796,6 +2841,11 @@ const api = {
   },
 
   // ── Diagnostics (FR-192) ──────────────────────────────
+  supportDiagnostics: {
+    generatePreview: () => ipcRenderer.invoke('supportDiagnostics:generatePreview') as Promise<SupportFeedbackResult<SupportDiagnosticPreview>>,
+    savePreview: (previewId: string) => ipcRenderer.invoke('supportDiagnostics:savePreview', previewId) as Promise<SupportFeedbackResult<SupportFeedbackSaveOutcome>>
+  },
+
   diagnostics: {
     getHealth: () => ipcRenderer.invoke('diagnostics:getHealth') as Promise<
       | {
@@ -2803,7 +2853,8 @@ const api = {
           data: {
             status: 'ok' | 'warning' | 'error'
             checkedAt: number
-            summary: Record<'ok' | 'warning' | 'error', number>
+            summary: Record<'ok' | 'warning' | 'error', number> & Partial<EvaluationCounts>
+            selectedConceptSource?: ConceptSource
             dailyCloseQuality?: {
               targetTradeDays: number
               retentionTradeDays: number
@@ -2831,11 +2882,13 @@ const api = {
               fingerprint: string
               persistedRunId: number | null
               persistedAt: number | null
-              summary: Record<'reliable' | 'degraded' | 'blocked', number>
+              summary: Record<'reliable' | 'degraded' | 'blocked', number> & Partial<EvaluationCounts>
               datasets: Array<{
                 key: 'stockBasic' | 'tradeCalendar' | 'dailyMarket' | 'auction' | 'benchmarks' | 'financials'
                 title: string
                 status: 'reliable' | 'degraded' | 'blocked'
+                displayStatus?: DiagnosticReadiness['displayStatus']
+                evidence?: DiagnosticReadiness['evidence']
                 summary: string
                 recordCount: number
                 earliestDate: string | null
@@ -2844,7 +2897,7 @@ const api = {
                 affectedModules: string[]
                 reasons: Array<{ code: string; message: string; severity: 'warning' | 'error' }>
                 action: null | {
-                  key: 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks'
+                  key: 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncAuctionSnapshot' | 'syncLimitList'
                   label: string
                 }
               }>
@@ -2856,13 +2909,15 @@ const api = {
                 key: string
                 title: string
                 status: 'ok' | 'warning' | 'error'
+                displayStatus?: DiagnosticReadiness['displayStatus']
+                evidence?: DiagnosticReadiness['evidence']
                 message: string
                 detail?: string
                 recordCount?: number | null
                 latestDate?: string | null
                 checkedAt: number
                 actions?: Array<{
-                  key: 'open-datasource' | 'open-ai-config' | 'syncStockBasic' | 'syncHistoricalDaily' | 'syncConceptMembers' | 'backfillDecisionSignals'
+                  key: 'open-datasource' | 'open-ai-config' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals' | 'syncAuctionSnapshot' | 'syncLimitList'
                   label: string
                   kind: 'navigate' | 'run'
                 }>
@@ -2872,10 +2927,10 @@ const api = {
         }
       | { ok: false; error: string; message: string }
     >,
-    runCheck: (action: 'refreshHealth' | 'refreshDataQuality' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals') =>
+    runCheck: (action: 'refreshHealth' | 'refreshDataQuality' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals' | 'syncAuctionSnapshot' | 'syncLimitList') =>
       ipcRenderer.invoke('diagnostics:runCheck', { action }) as Promise<
-        | { ok: true; data: { action: string; status: 'completed' | 'started'; message: string } }
-        | { ok: false; error: string; message: string }
+        | { ok: true; data: { action: string; status: 'completed' | 'started'; message: string } & Partial<FactSyncReceipt> }
+        | { ok: false; error: string; message: string; receipt?: FactSyncReceipt }
       >,
     onHistoricalDailyProgress: (cb: (p: {
       totalTradeDays: number

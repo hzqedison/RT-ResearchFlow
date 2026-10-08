@@ -1,9 +1,9 @@
 {
   "name": "rt-research-flow",
-  "version": "0.1.0-beta.4",
-  "description": "RT-ResearchFlow - 本地优先的 A 股个人投研工作台",
+  "version": "1.3.0",
+  "description": "RT-ResearchFlow - 资讯、AI研究、策略验证与本人确认交易的一体化工作台",
   "main": "./out/main/index.js",
-  "author": "",
+  "author": { "name": "hzqedison", "url": "https://github.com/hzqedison" },
   "private": true,
   "license": "AGPL-3.0-only",
   "packageManager": "pnpm@10.14.0",
@@ -92,3 +92,4 @@
     "vitest": "^2.0.4"
   }
 }
+

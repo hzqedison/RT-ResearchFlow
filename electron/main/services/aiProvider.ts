@@ -138,6 +138,8 @@ async function callDeepSeek(req: AIProviderRequest): Promise<AIProviderResponse>
   const completion = await client.chat.completions.create({
     model: req.model,
     messages: buildMessages(req),
+    // Keep the existing bounded-output, non-thinking research workflow for the current official models.
+    ...(['deepseek-flash', 'deepseek-v4-pro'].includes(req.model) ? { thinking: { type: 'disabled' } } : {}),
     ...(req.omitOutputTokenLimit ? {} : { max_tokens: resolveMaxTokens(req.maxTokens) }),
   }, { signal: req.signal })
 
@@ -397,8 +399,8 @@ export const PROVIDER_MODELS: Record<AIProvider, string[]> = {
     'qwen-turbo'
   ],
   deepseek: [
-    'deepseek-chat',
-    'deepseek-reasoner'
+    'deepseek-flash',
+    'deepseek-v4-pro'
   ]
 }
 

@@ -34,6 +34,7 @@ export const PUBLIC_HISTORICAL_DAILY_BATCH_SIZE = 400
 export const PUBLIC_HISTORICAL_DAILY_BATCH_PAUSE_MS = 60_000
 
 interface PublicHistoricalDailyDependencies {
+  providers?: Array<'sina' | 'tencent'>
   fetchImpl?: typeof fetch
   governor?: PersistentPublicMarketRequestGovernor
   now?: () => number
@@ -177,6 +178,16 @@ export async function fetchPublicDailyHistoryForCode(
     governor: dependencies.governor ?? getPersistentPublicMarketRequestGovernor(db),
     timeoutMs: dependencies.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     acceptEmptyBeforeFirstClose: dependencies.acceptEmptyBeforeFirstClose === true,
+  }
+  if (dependencies.providers) {
+    let lastError: unknown = errorWithCode('PUBLIC_DAILY_NO_SELECTED_PROVIDER')
+    for (const provider of [...new Set(dependencies.providers)]) {
+      try {
+        if (provider === 'sina') return await fetchSinaHistory(tsCode, targetEndDate, resolved)
+        if (provider === 'tencent') return await fetchTencentHistory(tsCode, targetEndDate, resolved)
+      } catch (error) { lastError = error }
+    }
+    throw lastError
   }
   try {
     return await fetchSinaHistory(tsCode, targetEndDate, resolved)

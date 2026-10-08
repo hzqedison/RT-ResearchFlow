@@ -1,111 +1,106 @@
 /**
- * 交易日历 DB 同步服务（FR-162）
- *
- * 将 Tushare trade_cal 数据持久化到 trade_cal 表，
- * 为调度器和各策略服务提供精确的交易日判断和区间计算。
- *
- * 与 tradingCalendarService.ts 的区别：
- *   - tradingCalendarService：仅缓存今日是否开市（内存布尔值）
- *   - tradeCalSyncService：全量存储 trade_cal 到 SQLite，支持任意日期查询
+ * Persist exchange calendars without making the default route require a Key.
+ * Tushare remains the preferred configured provider. Official fallback only
+ * fills missing rows within announced coverage; no future weekdays are guessed.
  */
-
 import Database from 'better-sqlite3'
-import { upsertTradeCal, getLatestCalDate } from '../database/tradeCalRepository'
+import { upsertTradeCal, hasTradeCalCoverage, insertTradeCalIfMissing } from '../database/tradeCalRepository'
 import { fetchTradeCal } from './tushareService'
+import { getBeijingYmd, offsetYmd } from './marketSettlementPolicy'
+import {
+  buildOfficialSseTradingCalendar,
+  OFFICIAL_SSE_CALENDAR_START,
+  OFFICIAL_SSE_CALENDAR_END,
+} from '../../shared/officialSseTradingCalendar'
 
-/** 防止并发同步 */
 let _syncRunning = false
 let _syncPromise: Promise<TradeCalSyncResult> | null = null
 
 export interface TradeCalSyncResult {
   status: 'completed' | 'empty' | 'failed'
   rowCount: number
+  source?: 'tushare' | 'official-sse'
+  insertedRows?: number
+  conflictRows?: number
+  firstConflictDate?: string | null
+  coverageStart?: string
+  coverageEnd?: string
 }
 
-/** 返回北京时间当日 YYYYMMDD */
-function getBjTodayYmd(): string {
-  const d = new Date(Date.now() + 8 * 60 * 60 * 1000)
-  return (
-    `${d.getUTCFullYear()}` +
-    `${String(d.getUTCMonth() + 1).padStart(2, '0')}` +
-    `${String(d.getUTCDate()).padStart(2, '0')}`
-  )
+export function seedOfficialTradeCalendar(db: Database.Database): TradeCalSyncResult {
+  const rows = buildOfficialSseTradingCalendar()
+  if (rows.length === 0) return { status: 'empty', rowCount: 0 }
+  const merged = insertTradeCalIfMissing(db, rows)
+  if (merged.conflictRows > 0) {
+    console.warn(`[TradeCal] Retained ${merged.conflictRows} existing rows differing from annual schedules; first=${merged.firstConflictDate}`)
+  }
+  return {
+    status: 'completed',
+    rowCount: rows.length,
+    source: 'official-sse',
+    ...merged,
+    coverageStart: OFFICIAL_SSE_CALENDAR_START,
+    coverageEnd: OFFICIAL_SSE_CALENDAR_END,
+  }
 }
 
-/** 日期字符串加 N 天（YYYYMMDD → YYYYMMDD） */
-function addDaysYmd(ymd: string, days: number): string {
-  const y = parseInt(ymd.slice(0, 4), 10)
-  const m = parseInt(ymd.slice(4, 6), 10) - 1
-  const d = parseInt(ymd.slice(6, 8), 10)
-  const dt = new Date(Date.UTC(y, m, d))
-  dt.setUTCDate(dt.getUTCDate() + days)
-  return (
-    `${dt.getUTCFullYear()}` +
-    `${String(dt.getUTCMonth() + 1).padStart(2, '0')}` +
-    `${String(dt.getUTCDate()).padStart(2, '0')}`
-  )
-}
-
-/**
- * 按需同步交易日历：
- *  - 若数据库最新日期 >= 今日 + 60 天，视为充足，跳过
- *  - 否则拉取：从今日往前 1 年到今日往后 12 个月（约 2 年跨度）
- *
- * 启动时和每月 1 日 04:00 由 schedulerService 调用。
- */
-export async function syncTradeCalIfNeeded(db: Database.Database, token: string): Promise<void> {
+export async function syncTradeCalIfNeeded(db: Database.Database, token?: string | null): Promise<void> {
   if (_syncPromise) {
     await _syncPromise
     return
   }
-  const today = getBjTodayYmd()
-  const threshold = addDaysYmd(today, 60)
-  const latest = getLatestCalDate(db)
-  if (latest !== null && latest >= threshold) {
-    console.log(`[TradeCal] DB 已充足（最新=${latest}），跳过同步`)
-    return
-  }
+  seedOfficialTradeCalendar(db)
+  const today = getBeijingYmd()
+  if (hasTradeCalCoverage(db, today, offsetYmd(today, 60))) return
   await syncTradeCalFull(db, token)
 }
 
-/**
- * 强制全量同步：拉取 3 年历史 + 未来 1 年。
- * 由 IPC handler 的「立即同步」和 syncTradeCalIfNeeded 不足时调用。
- */
-export async function syncTradeCalFull(db: Database.Database, token: string): Promise<TradeCalSyncResult> {
+export function syncTradeCalFull(db: Database.Database, token?: string | null): Promise<TradeCalSyncResult> {
   if (_syncPromise) return _syncPromise
   _syncRunning = true
-  _syncPromise = (async () => {
+  let promise: Promise<TradeCalSyncResult>
+  promise = Promise.resolve().then(async (): Promise<TradeCalSyncResult> => {
     try {
-      const today = getBjTodayYmd()
-      const startDate = addDaysYmd(today, -3 * 365) // 约 3 年前
-      const endDate = addDaysYmd(today, 365)         // 未来约 1 年
-
-      console.log(`[TradeCal] 开始同步 ${startDate} ~ ${endDate}`)
-      const rows = await fetchTradeCal(token, 'SSE', startDate, endDate)
-      if (rows.length === 0) {
-        console.warn('[TradeCal] API 返回 0 行，跳过写库')
-        return { status: 'empty', rowCount: 0 }
+      const today = getBeijingYmd()
+      const startDate = offsetYmd(today, -3 * 365)
+      const endDate = offsetYmd(today, 365)
+      if (token?.trim()) {
+        try {
+          const rows = await fetchTradeCal(token, 'SSE', startDate, endDate)
+          if (rows.length > 0 && rows.every((row) =>
+            /^\d{8}$/.test(row.calDate) && (row.isOpen === 0 || row.isOpen === 1),
+          )) {
+            upsertTradeCal(db, rows.map((row) => ({
+              calDate: row.calDate, isOpen: row.isOpen, pretradeDate: row.pretradeDate,
+            })))
+            return {
+              status: 'completed',
+              rowCount: rows.length,
+              source: 'tushare',
+              coverageStart: rows.reduce((min, row) => row.calDate < min ? row.calDate : min, rows[0].calDate),
+              coverageEnd: rows.reduce((max, row) => row.calDate > max ? row.calDate : max, rows[0].calDate),
+            }
+          }
+          console.warn('[TradeCal] Tushare returned no usable calendar; using published official schedules')
+        } catch {
+          console.warn('[TradeCal] Tushare calendar unavailable; using published official schedules')
+        }
       }
-      upsertTradeCal(db, rows.map((r) => ({
-        calDate: r.calDate,
-        isOpen: r.isOpen,
-        pretradeDate: r.pretradeDate,
-      })))
-      console.log(`[TradeCal] 同步完成，共 ${rows.length} 条记录`)
-      return { status: 'completed', rowCount: rows.length }
-    } catch (err) {
-      console.warn('[TradeCal] 同步失败:', err instanceof Error ? err.message : String(err))
+      return seedOfficialTradeCalendar(db)
+    } catch {
+      console.warn('[TradeCal] Calendar persistence failed; existing data was not cleared')
       return { status: 'failed', rowCount: 0 }
-    } finally {
-      _syncRunning = false
-      _syncPromise = null
     }
-  })()
-  return _syncPromise
+  }).finally(() => {
+    if (_syncPromise === promise) {
+      _syncPromise = null
+      _syncRunning = false
+    }
+  })
+  _syncPromise = promise
+  return promise
 }
 
-/** 供外部检查是否正在同步 */
 export function isTradeCalSyncRunning(): boolean {
   return _syncRunning
 }

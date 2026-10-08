@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
 const scheduler = readFileSync(
@@ -10,6 +11,28 @@ const chipMonitor = readFileSync(
   'utf8',
 )
 
+const schedulerSyntax = ts.createSourceFile('schedulerService.ts', scheduler, ts.ScriptTarget.Latest, true)
+
+function schedulerBody(name: string): ts.Block {
+  const declaration = schedulerSyntax.statements.find((statement): statement is ts.FunctionDeclaration => (
+    ts.isFunctionDeclaration(statement) && statement.name?.text === name
+  ))
+  if (!declaration?.body) throw new Error(`Missing scheduler function: ${name}`)
+  return declaration.body
+}
+
+function callsWithin(node: ts.Node, name: string): ts.CallExpression[] {
+  const calls: ts.CallExpression[] = []
+  const visit = (child: ts.Node): void => {
+    if (ts.isCallExpression(child) && ts.isIdentifier(child.expression) && child.expression.text === name) {
+      calls.push(child)
+    }
+    ts.forEachChild(child, visit)
+  }
+  visit(node)
+  return calls
+}
+
 describe('18:00统一盘后调度契约', () => {
   it('只注册一个盘后协调器且不保留17点计时器', () => {
     expect(scheduler).toContain('runUnifiedAfterCloseSyncJob')
@@ -20,25 +43,33 @@ describe('18:00统一盘后调度契约', () => {
   })
 
   it('修改资讯扫描频率只重排资讯计时器', () => {
-    const start = scheduler.indexOf('export function reschedule(): void')
-    const end = scheduler.indexOf('\nfunction scheduleNext()', start)
-    const body = scheduler.slice(start, end)
+    const declaration = schedulerBody('reschedule')
+    const body = declaration.getText(schedulerSyntax)
     expect(body).not.toContain('stopScheduler()')
     expect(body).toContain('clearTimeout(_timer)')
-    expect(body).toContain('scheduleNext()')
+    const schedules = callsWithin(declaration, 'scheduleNext')
+    expect(schedules).toHaveLength(1)
+    expect(schedules[0].getText(schedulerSyntax)).toBe("scheduleNext(_scheduler.replaceScope('scan'))")
   })
 
   it('启动补漏不依赖Tushare配置且市场任务等待个性选股收敛', () => {
-    const startScheduler = scheduler.slice(
-      scheduler.indexOf('export function startScheduler(): void'),
-      scheduler.indexOf('export function stopScheduler(): void'),
-    )
-    expect(startScheduler).toContain('} else {')
-    expect(startScheduler.match(/runStartupAfterCloseCatchUp\(\)/g)).toHaveLength(2)
+    const startup = schedulerBody('startScheduler')
+    const startScheduler = startup.getText(schedulerSyntax)
+    const catchUps = callsWithin(startup, 'runStartupAfterCloseCatchUp')
+    expect(catchUps).toHaveLength(1)
+    expect(ts.isAwaitExpression(catchUps[0].parent)).toBe(true)
+    // The shared catch-up must remain outside either Token branch, not merely appear twice in source.
+    for (let ancestor = catchUps[0].parent; ancestor !== startup; ancestor = ancestor.parent) {
+      if (ts.isIfStatement(ancestor)) {
+        expect(ancestor.expression.getText(schedulerSyntax)).not.toMatch(/\btoken\b/)
+      }
+    }
     expect(startScheduler.match(/runStartupPublicHistoricalDailySyncIfNeeded\(/g)).toHaveLength(2)
     expect(startScheduler).toContain('schedulePublicHistoricalDailyResumeCheck()')
     expect(startScheduler.match(/schedulePublicHistoricalDailyResumeCheck\(\)/g)).toHaveLength(2)
-    expect(scheduler).toContain('_publicDailyResumeTimer = setInterval')
+    const resume = schedulerBody('schedulePublicHistoricalDailyResumeCheck').getText(schedulerSyntax)
+    expect(resume).toContain('_publicDailyResumeTimer = _scheduler.interval(scope,')
+    expect(resume).toContain('if (!_scheduler.isCurrent(scope)) return')
     expect(scheduler).toContain('if (_publicDailyResumeTimer)')
 
     const marketTask = scheduler.slice(

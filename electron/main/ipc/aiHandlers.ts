@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
+import { registerTrustedIpcHandler, type TrustedWindowGetter } from '../security/trustedIpc'
 import type Database from 'better-sqlite3'
 import { getDb } from '../database/db'
 import { getAIConfig, updateAIConfig, getProviderConfig, setProviderConfig, getAllProviderConfigs, getConfiguredProviders } from '../database/aiConfigRepository'
@@ -14,8 +15,11 @@ import {
   deleteSessionsOlderThan,
   type ConversationMessage
 } from '../database/aiAnalysisSessionRepository'
-import { getDataSourceConfig, updateDataSourceConfig } from '../database/dataSourceRepository'
-import { encryptApiKey, decryptApiKey } from '../utils/apiKeyEncryption'
+import { getDataSourceConfig, updateDataSourceConfig, getMultiSourcePreference, updateMultiSourcePreference, getWencaiCookieEncrypted } from '../database/dataSourceRepository'
+import { registerMultiSourceHandlers } from './multiSourceHandlers'
+import { fetchSelectedStockDaily } from '../services/multiSourceMarketService'
+import type { DailyDataProvider, SaveDataSourcePreference } from '../../shared/dataSourceTypes'
+import { encryptRequiredApiKey, decryptApiKey } from '../utils/apiKeyEncryption'
 import { callAIProvider, PROVIDER_MODELS, PROVIDER_LABELS, PROVIDER_DEFAULT_BASE_URLS } from '../services/aiProvider'
 import type { AIProviderUsage } from '../services/aiProvider'
 import {
@@ -33,12 +37,10 @@ import {
   backfillTodayDailyFromIntradayIfMissing,
   ensureTrendBenchmarkFreshness,
   fetchEastmoneyMinuteOHLCV,
-  fetchEastmoneySingleStockDaily,
   fetchIndexPrices,
   fetchIntradayData,
   fetchIntradayDataBySecid,
   fetchStockMinuteDaily,
-  forceFetchSingleStock,
   getBoardSecid,
   validateTushareToken,
 } from '../services/tushareService'
@@ -832,7 +834,7 @@ function enrichStockPriceRows(
   })
 }
 
-type StockFetchProvider = 'tushare' | 'eastmoney' | 'local-cache'
+type StockFetchProvider = DailyDataProvider | 'local-cache'
 type StockFetchDataState = 'complete' | 'degraded'
 
 interface StockFetchSummary {
@@ -889,7 +891,8 @@ function getCachedStockFetchSummary(
   }
 }
 
-export function registerAIHandlers(getWindow: () => BrowserWindow | null): void {
+export function registerAIHandlers(getWindow: TrustedWindowGetter): void {
+  registerMultiSourceHandlers(getWindow)
   // ── FR-072 / FR-081: per-stock per-provider forecast cache (in-process memory) ──
   interface StockForecastCache {
     today?: { time: string; price: number }[]
@@ -904,7 +907,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   const multiProviderCacheMap = new Map<string, StockForecastCache>()
 
   // ── ai:getConfig ─────────────────────────────────────────────────────────────
-  ipcMain.handle('ai:getConfig', () => {
+  registerTrustedIpcHandler('ai:getConfig', getWindow, () => {
     const db = getDb()
     const row = getAIConfig(db)
     const allConfigs = getAllProviderConfigs(db)
@@ -935,7 +938,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
     return {
       provider: row.provider,
       model: row.model,
-      hasApiKey: row.provider ? !!providerHasApiKey[row.provider] : false,
+      hasApiKey: configured.length > 0,
       providerHasApiKey,
       providerConfigs,
       baseUrl: row.baseUrl ?? '',
@@ -969,7 +972,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── ai:saveConfig ─────────────────────────────────────────────────────────────
-  ipcMain.handle('ai:saveConfig', (_e, data: {
+  registerTrustedIpcHandler('ai:saveConfig', getWindow, (_e, data: {
     provider?: AIProvider
     model?: string
     apiKey?: string // empty string = keep existing
@@ -1002,75 +1005,77 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
     }
   }) => {
     const db = getDb()
-    const update: Parameters<typeof updateAIConfig>[1] = {}
+    return db.transaction(() => {
+      const update: Parameters<typeof updateAIConfig>[1] = {}
 
-    if (data.provider !== undefined) update.provider = data.provider
-    if (data.model !== undefined) update.model = data.model
-    if (data.baseUrl !== undefined) update.baseUrl = data.baseUrl || null
-    if (data.presetPrompt !== undefined) update.presetPrompt = data.presetPrompt || null
-    if (data.triggerRating !== undefined) update.triggerRating = data.triggerRating
-    if (data.maxArticlesPerBatch !== undefined) update.maxArticlesPerBatch = data.maxArticlesPerBatch
-    if (data.maxContentCharsPerArticle !== undefined) update.maxContentCharsPerArticle = data.maxContentCharsPerArticle
-    if ('maxArticleAgeDays' in data) update.maxArticleAgeDays = data.maxArticleAgeDays ?? null
-    if ('autoCleanupDays' in data) update.autoCleanupDays = data.autoCleanupDays ?? null
-    if (data.trendForecastPrompt !== undefined) update.trendForecastPrompt = data.trendForecastPrompt || null
-    if (data.trendForecastMorrowPrompt !== undefined) update.trendForecastMorrowPrompt = data.trendForecastMorrowPrompt || null
-    if (data.maxForecastsPerStock !== undefined) update.maxForecastsPerStock = Math.min(100, Math.max(1, data.maxForecastsPerStock))
-    if (data.providerPriority !== undefined) update.providerPriority = JSON.stringify(data.providerPriority)
-    if (data.multiModelProviders !== undefined) update.multiModelProviders = JSON.stringify(data.multiModelProviders)
-    if (data.maxForecastComparison !== undefined) update.maxForecastComparison = Math.min(10, Math.max(1, data.maxForecastComparison))
-    if (data.selectedSkills !== undefined) update.selectedSkills = JSON.stringify(data.selectedSkills)
-    if (data.skillsForTrend !== undefined) update.skillsForTrend = data.skillsForTrend ? 1 : 0
-    if (data.maxSkillChars !== undefined) update.maxSkillChars = Math.min(100000, Math.max(1000, data.maxSkillChars))
+      if (data.provider !== undefined) update.provider = data.provider
+      if (data.model !== undefined) update.model = data.model
+      if (data.baseUrl !== undefined) update.baseUrl = data.baseUrl || null
+      if (data.presetPrompt !== undefined) update.presetPrompt = data.presetPrompt || null
+      if (data.triggerRating !== undefined) update.triggerRating = data.triggerRating
+      if (data.maxArticlesPerBatch !== undefined) update.maxArticlesPerBatch = data.maxArticlesPerBatch
+      if (data.maxContentCharsPerArticle !== undefined) update.maxContentCharsPerArticle = data.maxContentCharsPerArticle
+      if ('maxArticleAgeDays' in data) update.maxArticleAgeDays = data.maxArticleAgeDays ?? null
+      if ('autoCleanupDays' in data) update.autoCleanupDays = data.autoCleanupDays ?? null
+      if (data.trendForecastPrompt !== undefined) update.trendForecastPrompt = data.trendForecastPrompt || null
+      if (data.trendForecastMorrowPrompt !== undefined) update.trendForecastMorrowPrompt = data.trendForecastMorrowPrompt || null
+      if (data.maxForecastsPerStock !== undefined) update.maxForecastsPerStock = Math.min(100, Math.max(1, data.maxForecastsPerStock))
+      if (data.providerPriority !== undefined) update.providerPriority = JSON.stringify(data.providerPriority)
+      if (data.multiModelProviders !== undefined) update.multiModelProviders = JSON.stringify(data.multiModelProviders)
+      if (data.maxForecastComparison !== undefined) update.maxForecastComparison = Math.min(10, Math.max(1, data.maxForecastComparison))
+      if (data.selectedSkills !== undefined) update.selectedSkills = JSON.stringify(data.selectedSkills)
+      if (data.skillsForTrend !== undefined) update.skillsForTrend = data.skillsForTrend ? 1 : 0
+      if (data.maxSkillChars !== undefined) update.maxSkillChars = Math.min(100000, Math.max(1000, data.maxSkillChars))
 
-    // Only update API key if a non-empty string was provided (legacy flat path)
-    if (data.apiKey) {
-      const encrypted = encryptApiKey(data.apiKey)
-      if (encrypted) {
-        const targetProvider = data.provider ?? getAIConfig(db).provider
-        if (targetProvider) {
-          setProviderConfig(db, targetProvider, { apiKeyEncrypted: encrypted })
-        }
-        update.apiKeyEncrypted = encrypted
-      }
-    }
-
-    // FR-079: per-provider config upsert
-    if (data.providerConfig) {
-      const pc = data.providerConfig
-      const pcUpdate: Record<string, unknown> = {}
-      if (pc.model !== undefined) pcUpdate.model = pc.model || null
-      if (pc.baseUrl !== undefined) pcUpdate.baseUrl = pc.baseUrl || null
-      if (pc.maxTokens !== undefined) pcUpdate.maxTokens = Math.max(1, Math.floor(pc.maxTokens))
-      if (pc.presetPrompt !== undefined) pcUpdate.presetPrompt = pc.presetPrompt || null
-      if (pc.trendForecastPrompt !== undefined) pcUpdate.trendForecastPrompt = pc.trendForecastPrompt || null
-      if (pc.trendForecastMorrowPrompt !== undefined) pcUpdate.trendForecastMorrowPrompt = pc.trendForecastMorrowPrompt || null
-      if (pc.apiKey) {
-        const encrypted = encryptApiKey(pc.apiKey)
-        if (encrypted) pcUpdate.apiKeyEncrypted = encrypted
-      }
-      setProviderConfig(db, pc.provider, pcUpdate)
-
-      // Auto-add provider to providerPriority when it has a valid API key
-      if (pc.apiKey || getProviderConfig(db, pc.provider)?.apiKeyEncrypted) {
-        const current = getAIConfig(db)
-        const currentPriority: string[] = current.providerPriority
-          ? JSON.parse(current.providerPriority)
-          : []
-        if (!currentPriority.includes(pc.provider)) {
-          currentPriority.push(pc.provider)
-          update.providerPriority = JSON.stringify(currentPriority)
+      // Only update API key if a non-empty string was provided (legacy flat path)
+      if (data.apiKey) {
+        const encrypted = encryptRequiredApiKey(data.apiKey)
+        if (encrypted) {
+          const targetProvider = data.provider ?? getAIConfig(db).provider
+          if (targetProvider) {
+            setProviderConfig(db, targetProvider, { apiKeyEncrypted: encrypted })
+          }
+          update.apiKeyEncrypted = encrypted
         }
       }
-    }
 
-    updateAIConfig(db, update)
-    return { ok: true }
+      // FR-079: per-provider config upsert
+      if (data.providerConfig) {
+        const pc = data.providerConfig
+        const pcUpdate: Record<string, unknown> = {}
+        if (pc.model !== undefined) pcUpdate.model = pc.model || null
+        if (pc.baseUrl !== undefined) pcUpdate.baseUrl = pc.baseUrl || null
+        if (pc.maxTokens !== undefined) pcUpdate.maxTokens = Math.max(1, Math.floor(pc.maxTokens))
+        if (pc.presetPrompt !== undefined) pcUpdate.presetPrompt = pc.presetPrompt || null
+        if (pc.trendForecastPrompt !== undefined) pcUpdate.trendForecastPrompt = pc.trendForecastPrompt || null
+        if (pc.trendForecastMorrowPrompt !== undefined) pcUpdate.trendForecastMorrowPrompt = pc.trendForecastMorrowPrompt || null
+        if (pc.apiKey) {
+          const encrypted = encryptRequiredApiKey(pc.apiKey)
+          if (encrypted) pcUpdate.apiKeyEncrypted = encrypted
+        }
+        setProviderConfig(db, pc.provider, pcUpdate)
+
+        // Auto-add provider to providerPriority when it has a valid API key
+        if ((getProviderConfig(db, pc.provider)?.apiKeyEncrypted?.length ?? 0) > 0) {
+          const current = getAIConfig(db)
+          const currentPriority: string[] = current.providerPriority
+            ? JSON.parse(current.providerPriority)
+            : []
+          if (!currentPriority.includes(pc.provider)) {
+            currentPriority.push(pc.provider)
+            update.providerPriority = JSON.stringify(currentPriority)
+          }
+        }
+      }
+
+      updateAIConfig(db, update)
+      return { ok: true }
+    })()
   })
 
   // ── ai:analyze ────────────────────────────────────────────────────────────────
   // Accepts briefingIds (FR-048: content-first) OR articleUrls (legacy single-article fallback)
-  ipcMain.handle('ai:analyze', async (_e, data: {
+  registerTrustedIpcHandler('ai:analyze', getWindow, async (_e, data: {
     briefingIds?: number[]
     articleUrls?: string[]   // legacy: used when briefingId not available
     scanRunId: number | null
@@ -1239,7 +1244,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── ai:listSessions ────────────────────────────────────────────────────────────
-  ipcMain.handle('ai:listSessions', () => {
+  registerTrustedIpcHandler('ai:listSessions', getWindow, () => {
     const db = getDb()
     const rows = listSessions(db)
     const structuredStatus = listStructuredStatusBySessionIds(db, rows.map((row) => row.id))
@@ -1265,7 +1270,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── ai:getSession ─────────────────────────────────────────────────────────────
-  ipcMain.handle('ai:getSession', (_e, data: { id: number }) => {
+  registerTrustedIpcHandler('ai:getSession', getWindow, (_e, data: { id: number }) => {
     const db = getDb()
     const row = getSession(db, data.id)
     if (!row) return null
@@ -1306,7 +1311,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── FR-239 research discussions ──────────────────────────────────────────────
-  ipcMain.handle('ai:startResearchDiscussion', (_e, data: Record<string, unknown>) => {
+  registerTrustedIpcHandler('ai:startResearchDiscussion', getWindow, (_e, data: Record<string, unknown>) => {
     try {
       const requestId = typeof data?.requestId === 'string' ? data.requestId : ''
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
@@ -1369,7 +1374,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
     }
   })
 
-  ipcMain.handle('ai:updateResearchDiscussionContext', (_e, data: Record<string, unknown>) => {
+  registerTrustedIpcHandler('ai:updateResearchDiscussionContext', getWindow, (_e, data: Record<string, unknown>) => {
     try {
       const requestId = typeof data?.requestId === 'string' ? data.requestId : ''
       const sessionId = Number(data?.sessionId)
@@ -1387,7 +1392,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
     }
   })
 
-  ipcMain.handle('ai:listResearchDiscussions', (_e, data: Record<string, unknown> = {}) => {
+  registerTrustedIpcHandler('ai:listResearchDiscussions', getWindow, (_e, data: Record<string, unknown> = {}) => {
     try {
       const origin = data.origin && typeof data.origin === 'object' ? data.origin as Record<string, unknown> : null
       const projectId = typeof data.projectId === 'string' ? data.projectId.slice(0, 128) : undefined
@@ -1415,14 +1420,14 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── ai:generateStructuredResult ──────────────────────────────────────────────
-  ipcMain.handle('ai:generateStructuredResult', async (_e, data: { sessionId: number; force?: boolean }) => {
+  registerTrustedIpcHandler('ai:generateStructuredResult', getWindow, async (_e, data: { sessionId: number; force?: boolean }) => {
     const db = getDb()
     const result = await generateStructuredResult(db, data.sessionId, { force: data.force })
     return { structuredResult: result }
   })
 
   // ── ai:deleteAllSessions ───────────────────────────────────────────────────────
-  ipcMain.handle('ai:deleteAllSessions', (_e, data: { includeResearchDiscussions?: boolean } = {}) => {
+  registerTrustedIpcHandler('ai:deleteAllSessions', getWindow, (_e, data: { includeResearchDiscussions?: boolean } = {}) => {
     const db = getDb()
     const protectedResearchDiscussions = countResearchDiscussionSessions(db)
     if (data.includeResearchDiscussions) {
@@ -1433,14 +1438,14 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── ai:cleanupOldSessions ──────────────────────────────────────────────────────
-  ipcMain.handle('ai:cleanupOldSessions', (_e, data: { olderThanDays: number; dryRun: boolean }) => {
+  registerTrustedIpcHandler('ai:cleanupOldSessions', getWindow, (_e, data: { olderThanDays: number; dryRun: boolean }) => {
     const db = getDb()
     const olderThanMs = data.olderThanDays * 24 * 60 * 60 * 1000
     return deleteSessionsOlderThan(db, olderThanMs, data.dryRun)
   })
 
   // ── ai:deleteSession ──────────────────────────────────────────────────────────
-  ipcMain.handle('ai:deleteSession', (_e, data: { id: number; confirmResearchDiscussion?: boolean }) => {
+  registerTrustedIpcHandler('ai:deleteSession', getWindow, (_e, data: { id: number; confirmResearchDiscussion?: boolean }) => {
     const db = getDb()
     const discussion = getResearchDiscussionContext(db, data.id)
     if (discussion) {
@@ -1455,7 +1460,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── ai:recoverCandidates ──────────────────────────────────────────────────────
-  ipcMain.handle('ai:recoverCandidates', async (_e, data: { sessionId: number }) => {
+  registerTrustedIpcHandler('ai:recoverCandidates', getWindow, async (_e, data: { sessionId: number }) => {
     const sessionId = Number(data?.sessionId)
     if (!Number.isInteger(sessionId) || sessionId <= 0) {
       return { ok: false, code: 'INVALID_STATE', message: '会话参数无效' }
@@ -1490,7 +1495,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
   // ── ai:triggerRound2 ──────────────────────────────────────────────────────────
   // FR-060: manually trigger second-round analysis for a session
-  ipcMain.handle('ai:triggerRound2', async (_e, data: { sessionId: number }) => {
+  registerTrustedIpcHandler('ai:triggerRound2', getWindow, async (_e, data: { sessionId: number }) => {
     const db = getDb()
     const session = getSession(db, data.sessionId)
     if (!session) return { error: 'Session not found' }
@@ -1534,7 +1539,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
   // ── ai:followUp ───────────────────────────────────────────────────────────────
   // FR-061: continue conversation within an existing session
-  ipcMain.handle('ai:followUp', async (_e, data: { sessionId: number; message: string }) => {
+  registerTrustedIpcHandler('ai:followUp', getWindow, async (_e, data: { sessionId: number; message: string }) => {
     const db = getDb()
     const session = getSession(db, data.sessionId)
     if (!session) return { error: 'Session not found' }
@@ -1590,24 +1595,34 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── datasource:getConfig ──────────────────────────────────────────────────────
-  ipcMain.handle('datasource:getConfig', () => {
+  registerTrustedIpcHandler('datasource:getConfig', getWindow, () => {
     const db = getDb()
     const row = getDataSourceConfig(db)
     return {
+      ...getMultiSourcePreference(db),
       tushareEnabled: row.tushareEnabled === 1,
-      hasTushareToken: !!(row.tushareTokenEncrypted && row.tushareTokenEncrypted.length > 0)
+      hasTushareToken: !!(row.tushareTokenEncrypted && row.tushareTokenEncrypted.length > 0),
+      hasWencaiCookie: !!getWencaiCookieEncrypted(db)?.length
     }
   })
 
   // ── datasource:saveConfig ─────────────────────────────────────────────────────
-  ipcMain.handle('datasource:saveConfig', (_e, data: { tushareToken?: string; tushareEnabled?: boolean }) => {
+  registerTrustedIpcHandler('datasource:saveConfig', getWindow, (_e, data: SaveDataSourcePreference) => {
     const db = getDb()
     const update: Parameters<typeof updateDataSourceConfig>[1] = {}
-    if (data.tushareToken) update.tushareTokenEncrypted = encryptApiKey(data.tushareToken)
-    if (data.tushareEnabled !== undefined) update.tushareEnabled = data.tushareEnabled ? 1 : 0
-    updateDataSourceConfig(db, update)
+    if (data.tushareToken) update.tushareTokenEncrypted = encryptRequiredApiKey(data.tushareToken)
+    let selected = data.dailyProviders
+    if (selected === undefined && data.tushareEnabled !== undefined) {
+      const existing = getMultiSourcePreference(db).dailyProviders.filter(provider => provider !== 'tushare')
+      selected = data.tushareEnabled ? ['tushare', ...existing] : existing
+    }
+    if (selected !== undefined) update.tushareEnabled = selected.includes('tushare') ? 1 : 0
+    db.transaction(() => {
+      updateMultiSourcePreference(db, { ...data, dailyProviders: selected })
+      updateDataSourceConfig(db, update)
+    })()
     // FR-123: 关闭 Tushare 时立即取消分钟 K 订阅, 防止失效订阅继续轮询
-    if (data.tushareEnabled === false) {
+    if (update.tushareEnabled === 0) {
       unsubscribeStockMinute()
     }
     const latest = getDataSourceConfig(db)
@@ -1620,13 +1635,13 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── datasource:validateTushare ────────────────────────────────────────────────
-  ipcMain.handle('datasource:validateTushare', async (_e, data: { token: string }) => {
+  registerTrustedIpcHandler('datasource:validateTushare', getWindow, async (_e, data: { token: string }) => {
     return validateTushareToken(data.token)
   })
 
   // ── datasource:listStocks ──────────────────────────────────────────────────────
   // Returns distinct stock codes that have cached price data, with names from stock_info
-  ipcMain.handle('datasource:listStocks', () => {
+  registerTrustedIpcHandler('datasource:listStocks', getWindow, () => {
     const db = getDb()
     const rows = db
       .prepare(`
@@ -1639,7 +1654,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── datasource:getStockPrices ──────────────────────────────────────────────────
-  ipcMain.handle('datasource:getStockPrices', async (_e, data: { stockCode: string }) => {
+  registerTrustedIpcHandler('datasource:getStockPrices', getWindow, async (_e, data: { stockCode: string }) => {
     const db = getDb()
     // FR-093: read path fallback — synthesize today's missing daily row from intraday data.
     await backfillTodayDailyFromIntradayIfMissing(db, data.stockCode)
@@ -1651,7 +1666,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   })
 
   // 股票走势图首屏与左侧历史增量读取。旧全量接口继续保留给预测等既有消费者。
-  ipcMain.handle('datasource:getStockPricePage', async (_e, data: {
+  registerTrustedIpcHandler('datasource:getStockPricePage', getWindow, async (_e, data: {
     stockCode?: string
     beforeTradeDate?: string
     limit?: number
@@ -1688,7 +1703,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
   // ── datasource:deleteStock ─────────────────────────────────────────────────────
   // FR-065: Remove a single stock and its cached data; preset indices are protected
-  ipcMain.handle('datasource:deleteStock', (_e, data: { stockCode: string }) => {
+  registerTrustedIpcHandler('datasource:deleteStock', getWindow, (_e, data: { stockCode: string }) => {
     const PRESET_INDEX_CODES = ['000001.SH', '399001.SZ', '399006.SZ']
     if (PRESET_INDEX_CODES.includes(data.stockCode)) return { ok: false, reason: 'preset' }
     const db = getDb()
@@ -1699,7 +1714,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
   // ── datasource:clearAllStocks ─────────────────────────────────────────────────
   // FR-065: Remove all non-preset stocks and their cached data
-  ipcMain.handle('datasource:clearAllStocks', () => {
+  registerTrustedIpcHandler('datasource:clearAllStocks', getWindow, () => {
     const db = getDb()
     db.prepare(
       "DELETE FROM stock_price_cache WHERE stockCode NOT IN ('000001.SH','399001.SZ','399006.SZ')"
@@ -1713,7 +1728,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   // ── datasource:refreshStock ────────────────────────────────────────────────────
   // FR-066/067/252: Re-fetch one stock or preset index.
   // Regular stocks use Tushare when configured, otherwise the explicit single-stock Eastmoney fallback.
-  ipcMain.handle('datasource:refreshStock', async (_e, data: { stockCode: string; force?: boolean }) => {
+  registerTrustedIpcHandler('datasource:refreshStock', getWindow, async (_e, data: { stockCode: string; force?: boolean }) => {
     const db = getDb()
     const PRESET_INDEX_CODES = ['000001.SH', '399001.SZ', '399006.SZ']
     const rawCode = String(data?.stockCode ?? '').trim().toUpperCase()
@@ -1740,29 +1755,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
       const stockCode = rawCode.replace(/\.(SH|SZ|BJ)$/i, '')
       if (!/^\d{6}$/.test(stockCode)) return { ok: false as const, reason: 'invalid_code' as const }
-      const dsConfig = getDataSourceConfig(db)
-      let result: StockFetchSummary | null = null
-      if (!dsConfig.tushareEnabled || !dsConfig.tushareTokenEncrypted) {
-        const fetched = await fetchEastmoneySingleStockDaily(db, stockCode)
-        if (!fetched.ok) {
-          return {
-            ok: false as const,
-            reason: fetched.code === 'STOCK_NOT_FOUND'
-              ? 'not_found' as const
-              : fetched.code === 'INVALID_STOCK_CODE'
-                ? 'invalid_code' as const
-                : 'fetch_error' as const,
-          }
-        }
-        result = fetched
-      } else {
-        const token = decryptApiKey(dsConfig.tushareTokenEncrypted)
-        if (!token) return { ok: false as const, reason: 'no_token' as const }
-        const rowsWritten = await forceFetchSingleStock(db, token, stockCode)
-        const benchmark = await ensureTrendBenchmarkFreshness(db)
-        result = getCachedStockFetchSummary(db, stockCode, 'tushare', rowsWritten, benchmark)
-        if (!result) return { ok: false as const, reason: 'not_found' as const }
-      }
+      const result = await fetchSelectedStockDaily(db, stockCode)
       // FR-072: clear forecast cache for the refreshed stock
       forecastCacheMap.delete(stockCode)
       getWindow()?.webContents.send('datasource:stocksUpdated', {})
@@ -1774,7 +1767,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
   // ── datasource:fetchStock ──────────────────────────────────────────────────
   // FR-069/252: 手动按股票代码查询行情，写入缓存并加入走势图列表
-  ipcMain.handle('datasource:fetchStock', async (_e, data: { stockCode: string }) => {
+  registerTrustedIpcHandler('datasource:fetchStock', getWindow, async (_e, data: { stockCode: string }) => {
     const db = getDb()
     const stockCode = String(data?.stockCode ?? '').trim()
     if (!/^\d{6}$/.test(stockCode)) {
@@ -1788,41 +1781,19 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
       if (refreshedLocal) return { ...refreshedLocal, added: true as const }
     }
 
-    const dsConfig = getDataSourceConfig(db)
-    if (!dsConfig.tushareEnabled || !dsConfig.tushareTokenEncrypted) {
-      const fetched = await fetchEastmoneySingleStockDaily(db, stockCode)
-      if (!fetched.ok) {
-        if (local) return { ...local, added: true as const }
-        return { error: { code: fetched.code, message: fetched.message } }
-      }
+    try {
+      const fetched = await fetchSelectedStockDaily(db, stockCode)
       getWindow()?.webContents.send('datasource:stocksUpdated', {})
       return { ...fetched, added: true as const }
-    }
-    const token = decryptApiKey(dsConfig.tushareTokenEncrypted)
-    if (!token) {
-      return { error: { code: 'FETCH_FAILED', message: 'Tushare 配置不可用，请检查数据源设置' } }
-    }
-    try {
-      const rowsInserted = await forceFetchSingleStock(db, token, stockCode)
-      const benchmark = await ensureTrendBenchmarkFreshness(db)
-      // FR-069 补充：Tushare 返回空数据表示股票代码不存在
-      if (rowsInserted === 0 && getCachedPrices(db, stockCode).length === 0) {
-        return { error: { code: 'STOCK_NOT_FOUND', message: `未找到股票代码 ${stockCode}，请确认代码是否正确` } }
-      }
-      const summary = getCachedStockFetchSummary(db, stockCode, 'tushare', rowsInserted, benchmark)
-      if (!summary) {
-        return { error: { code: 'STOCK_NOT_FOUND', message: `未取得股票代码 ${stockCode} 的有效名称和行情` } }
-      }
-      getWindow()?.webContents.send('datasource:stocksUpdated', {})
-      return { ...summary, added: true as const }
-    } catch (err) {
-      return { error: { code: 'FETCH_FAILED', message: err instanceof Error ? err.message : '查询失败' } }
+    } catch (error) {
+      if (local) return { ...local, added: true as const }
+      return { error: { code: 'FETCH_FAILED', message: error instanceof Error ? error.message : '查询失败' } }
     }
   })
 
   // ── datasource:updateStockName ───────────────────────────────────────────
   // FR-107: 用云图传入的权威名称直接修正 stock_info，不依赖 Tushare
-  ipcMain.handle('datasource:updateStockName', (_e, data: { stockCode: string; stockName: string }) => {
+  registerTrustedIpcHandler('datasource:updateStockName', getWindow, (_e, data: { stockCode: string; stockName: string }) => {
     const db = getDb()
     upsertStockInfo(db, data.stockCode, data.stockName)
     return { ok: true }
@@ -1830,7 +1801,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
   // ── datasource:searchStock ────────────────────────────────────────────────
   // 按股票名称或代码模糊搜索，优先从本地 stock_basic_cache 查询，无需调用 API
-  ipcMain.handle('datasource:searchStock', (_e, data: { keyword: string }) => {
+  registerTrustedIpcHandler('datasource:searchStock', getWindow, (_e, data: { keyword: string }) => {
     const keyword = (data?.keyword ?? '').trim()
     if (!keyword) return { ok: true as const, results: [], empty: false }
     const db = getDb()
@@ -1845,7 +1816,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
   // ── datasource:getIntradayData ─────────────────────────────────────────────
   // FR-070: 获取分时图数据（不持久化，仅用于当次展示）
-  ipcMain.handle('datasource:getIntradayData', async (_e, data: { stockCode: string }) => {
+  registerTrustedIpcHandler('datasource:getIntradayData', getWindow, async (_e, data: { stockCode: string }) => {
     try {
       const items = await fetchIntradayData(data.stockCode)
       const bjNow = new Date(Date.now() + 8 * 60 * 60 * 1000)
@@ -1868,7 +1839,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   }
 
   // DB-first + 今日用 Tushare 补拉 / Tushare 缺失时回退东财 push2his OHLCV 补拉并落库
-  ipcMain.handle('datasource:getStockMinuteKline', async (_e, data: { tsCode?: string; tradeDate?: string }) => {
+  registerTrustedIpcHandler('datasource:getStockMinuteKline', getWindow, async (_e, data: { tsCode?: string; tradeDate?: string }) => {
     if (!data?.tsCode) return { ok: false, code: 'INVALID_PARAM', message: '缺少 tsCode' }
     const stockCode = data.tsCode.split('.')[0]
     const todayStr = bjTodayYYYYMMDD()
@@ -1928,14 +1899,14 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
   // 启动一只股票的分钟订阅（互斥, 切换股票自动 unsubscribe 旧的）
   // 不再要求 Tushare：无 Tushare 时订阅内部自动回退东财 push2his 60s 轮询
-  ipcMain.handle('datasource:subscribeStockMinute', async (_e, data: { stockCode?: string }) => {
+  registerTrustedIpcHandler('datasource:subscribeStockMinute', getWindow, async (_e, data: { stockCode?: string }) => {
     if (!data?.stockCode) return { ok: false, code: 'INVALID_PARAM', message: '缺少 stockCode' }
     subscribeStockMinute(data.stockCode)
     return { ok: true }
   })
 
   // 取消当前活跃订阅
-  ipcMain.handle('datasource:unsubscribeStockMinute', () => {
+  registerTrustedIpcHandler('datasource:unsubscribeStockMinute', getWindow, () => {
     unsubscribeStockMinute()
     return { ok: true }
   })
@@ -2113,7 +2084,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   // FR-072: 预测今日走势（仅当日分时数据 + 板块/大盘）
   // FR-080: auto-fallback across providers
   // FR-081: multi-model parallel prediction via Promise.allSettled
-  ipcMain.handle('ai:predictTrendToday', async (_e, data: { stockCode: string; provider?: string; providers?: string[] }) => {
+  registerTrustedIpcHandler('ai:predictTrendToday', getWindow, async (_e, data: { stockCode: string; provider?: string; providers?: string[] }) => {
     const db = getDb()
     const aiConfig = getAIConfig(db)
     const requestedProviders = Array.isArray(data.providers)
@@ -2377,7 +2348,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   // FR-072: 预测明日走势（含近30日日线数据 + 当日完整分时 + 板块/大盘）
   // FR-080: auto-fallback across providers
   // FR-081: multi-model parallel prediction via Promise.allSettled
-  ipcMain.handle('ai:predictTrendMorrow', async (_e, data: { stockCode: string; providers?: string[] }) => {
+  registerTrustedIpcHandler('ai:predictTrendMorrow', getWindow, async (_e, data: { stockCode: string; providers?: string[] }) => {
     const db = getDb()
     const aiConfig = getAIConfig(db)
     const requestedProviders = Array.isArray(data.providers)
@@ -2571,7 +2542,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   // ── ai:clearForecast ──────────────────────────────────────────────────────
   // FR-072: 仅清除内存中的预测叠加线（不删除DB记录）
   // FR-081: also clear multi-provider cache entries
-  ipcMain.handle('ai:clearForecast', (_e, data: { stockCode: string }) => {
+  registerTrustedIpcHandler('ai:clearForecast', getWindow, (_e, data: { stockCode: string }) => {
     forecastCacheMap.delete(data.stockCode)
     // Clear all multi-provider entries for this stock
     for (const key of multiProviderCacheMap.keys()) {
@@ -2586,7 +2557,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
   // FR-077: 从 DB 读取该股票最新 today + morrow 预测（重启后仍可恢复叠加线）
   // FR-078: 响应新增 todayCreatedAt 供前端判断是否已有当日预测
   // FR-081: 响应新增 providers 对象，包含各厂商独立的预测数据
-  ipcMain.handle('ai:getPredictionCache', (_e, data: { stockCode: string }) => {
+  registerTrustedIpcHandler('ai:getPredictionCache', getWindow, (_e, data: { stockCode: string }) => {
     // Build providers map from multi-provider cache
     const providers: Record<string, StockForecastCache> = {}
     for (const [key, val] of multiProviderCacheMap.entries()) {
@@ -2638,7 +2609,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
   // ── ai:listForecasts ──────────────────────────────────────────────────────
   // FR-077: 列出某只股票的所有预测记录（供预测面板下拉选择）
-  ipcMain.handle('ai:listForecasts', (_e, data: { stockCode: string }) => {
+  registerTrustedIpcHandler('ai:listForecasts', getWindow, (_e, data: { stockCode: string }) => {
     const db = getDb()
     const aiConfig = getAIConfig(db)
     const maxKeep = aiConfig.maxForecastsPerStock ?? 50
@@ -2647,7 +2618,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
   // ── ai:getForecast ────────────────────────────────────────────────────────
   // FR-077: 获取单条预测记录详情（含 points JSON）
-  ipcMain.handle('ai:getForecast', (_e, data: { id: number }) => {
+  registerTrustedIpcHandler('ai:getForecast', getWindow, (_e, data: { id: number }) => {
     const db = getDb()
     const row = getForecast(db, data.id)
     if (!row) return { error: { code: 'NOT_FOUND', message: '预测记录不存在' } }
@@ -2656,7 +2627,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
   // ── ai:reviseTrendForecast ───────────────────────────────────────────────
   // FR-174: 基于用户反馈再次预测，生成新记录且保留来源预测链路
-  ipcMain.handle('ai:reviseTrendForecast', async (_e, data: { forecastId: number; stockCode: string; userFeedback: string; providers?: string[] }) => {
+  registerTrustedIpcHandler('ai:reviseTrendForecast', getWindow, async (_e, data: { forecastId: number; stockCode: string; userFeedback: string; providers?: string[] }) => {
     const db = getDb()
     const forecastId = Number(data.forecastId)
     const stockCode = String(data.stockCode ?? '').trim()
@@ -2838,7 +2809,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
   // ── ai:deleteForecast ─────────────────────────────────────────────────────
   // FR-077: 删除单条预测记录
-  ipcMain.handle('ai:deleteForecast', (_e, data: { id: number }) => {
+  registerTrustedIpcHandler('ai:deleteForecast', getWindow, (_e, data: { id: number }) => {
     const db = getDb()
     deleteForecast(db, data.id)
     return { ok: true }
@@ -2846,7 +2817,7 @@ export function registerAIHandlers(getWindow: () => BrowserWindow | null): void 
 
   // ── ai:deleteAllForecasts ─────────────────────────────────────────────────
   // FR-077: 删除某只股票的全部预测记录
-  ipcMain.handle('ai:deleteAllForecasts', (_e, data: { stockCode: string }) => {
+  registerTrustedIpcHandler('ai:deleteAllForecasts', getWindow, (_e, data: { stockCode: string }) => {
     const db = getDb()
     deleteForecasts(db, data.stockCode)
     forecastCacheMap.delete(data.stockCode)

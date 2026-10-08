@@ -1,7 +1,8 @@
 import { app, BrowserWindow, shell, net, ipcMain, Menu } from 'electron'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { pathToFileURL } from 'url'
 import { initDb, getDb } from './database/db'
+import { claimMainEntryOwner } from './mainEntryOwner'
 import { seedBuiltInSources } from './database/sourceRepository'
 import { BUILT_IN_SOURCES } from './database/seeds'
 import { registerBriefingHandlers } from './ipc/briefingHandlers'
@@ -20,6 +21,11 @@ import { registerMarketOverviewHandlers } from './ipc/marketOverviewHandlers'
 import { registerScreenerHandlers } from './ipc/screenerHandlers'
 import { registerSectorFlowHandlers } from './ipc/sectorFlowHandlers'
 import { registerTradeCalHandlers } from './ipc/tradeCalHandlers'
+import { registerMacThsHandlers, createMacThsNativeConfirmation, macThsAccessibility } from './ipc/macThsHandlers'
+import { MacThsOrderService } from './services/macThsOrderService'
+import { createMacThsOrderDirectoryPreparation } from './services/macThsOrderDirectory'
+import { registerAppUpdateHandlers } from './ipc/appUpdateHandlers'
+import { registerSupportDiagnosticsHandlers } from './ipc/supportDiagnosticsHandlers'
 import { registerTrendHandlers } from './ipc/trendHandlers'
 import { registerDecisionHandlers } from './ipc/decisionHandlers'
 import { registerPortfolioHandlers } from './ipc/portfolioHandlers'
@@ -46,12 +52,14 @@ import { initDefaultEdgesIfEmpty } from './database/supplyChainRepository'
 import { getAIConfig } from './database/aiConfigRepository'
 import { deleteSessionsOlderThan } from './database/aiAnalysisSessionRepository'
 import { getDataSourceConfig } from './database/dataSourceRepository'
-import { setEventHandlers } from './services/scanEngine'
+import { setEventHandlers, stopScan, isScanning } from './services/scanEngine'
 import { decryptApiKey } from './utils/apiKeyEncryption'
 import { isArticleExpired } from './utils/articleAgeUtils'
-import { startScheduler, stopScheduler, runConceptMembersSyncJob } from './services/schedulerService'
+import { startScheduler, stopScheduler, waitForSchedulerIdle, runConceptMembersSyncJob } from './services/schedulerService'
 import { syncTradeCalIfNeeded } from './services/tradeCalSyncService'
-import { scheduleDailyCleanup } from './services/cleanerService'
+import { scheduleDailyCleanup, stopDailyCleanup } from './services/cleanerService'
+import { registerTrustedIpcHandler, isTrustedIpcSender } from './security/trustedIpc'
+import { recordSupportFailure } from './services/supportDiagnosticsService'
 import { emitPriorityNewsSignalsForScan } from './services/newsDecisionSignalService'
 import {
   startHeartbeat,
@@ -70,15 +78,102 @@ import {
   shouldAllowRendererPermission,
 } from './security/navigationPolicy'
 
+interface StartupDiagnostic {
+  entryEvaluations: number
+  bootstrapInvocations: number
+  readySubscriptions: number
+}
+
+const startupDiagnosticKey = Symbol.for('RT-ResearchFlow.main.diagnostic.v1')
+const diagnosticProcess = process as typeof process & { [key: symbol]: StartupDiagnostic | undefined }
+const startupDiagnostic: StartupDiagnostic = diagnosticProcess[startupDiagnosticKey] ?? {
+  entryEvaluations: 0, bootstrapInvocations: 0, readySubscriptions: 0,
+}
+startupDiagnostic.entryEvaluations += 1
+diagnosticProcess[startupDiagnosticKey] = startupDiagnostic
+
+const mainEntryBuildIdentity = JSON.stringify({
+  version: app.getVersion(),
+  appPath: resolve(app.getAppPath()),
+  entryPath: resolve(__filename),
+  executablePath: resolve(process.execPath),
+  electronVersion: process.versions.electron,
+})
+const entryClaim = claimMainEntryOwner(process, mainEntryBuildIdentity)
+if (entryClaim.acquired) {
+const mainEntryOwnership = entryClaim
+try {
 let mainWindow: BrowserWindow | null = null
 let databaseReady = false
+let applicationStarted = false
+let applicationStopping = false
+let shutdownComplete = false
+let shutdownTask: Promise<void> | null = null
+let macThsOrderService: MacThsOrderService | null = null
+let restartRequested = false
+let bootstrapTask: Promise<void> | null = null
+let networkMonitor: ReturnType<typeof setInterval> | null = null
+const startupTasks = new Set<Promise<unknown>>()
+const getTrustedWindow = () => applicationStopping ? null : mainWindow
+
+function trackStartupTask<T>(task: Promise<T>): Promise<T> {
+  startupTasks.add(task)
+  void task.finally(() => startupTasks.delete(task)).catch(() => undefined)
+  return task
+}
+
+async function waitForScanIdle(timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (isScanning() && Date.now() < deadline) {
+    await new Promise<void>(resolve => setTimeout(resolve, 50))
+  }
+}
+
+async function stopApplication(): Promise<void> {
+  applicationStopping = true
+  macThsOrderService?.beginStop()
+  stopHeartbeat()
+  stopScheduler()
+  stopDailyCleanup()
+  stopScan()
+  if (networkMonitor) clearInterval(networkMonitor)
+  networkMonitor = null
+  if (applicationDataReady && databaseReady) recordCloseTime()
+
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined
+  const drain = (async () => {
+    await bootstrapTask?.catch(() => undefined)
+    await Promise.allSettled([...startupTasks])
+    await Promise.allSettled([
+      waitForSchedulerIdle(5000),
+      waitForScanIdle(5000),
+      stopResearchAccessTransport(),
+    ])
+  })()
+  try {
+    await Promise.race([
+      drain,
+      new Promise<void>(resolve => {
+        deadlineTimer = setTimeout(() => {
+          console.warn('[Shutdown] Grace period expired; exiting with SQLite recovery enabled.')
+          resolve()
+        }, 8000)
+      }),
+    ])
+  } finally {
+    if (deadlineTimer) clearTimeout(deadlineTimer)
+    // The research-task grace period is not an order-executor exit proof.
+  }
+  await macThsOrderService?.shutdown()
+  shutdownComplete = true
+}
 
 /**
  * FR-050/053: Check if AI analysis should be triggered after a scan.
  * Queries qualifying briefings, applies time filter, pushes scan:aiAnalysisAvailable.
  */
 function triggerAIAnalysisIfAvailable(scanRunId: number | null, briefingScanRunId: number): void {
-  if (!mainWindow) return
+  if (!mainWindow || applicationStopping) return
   try {
     emitPriorityNewsSignalsForScan(getDb(), briefingScanRunId, mainWindow)
   } catch (err) {
@@ -171,8 +266,25 @@ function createWindow(): void {
     event.preventDefault()
   })
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow!.show()
+  const createdWindow = mainWindow
+  createdWindow.once('ready-to-show', () => {
+    if (!createdWindow.isDestroyed()) createdWindow.show()
+  })
+  const callerId = createdWindow.webContents.id
+  createdWindow.on('close', event => {
+    macThsOrderService?.revokeCaller(callerId)
+    if (!shutdownComplete && (applicationStopping || process.platform !== 'darwin')) {
+      event.preventDefault()
+      if (!applicationStopping) app.quit()
+    }
+  })
+  createdWindow.webContents.on('render-process-gone', () => macThsOrderService?.revokeCaller(callerId))
+  createdWindow.webContents.on('destroyed', () => macThsOrderService?.revokeCaller(callerId))
+  createdWindow.webContents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => {
+    if (isMainFrame) macThsOrderService?.revokeCaller(callerId)
+  })
+  createdWindow.on('closed', () => {
+    if (mainWindow === createdWindow) mainWindow = null
   })
 
   const windowSession = mainWindow.webContents.session
@@ -207,23 +319,32 @@ function createWindow(): void {
 }
 
 async function bootstrap(): Promise<void> {
-  // 0. Hide the native menu bar. Global notices live in the in-app message center.
-  Menu.setApplicationMenu(null)
+  startupDiagnostic.bootstrapInvocations += 1
+  if (mainEntryOwnership.owner.phase === 'failed') throw new Error('MAIN_ENTRY_STARTUP_FAILED')
+  if (applicationStopping) return
+  // macOS needs native edit shortcuts, window management, and Command+Q.
+  Menu.setApplicationMenu(process.platform === 'darwin'
+    ? Menu.buildFromTemplate([
+      { role: 'appMenu' },
+      { role: 'editMenu' },
+      { role: 'windowMenu' },
+    ])
+    : null)
 
-  ipcMain.handle('window:minimize', () => {
+  registerTrustedIpcHandler('window:minimize', getTrustedWindow, () => {
     mainWindow?.minimize()
   })
-  ipcMain.handle('window:toggleMaximize', () => {
+  registerTrustedIpcHandler('window:toggleMaximize', getTrustedWindow, () => {
     if (!mainWindow) return
     if (mainWindow.isMaximized()) mainWindow.unmaximize()
     else mainWindow.maximize()
   })
-  ipcMain.handle('window:close', () => {
+  registerTrustedIpcHandler('window:close', getTrustedWindow, () => {
     mainWindow?.close()
   })
-  ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
+  registerTrustedIpcHandler('window:isMaximized', getTrustedWindow, () => mainWindow?.isMaximized() ?? false)
   ipcMain.handle('system:openExternal', async (event, value: unknown) => {
-    if (!mainWindow || event.sender !== mainWindow.webContents) {
+    if (!isTrustedIpcSender(event, getTrustedWindow)) {
       return { ok: false as const, error: 'UNAUTHORIZED' as const }
     }
     const externalUrl = normalizeExternalHttpUrl(value)
@@ -236,17 +357,34 @@ async function bootstrap(): Promise<void> {
       return { ok: false as const, error: 'OPEN_FAILED' as const }
     }
   })
-  ipcMain.handle('app:relaunch', () => {
-    app.relaunch()
-    app.exit(0)
+  registerTrustedIpcHandler('app:relaunch', getTrustedWindow, () => {
+    restartRequested = true
+    app.quit()
   })
 
+  // A single order service owns the existing execution domain, separately from the research DB.
+  // Native/ABI/storage failures become trading state instead of fatal research-app startup.
+  macThsOrderService = new MacThsOrderService({ directory: app.getPath('userData'),
+    prepareDirectory: directory => {
+      try { prepareMacThsOrderDirectory(directory) }
+      catch (error) {
+        const code = (error as { code?: string })?.code
+        console.warn('[MacTHS] Order directory unavailable:', code ?? 'ORDER_DIRECTORY_IO')
+        throw error
+      }
+    },
+    confirm: createMacThsNativeConfirmation(() => mainWindow), accessibility: macThsAccessibility })
+  await macThsOrderService.start()
+  if (applicationStopping) { macThsOrderService.beginStop(); return }
+
   // 1. Initialize database
-  initDb()
+  await initDb()
   databaseReady = true
+  if (applicationStopping) return
   seedBuiltInSources(BUILT_IN_SOURCES)
   initDefaultEdgesIfEmpty(getDb())
   const researchAccessStatus = await startResearchAccessTransport(getDb(), app.getPath('userData'))
+  if (applicationStopping) return
   if (researchAccessStatus.state !== 'ready') {
     console.warn(`[ResearchAccess] Local transport unavailable: ${researchAccessStatus.errorCode ?? 'unknown'}`)
   }
@@ -255,10 +393,10 @@ async function bootstrap(): Promise<void> {
   registerBriefingHandlers()
   registerSourceHandlers()
   registerScanHandlers()
-  registerSettingsHandlers()
+  registerSettingsHandlers(getTrustedWindow)
   registerArchiveHandlers()
   registerDetailHandlers()
-  registerAIHandlers(() => mainWindow)
+  registerAIHandlers(getTrustedWindow)
   registerAiEvaluationHandlers()
   registerSkillHandlers()
   registerBacktestHandlers()
@@ -268,13 +406,16 @@ async function bootstrap(): Promise<void> {
   registerScreenerHandlers()
   registerSectorFlowHandlers()
   registerTradeCalHandlers()
+  registerMacThsHandlers(() => mainWindow, macThsOrderService)
+  registerAppUpdateHandlers(getTrustedWindow)
+  registerSupportDiagnosticsHandlers(getTrustedWindow)
   registerTrendHandlers()
   registerDecisionHandlers()
   registerPortfolioHandlers(() => mainWindow)
   registerSupplyChainHandlers()
   registerIndustryResearchHandlers(() => mainWindow)
-  registerDiagnosticsHandlers()
-  registerDataSafetyHandlers()
+  registerDiagnosticsHandlers(getTrustedWindow)
+  registerDataSafetyHandlers(getTrustedWindow)
   registerBaseDataPackageHandlers()
   registerConditionBlockHandlers()
   registerStrategyBacktestHandlers()
@@ -318,10 +459,10 @@ async function bootstrap(): Promise<void> {
   // 使用 handle（非 handleOnce）以兼容开发模式下渲染进程热重载时的重复调用；
   // rendererReadyHandled 守卫确保副作用仅执行一次。
   let rendererReadyHandled = false
-  ipcMain.handle('renderer:ready', async () => {
+  registerTrustedIpcHandler('renderer:ready', getTrustedWindow, () => {
     if (rendererReadyHandled) return
     rendererReadyHandled = true
-
+    return trackStartupTask((async () => {
     const catchupResult = await runCatchUpIfNeeded((msg) => {
       mainWindow && sendScanEvent(mainWindow, 'catchup:status', { message: msg })
     })
@@ -329,6 +470,7 @@ async function bootstrap(): Promise<void> {
       triggerAIAnalysisIfAvailable(null, catchupResult.scanRunId)
     }
 
+    if (applicationStopping) return
     startScheduler()
 
     // 9c. 首次启动检查：kpl_concept_members 表为空时立即触发全量同步
@@ -336,7 +478,9 @@ async function bootstrap(): Promise<void> {
     const conceptCount = (getDb().prepare('SELECT COUNT(*) as c FROM kpl_concept_members').get() as { c: number }).c
     if (conceptCount === 0) {
       console.log('[Startup] kpl_concept_members is empty, triggering initial sync...')
-      void runConceptMembersSyncJob()
+      void trackStartupTask(runConceptMembersSyncJob()).catch(() => {
+        recordSupportFailure('INTERNAL_ERROR', 'data')
+      })
     }
 
     // 9d. 启动时按需同步交易日历（FR-162）
@@ -344,11 +488,12 @@ async function bootstrap(): Promise<void> {
     if (dsCfg.tushareEnabled && dsCfg.tushareTokenEncrypted) {
       const token = decryptApiKey(dsCfg.tushareTokenEncrypted)
       if (token) {
-        void syncTradeCalIfNeeded(getDb(), token).catch((err) =>
+        void trackStartupTask(syncTradeCalIfNeeded(getDb(), token)).catch((err) =>
           console.warn('[Startup] syncTradeCalIfNeeded failed:', err instanceof Error ? err.message : String(err))
         )
       }
     }
+    })())
   })
 
   // 8. Schedule daily data cleanup
@@ -367,15 +512,19 @@ async function bootstrap(): Promise<void> {
 
   // 9. Network status monitoring
   let lastOnlineState = net.isOnline()
-  setInterval(() => {
+  networkMonitor = setInterval(() => {
     const online = net.isOnline()
     if (online !== lastOnlineState) {
       lastOnlineState = online
       mainWindow && sendScanEvent(mainWindow, 'network:statusChanged', { online })
     }
   }, 30_000)
+  applicationStarted = true
 }
 
+// Capture Electron's app-specific default before configureApplicationDataPaths can change it.
+// This is read-only capture; permission work runs inside the nonfatal order-service start gate.
+const prepareMacThsOrderDirectory = createMacThsOrderDirectoryPreparation(app)
 let applicationDataReady = true
 let applicationDataFailure: string | null = null
 try {
@@ -391,17 +540,43 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.tradewatch.app')
 }
 
-if (applicationDataReady) {
-  app.whenReady().then(bootstrap).catch((error) => {
+const ownsApplicationInstance = applicationDataReady ? app.requestSingleInstanceLock() : true
+app.on('second-instance', () => {
+  if (applicationStopping) return
+  if (applicationStarted && (!mainWindow || mainWindow.isDestroyed())) createWindow()
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  }
+})
+
+if (!ownsApplicationInstance) {
+  mainEntryOwnership.fail(new Error('MAIN_ENTRY_SECOND_INSTANCE'))
+  app.quit()
+} else if (applicationDataReady) {
+  startupDiagnostic.readySubscriptions += 1
+  bootstrapTask = app.whenReady().then(bootstrap)
+  void bootstrapTask.then(() => {
+    if (!applicationStarted || applicationStopping) {
+      mainEntryOwnership.fail(new Error('MAIN_ENTRY_STARTUP_ABORTED'))
+    } else {
+      mainEntryOwnership.complete()
+    }
+  }, (error) => {
+    mainEntryOwnership.fail(error)
+    if (applicationStopping) return
+    const incident = recordSupportFailure('DATABASE_UNAVAILABLE', 'runtime')
     const details = error instanceof Error ? error.stack ?? error.message : String(error)
     console.error('[Startup] Bootstrap failed:', error)
     showFatalErrorWindow({
       title: '应用启动失败',
       message: '应用无法安全完成本地数据库或启动服务初始化。你的数据没有被自动覆盖，请根据下方信息检查后重新启动。',
-      details,
+      details: `问题编号：${incident.correlationId}\n\n${details}`,
     })
   })
 } else {
+  mainEntryOwnership.fail(new Error('MAIN_ENTRY_APP_DATA_UNAVAILABLE'))
   app.whenReady().then(() => {
     showFatalErrorWindow({
       title: '本地数据目录初始化失败',
@@ -412,21 +587,34 @@ if (applicationDataReady) {
 }
 
 app.on('window-all-closed', () => {
-  if (applicationDataReady && databaseReady) recordCloseTime()
-  stopHeartbeat()
-  stopScheduler()
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  // macOS keeps the application and background services alive after window close.
+  if (process.platform === 'darwin') return
+  app.quit()
 })
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+  if (!applicationStopping && applicationStarted && (!mainWindow || mainWindow.isDestroyed())) {
     createWindow()
   }
 })
 
-app.on('before-quit', () => {
-  if (applicationDataReady && databaseReady) recordCloseTime()
-  void stopResearchAccessTransport()
+app.on('before-quit', (event) => {
+  if (shutdownComplete || !ownsApplicationInstance) return
+  event.preventDefault()
+  if (shutdownTask) return
+  macThsOrderService?.beginStop()
+  shutdownTask = stopApplication().then(() => {
+    if (restartRequested) app.relaunch()
+    app.quit()
+  }).catch(() => {
+    // Retain the order owner and visible failure state. Never treat timeout/kill as a clean exit.
+    console.warn('[Shutdown] Order shutdown is unproven; process teardown was not authorized.')
+    shutdownTask = null
+    if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus() }
+  })
 })
+} catch (error) {
+  mainEntryOwnership.fail(error)
+  throw error
+}
+}

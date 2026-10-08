@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import { fetchStockPricesForPrompt } from './tushareService'
+import { fetchSelectedStockDaily } from './multiSourceMarketService'
 import {
   executeResearchFactTool,
   type ResearchPriceBar,
@@ -96,13 +96,15 @@ export async function prepareArticleRound2MarketContext(
   tushareToken: string | null,
 ): Promise<ArticleRound2MarketContext> {
   const codes = [...new Set(stockCodes.filter((code) => /^[036]\d{5}$/.test(code)))].slice(0, 5)
-  const refreshAttempted = Boolean(tushareToken)
-
-  if (tushareToken && codes.length > 0) {
+  let refreshAttempted = Boolean(tushareToken)
+  for (const code of codes) {
+    const cached = executeResearchFactTool(db, 'stock.price_history', { stockCode: code, limit: MAX_MARKET_BARS, minBars: MIN_MARKET_BARS })
+    if (!tushareToken && cached.status === 'ready') continue
+    refreshAttempted = true
     try {
-      await fetchStockPricesForPrompt(db, tushareToken, codes)
-    } catch (error) {
-      console.warn('[AI Round2 Market] Tushare refresh failed, using local cache:', error instanceof Error ? error.message : String(error))
+      await fetchSelectedStockDaily(db, code, { token: tushareToken, benchmark: false })
+    } catch {
+      console.warn('[AI Round2 Market] Selected source refresh unavailable; using only verified local facts.')
     }
   }
 
@@ -137,7 +139,7 @@ export async function prepareArticleRound2MarketContext(
     .sort()
     .at(-1) ?? null
   const sourceDescription = refreshAttempted
-    ? '本地全市场日线缓存 + 个股行情缓存；本轮已尝试通过 Tushare daily 增量更新'
+    ? '本地全市场日线缓存 + 个股行情缓存；本轮已尝试所选日线来源，按配置顺序回退，失败时仅使用已有真实缓存'
     : '本地全市场日线缓存 + 个股行情缓存'
   const status = missingCodes.length === 0 ? 'ready' : 'partial'
   const missingNotice = missingCodes.length > 0
@@ -168,7 +170,7 @@ export function buildRound2MarketBlockedResponse(context: ArticleRound2MarketCon
 
 本轮没有为 ${codes} 取得至少 ${MIN_MARKET_BARS} 个 OHLC 完整交易日，因此未调用 AI 生成走势、支撑位或压力位结论，避免用模型记忆补齐真实行情。
 
-- 已检查：本地全市场日线缓存、个股行情缓存${context.refreshAttempted ? '，并已尝试 Tushare 增量更新' : ''}
+- 已检查：本地全市场日线缓存、个股行情缓存${context.refreshAttempted ? '，并已尝试所选日线来源' : ''}
 - 影响：第一轮新闻与公司映射仍然保留，但尚未完成真实行情复核
 - 恢复动作：补齐近期日线数据后，点击“重新用近期行情复核”
 

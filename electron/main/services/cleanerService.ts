@@ -2,6 +2,9 @@ import { getSettings } from '../database/settingsRepository'
 import { deleteOldBriefings } from '../database/briefingRepository'
 import { utcToBjDate } from '../utils/dateUtils'
 
+let _cleanupTimer: ReturnType<typeof setInterval> | null = null
+let _cleanupGeneration = 0
+
 let _lastCleanDate: string | null = null
 
 /**
@@ -25,10 +28,19 @@ export function runCleanupIfNeeded(): void {
  * Schedule daily cleanup at midnight Beijing time.
  */
 export function scheduleDailyCleanup(): void {
+  if (_cleanupTimer !== null) return
+  const generation = ++_cleanupGeneration
   runCleanupIfNeeded()
-
-  // Check every hour if it's a new BJ day
-  setInterval(() => {
+  _cleanupTimer = setInterval(() => {
+    if (generation !== _cleanupGeneration) return
     runCleanupIfNeeded()
   }, 60 * 60 * 1000)
+}
+
+/** Release the hourly resource; repeated stops and subsequent starts are safe. */
+export function stopDailyCleanup(): void {
+  if (_cleanupTimer === null) return
+  clearInterval(_cleanupTimer)
+  _cleanupTimer = null
+  _cleanupGeneration += 1
 }

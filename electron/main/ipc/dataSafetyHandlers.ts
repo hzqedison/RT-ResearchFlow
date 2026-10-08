@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registerTrustedIpcHandler, type TrustedWindowGetter } from '../security/trustedIpc'
 import { getDb } from '../database/db'
 import { createDatabaseBackup, exportData, getDataSafetyStatus, openBackupDirectory, type DataExportScope } from '../services/dataSafetyService'
 
@@ -12,8 +12,8 @@ function messageFromError(err: unknown, fallback: string): string {
   return fallback
 }
 
-export function registerDataSafetyHandlers(): void {
-  ipcMain.handle('dataSafety:getStatus', () => {
+export function registerDataSafetyHandlers(getWindow: TrustedWindowGetter): void {
+  registerTrustedIpcHandler('dataSafety:getStatus', getWindow, () => {
     try {
       return { ok: true as const, data: getDataSafetyStatus(getDb()) }
     } catch (err) {
@@ -22,7 +22,7 @@ export function registerDataSafetyHandlers(): void {
     }
   })
 
-  ipcMain.handle('dataSafety:createBackup', async () => {
+  registerTrustedIpcHandler('dataSafety:createBackup', getWindow, async () => {
     try {
       return { ok: true as const, data: await createDatabaseBackup(getDb()) }
     } catch (err) {
@@ -31,7 +31,7 @@ export function registerDataSafetyHandlers(): void {
     }
   })
 
-  ipcMain.handle('dataSafety:openBackupDirectory', async () => {
+  registerTrustedIpcHandler('dataSafety:openBackupDirectory', getWindow, async () => {
     try {
       const backupDirectory = await openBackupDirectory()
       return { ok: true as const, data: { backupDirectory } }
@@ -41,7 +41,7 @@ export function registerDataSafetyHandlers(): void {
     }
   })
 
-  ipcMain.handle('dataSafety:exportData', (_event, payload?: { scope?: DataExportScope }) => {
+  registerTrustedIpcHandler('dataSafety:exportData', getWindow, (_event, payload?: { scope?: DataExportScope }) => {
     const scope = payload?.scope ?? 'all'
     if (!EXPORT_SCOPES.includes(scope)) return { ok: false as const, error: 'INVALID_PARAM' as const, message: '导出范围无效' }
     try {

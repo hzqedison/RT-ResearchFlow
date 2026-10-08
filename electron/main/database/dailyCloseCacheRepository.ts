@@ -67,7 +67,7 @@ interface CacheRow {
   fetched_at?: number | null
 }
 
-export type DailyCloseWriteSource = 'legacy' | 'tushare' | 'sina' | 'tencent' | 'sina_snapshot' | 'eastmoney'
+export type DailyCloseWriteSource = 'legacy' | 'tushare' | 'sina' | 'tencent' | 'sina_snapshot' | 'eastmoney' | 'tdx' | 'akshare'
 
 export interface DailyCloseWriteMetadata {
   dataSource: DailyCloseWriteSource
@@ -191,6 +191,8 @@ function sourceRank(alias: string, column = 'data_source'): string {
     WHEN 'legacy' THEN 5
     WHEN 'sina_snapshot' THEN 4
     WHEN 'eastmoney' THEN 3
+    WHEN 'akshare' THEN 3
+    WHEN 'tdx' THEN 2
     WHEN 'sina' THEN 2
     WHEN 'tencent' THEN 1
     ELSE 0 END`

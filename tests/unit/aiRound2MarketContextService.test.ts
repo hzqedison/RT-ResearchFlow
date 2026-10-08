@@ -1,5 +1,12 @@
 import Database from 'better-sqlite3'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fetchSelectedStockDaily } from '../../electron/main/services/multiSourceMarketService'
+
+vi.mock('../../electron/main/services/multiSourceMarketService', () => ({ fetchSelectedStockDaily: vi.fn() }))
+
+beforeEach(() => {
+  vi.mocked(fetchSelectedStockDaily).mockReset().mockRejectedValue(new Error('ISOLATED_OFFLINE_FIXTURE'))
+})
 import { runMigrations } from '../../electron/main/database/db'
 import { upsertDailyClose } from '../../electron/main/database/dailyCloseCacheRepository'
 import { insertPrices, upsertStockInfo } from '../../electron/main/database/stockPriceCacheRepository'
@@ -96,6 +103,7 @@ describe('FR-240 第二轮真实行情上下文', () => {
     expect(result.status).toBe('partial')
     expect(result.availableCodes).toEqual(['300012'])
     expect(result.missingCodes).toEqual(['002967'])
+    expect(fetchSelectedStockDaily).toHaveBeenCalledWith(database, '002967', { token: null, benchmark: false })
     expect(result.markdown).toContain('002967；不得为这些股票补写走势或价位')
   })
 

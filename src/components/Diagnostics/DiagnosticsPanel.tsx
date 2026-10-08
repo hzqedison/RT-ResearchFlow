@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ConfigDrawerTab } from '../ConfigDrawer/ConfigDrawer'
-import { getFlowProgress, type InitializationFlowState } from '../Onboarding/initializationTaskModel'
+import { getFlowProgress, INITIALIZATION_SCOPE_MESSAGE, type InitializationFlowState } from '../Onboarding/initializationTaskModel'
+import type { ConceptSource, DiagnosticReadiness, EvaluationCounts } from '../../../electron/shared/dataReadiness'
 import { AIQualityEvaluation } from './AIQualityEvaluation'
+import { SupportFeedbackPanel } from './SupportFeedbackPanel'
 import { DATA_SAFETY_STATUS_META, exportScopeLabel, formatBytes, formatDateTime, type DataBackupResult, type DataExportResult, type DataExportScope, type DataSafetyStatus } from './dataSafetyModel'
 
 type DiagnosticStatus = 'ok' | 'warning' | 'error'
-type DiagnosticRunAction = 'refreshHealth' | 'refreshDataQuality' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals'
+type DiagnosticRunAction = 'refreshHealth' | 'refreshDataQuality' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals' | 'syncAuctionSnapshot' | 'syncLimitList'
 type DataTrustStatus = 'reliable' | 'degraded' | 'blocked'
 
 interface DiagnosticAction {
@@ -14,7 +16,7 @@ interface DiagnosticAction {
   kind: 'navigate' | 'run'
 }
 
-interface DiagnosticItem {
+interface DiagnosticItem extends DiagnosticReadiness {
   key: string
   title: string
   status: DiagnosticStatus
@@ -59,13 +61,14 @@ interface DailyCloseQuality {
 interface DiagnosticsHealthSnapshot {
   status: DiagnosticStatus
   checkedAt: number
-  summary: Record<DiagnosticStatus, number>
+  summary: Record<DiagnosticStatus, number> & Partial<EvaluationCounts>
+  selectedConceptSource?: ConceptSource
   groups: DiagnosticGroup[]
   dailyCloseQuality?: DailyCloseQuality
   dataQuality?: DataQualitySnapshot
 }
 
-interface DataQualityDataset {
+interface DataQualityDataset extends DiagnosticReadiness {
   key: 'stockBasic' | 'tradeCalendar' | 'dailyMarket' | 'auction' | 'benchmarks' | 'financials'
   title: string
   status: DataTrustStatus
@@ -77,7 +80,7 @@ interface DataQualityDataset {
   affectedModules: string[]
   reasons: Array<{ code: string; message: string; severity: 'warning' | 'error' }>
   action: null | {
-    key: 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks'
+    key: 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncAuctionSnapshot' | 'syncLimitList'
     label: string
   }
 }
@@ -88,7 +91,7 @@ interface DataQualitySnapshot {
   fingerprint: string
   persistedRunId: number | null
   persistedAt: number | null
-  summary: Record<DataTrustStatus, number>
+  summary: Record<DataTrustStatus, number> & Partial<EvaluationCounts>
   datasets: DataQualityDataset[]
 }
 
@@ -116,13 +119,15 @@ interface DiagnosticsPanelProps {
   onStartInitialization?: () => void
 }
 
-const STATUS_META: Record<DiagnosticStatus, { label: string; className: string; dot: string }> = {
+const STATUS_META: Record<DiagnosticStatus | 'neutral', { label: string; className: string; dot: string }> = {
+  neutral: { label: '未参与', className: 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400', dot: 'bg-gray-400' },
   ok: { label: '正常', className: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300', dot: 'bg-emerald-500' },
   warning: { label: '提醒', className: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300', dot: 'bg-amber-500' },
   error: { label: '异常', className: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300', dot: 'bg-red-500' }
 }
 
-const DATA_TRUST_META: Record<DataTrustStatus, { label: string; className: string; dot: string; summary: string }> = {
+const DATA_TRUST_META: Record<DataTrustStatus | 'neutral', { label: string; className: string; dot: string; summary: string }> = {
+  neutral: { ...STATUS_META.neutral, summary: '未参与当前评价，不表示数据已齐备' },
   reliable: {
     label: '可用',
     className: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300',
@@ -178,6 +183,8 @@ function runActionFromKey(key: DiagnosticAction['key']): DiagnosticRunAction | n
     || key === 'syncHistoricalDaily'
     || key === 'syncMarketBenchmarks'
     || key === 'syncConceptMembers'
+    || key === 'syncAuctionSnapshot'
+    || key === 'syncLimitList'
     || key === 'backfillDecisionSignals'
   ) return key
   return null
@@ -248,7 +255,7 @@ export function DiagnosticsPanel({ onNavigateConfig, onOpenGuide, initialization
 
   const blockers = useMemo(() => {
     if (!snapshot) return []
-    return snapshot.groups.flatMap(group => group.items).filter(item => item.status !== 'ok').slice(0, 4)
+    return snapshot.groups.flatMap(group => group.items).filter(item => item.displayStatus !== 'neutral' && item.status !== 'ok').slice(0, 4)
   }, [snapshot])
 
   async function handleRun(action: DiagnosticRunAction) {
@@ -262,6 +269,9 @@ export function DiagnosticsPanel({ onNavigateConfig, onOpenGuide, initialization
         await loadHealth()
       } else {
         setError(res.message || '诊断动作执行失败')
+        // Refresh last-attempt evidence without converting failure into completion.
+        const health = await window.api.diagnostics.getHealth()
+        if (health.ok) setSnapshot(health.data)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '诊断动作执行失败')
@@ -394,7 +404,7 @@ export function DiagnosticsPanel({ onNavigateConfig, onOpenGuide, initialization
     }
   }
 
-  const overall = snapshot ? STATUS_META[snapshot.status] : STATUS_META.warning
+  const overall = snapshot?.summary.evaluatedCount === 0 ? { ...STATUS_META.neutral, label: '无可评价数据' } : snapshot ? STATUS_META[snapshot.status] : STATUS_META.warning
   const flowProgress = initializationFlow ? getFlowProgress(initializationFlow) : null
   const dataSafetyMeta = dataSafety ? DATA_SAFETY_STATUS_META[dataSafety.status] : DATA_SAFETY_STATUS_META.warning
 
@@ -409,6 +419,8 @@ export function DiagnosticsPanel({ onNavigateConfig, onOpenGuide, initialization
               <span className={`rounded border px-2 py-0.5 text-xs ${overall.className}`}>{overall.label}</span>
             </div>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">最近检查：{formatTime(snapshot?.checkedAt)}</p>
+            {snapshot && <p className="mt-1 text-xs text-gray-500">已评估 {snapshot.summary.evaluatedCount ?? snapshot.summary.ok + snapshot.summary.warning + snapshot.summary.error} 项，另有 {snapshot.summary.neutral ?? 0} 项未参与</p>}
+            <p className="mt-1 text-xs text-gray-500">{INITIALIZATION_SCOPE_MESSAGE}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {onStartInitialization && (
@@ -443,6 +455,8 @@ export function DiagnosticsPanel({ onNavigateConfig, onOpenGuide, initialization
           </div>
         </div>
 
+        <SupportFeedbackPanel />
+
         {snapshot && (
           <div data-testid="diagnostics-summary" className="grid grid-cols-3 gap-3">
             {(['ok', 'warning', 'error'] as DiagnosticStatus[]).map(status => (
@@ -476,6 +490,7 @@ export function DiagnosticsPanel({ onNavigateConfig, onOpenGuide, initialization
                   <div className="hidden text-right text-[11px] text-gray-500 dark:text-gray-400 sm:block">
                     <div>{quality.summary.reliable} 项可用 · {quality.summary.degraded} 项需注意</div>
                     <div>{quality.summary.blocked} 项阻断</div>
+                    <div>{quality.summary.evaluatedCount === 0 ? '无可评价数据' : `已评估 ${quality.summary.evaluatedCount ?? quality.summary.reliable + quality.summary.degraded + quality.summary.blocked} 项`}，另有 {quality.summary.neutral ?? 0} 项未参与</div>
                   </div>
                   <button
                     type="button"
@@ -490,7 +505,7 @@ export function DiagnosticsPanel({ onNavigateConfig, onOpenGuide, initialization
               </div>
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
                 {quality.datasets.map(dataset => {
-                  const meta = DATA_TRUST_META[dataset.status]
+                  const meta = DATA_TRUST_META[dataset.displayStatus ?? dataset.status]
                   const range = dataset.earliestDate || dataset.latestDate
                     ? `${formatFactDate(dataset.earliestDate)} ~ ${formatFactDate(dataset.latestDate)}`
                     : '暂无事实范围'
@@ -508,6 +523,7 @@ export function DiagnosticsPanel({ onNavigateConfig, onOpenGuide, initialization
                             <span>{range}</span>
                             <span>{dataset.recordCount.toLocaleString('zh-CN')} 条</span>
                             <span>{dataset.sourceLabel}</span>
+                            {dataset.evidence?.expectedTradeDate && <span>应有交易日：{dataset.evidence.expectedTradeDate}</span>}
                           </div>
                           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
                             <span>影响：</span>
@@ -724,15 +740,16 @@ export function DiagnosticsPanel({ onNavigateConfig, onOpenGuide, initialization
                 <div key={item.key} className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={`h-2 w-2 rounded-full ${STATUS_META[item.status].dot}`} />
+                      <span className={`h-2 w-2 rounded-full ${STATUS_META[item.displayStatus ?? item.status].dot}`} />
                       <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.title}</div>
-                      <span className={`rounded border px-1.5 py-0.5 text-[11px] ${STATUS_META[item.status].className}`}>{STATUS_META[item.status].label}</span>
+                      <span className={`rounded border px-1.5 py-0.5 text-[11px] ${STATUS_META[item.displayStatus ?? item.status].className}`}>{item.displayStatus === 'neutral' ? '未参与' : item.evidence?.readiness === 'unknown' ? '待核验' : item.evidence?.readiness === 'missing' ? '缺数据' : item.evidence?.readiness === 'partial' ? '未齐备' : STATUS_META[item.status].label}</span>
                     </div>
                     <div className="mt-1 text-xs text-gray-600 dark:text-gray-300">{item.message}</div>
                     {item.detail && <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">{item.detail}</div>}
                     <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-gray-400 dark:text-gray-500">
                       {item.recordCount !== undefined && <span>记录数：{item.recordCount ?? '—'}</span>}
                       {item.latestDate !== undefined && <span>最近日期：{item.latestDate ?? '—'}</span>}
+                      {item.evidence?.expectedTradeDate && <span>应有交易日：{item.evidence.expectedTradeDate}</span>}
                     </div>
                   </div>
                   {item.actions && item.actions.length > 0 && (

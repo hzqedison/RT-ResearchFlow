@@ -1,0 +1,80 @@
+name: Windows build and installed-app test
+
+on:
+  push:
+    branches: [codex/macos-support]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-build:
+    if: github.repository == 'hzqedison/RT-ResearchFlow'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check public boundary
+        shell: pwsh
+        run: ./.github/scripts/Test-PublicBoundary.ps1
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install Electron native dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify source and isolated unit tests
+        run: pnpm run verify
+      - name: Package Windows x64 installer
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: pnpm exec electron-builder --win --x64 --config electron-builder.js --config.nsis.runAfterFinish=false
+      - name: Check installer and create checksum
+        shell: pwsh
+        run: |
+          $package = Get-Content -Raw package.json | ConvertFrom-Json
+          $name = "RT-ResearchFlow-Setup-$($package.version)-x64.exe"
+          $installer = Get-Item -LiteralPath (Join-Path release $name)
+          $unexpected = @(Get-ChildItem -LiteralPath release -Filter '*.exe' -File | Where-Object Name -ne $name)
+          if ($unexpected.Count -ne 0) { throw "Unexpected installer artifacts." }
+          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name" | Set-Content -LiteralPath release/SHA256SUMS.txt -Encoding ascii
+          ./.github/scripts/Test-PublicBoundary.ps1 -ArtifactDirectory release
+      - name: Install only inside the isolated runner directory
+        shell: pwsh
+        run: |
+          $package = Get-Content -Raw package.json | ConvertFrom-Json
+          $installer = (Get-Item -LiteralPath "release/RT-ResearchFlow-Setup-$($package.version)-x64.exe").FullName
+          $install = Join-Path $env:RUNNER_TEMP "RT-ResearchFlow-installed-$($package.version)"
+          $process = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$install") -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
+          $executable = Join-Path $install 'RT-ResearchFlow.exe'
+          if (-not (Test-Path -LiteralPath $executable)) { throw "Installed executable is missing." }
+          "TRADE_WATCH_PACKAGED_EXECUTABLE=$executable" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+      - name: Check installed startup, SQLite, AI save and platform safety
+        run: pnpm exec playwright test tests/e2e/packaged-app-smoke.spec.ts tests/e2e/windows-integrated-app.spec.ts --reporter=line --workers=1
+      - name: Upload tested Windows packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: RT-ResearchFlow-Windows-x64-${{ github.sha }}
+          path: |
+            release/RT-ResearchFlow-Setup-*-x64.exe
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload isolated test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RT-ResearchFlow-Windows-checks-${{ github.sha }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14

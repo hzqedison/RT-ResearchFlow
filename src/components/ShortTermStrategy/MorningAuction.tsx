@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useAppStore } from '../../store/appStore'
+import { buildMorningAuctionReadinessViewModel, type MorningAuctionReadinessDto } from './morningAuctionReadinessViewModel'
 import { createPortal } from 'react-dom'
 import { StockKlineChipDrawer } from '../shared/StockMiniChart'
 import { BacktestModal } from '../shared/BacktestModal'
@@ -90,6 +91,7 @@ interface MorningAuctionSnapshot {
   tradeDate: string
   generatedAt: number
   isMock: boolean
+  readiness?: MorningAuctionReadinessDto
   threeOne: {
     firstBoard: MorningAuctionStock[]
     secondBoard: MorningAuctionStock[]
@@ -864,6 +866,7 @@ function CandidateQueue({
   chipSyncAttemptedCodes,
   chipSyncing,
   priceHistoryCoverage,
+  emptyMessage,
   onSelect,
   onStockClick,
 }: {
@@ -874,13 +877,14 @@ function CandidateQueue({
   chipSyncAttemptedCodes: Set<string>
   chipSyncing: boolean
   priceHistoryCoverage?: MorningAuctionPriceHistoryCoverage
+  emptyMessage: string
   onSelect: (candidate: AuctionCandidate) => void
   onStockClick: (stock: MorningAuctionStock) => void
 }): JSX.Element {
   if (candidates.length === 0) {
     return (
       <div className="flex h-full min-h-[320px] items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-800">
-        暂无符合当前筛选的竞价候选
+        {emptyMessage}
       </div>
     )
   }
@@ -1650,6 +1654,12 @@ export function MorningAuction({ dataTools, onOpenDataTools }: MorningAuctionPro
   const headlineCandidate = selectedCandidate ?? workbench.candidates[0] ?? null
   const headlineStock = headlineCandidate?.stock ?? null
   const candidateRecordCount = snapshot ? collectSnapshotStocks(snapshot).length : 0
+  const readinessView = useMemo(() => buildMorningAuctionReadinessViewModel({
+    readiness: snapshot?.readiness,
+    selectedTradeDate: selectedDate,
+    snapshotTradeDate: snapshot?.tradeDate,
+    isMock: snapshot?.isMock,
+  }), [selectedDate, snapshot?.readiness, snapshot?.tradeDate, snapshot?.isMock])
   const recoveryState = useMemo(() => buildMorningAuctionRecoveryState({
     loadError: error,
     insightError,
@@ -1718,7 +1728,7 @@ export function MorningAuction({ dataTools, onOpenDataTools }: MorningAuctionPro
         </div>
         <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
           <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-800">竞价数据 <strong className="text-slate-700 dark:text-slate-200">stk_auction</strong></span>
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-800">自动刷新 <strong className="text-slate-700 dark:text-slate-200">60s</strong></span>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-800">按需更新</span>
         </div>
       </div>
 
@@ -1735,6 +1745,37 @@ export function MorningAuction({ dataTools, onOpenDataTools }: MorningAuctionPro
           当前为 Mock 演示数据：Tushare 374 套餐尚未开通，待接入真实接口后将切换为实时数据。
         </div>
       )}
+
+      <section
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className={`shrink-0 border-b px-4 py-2 text-xs ${readinessView.tone === 'blocked'
+          ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200'
+          : readinessView.tone === 'warning'
+            ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200'
+            : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'}`}
+      >
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <strong>{readinessView.title}</strong>
+          <span>目标日：{readinessView.targetDateLabel}</span>
+          <span>{readinessView.conceptSourceLabel}</span>
+          {onOpenDataTools && (
+            <button type="button" onClick={onOpenDataTools} className="rounded border border-current px-2 py-0.5 font-medium hover:bg-white/50 dark:hover:bg-slate-700">
+              打开数据工具
+            </button>
+          )}
+        </div>
+        <p className="mt-1 break-words leading-5">{readinessView.description}</p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 leading-5">
+          <span>{readinessView.auctionLabel}</span>
+          <span>{readinessView.previousLimitLabel}</span>
+          <span>{readinessView.blockedPoolsLabel}</span>
+          <span>{readinessView.observedAtLabel}</span>
+        </div>
+        {readinessView.lastAttemptLabel && <p className="mt-1 break-words leading-5">{readinessView.lastAttemptLabel}</p>}
+        <p className="mt-1 leading-5">{readinessView.coverageLabel}。单日事实补齐位于配置中心-诊断；本页不自动调用默认最新日补齐。</p>
+      </section>
 
       <RecoveryPanel
         key={recoverySignature}
@@ -1911,6 +1952,7 @@ export function MorningAuction({ dataTools, onOpenDataTools }: MorningAuctionPro
             selectedName={selectedCandidate?.stock.stockName ?? null}
             chipSyncAttemptedCodes={chipSyncAttemptedCodes}
             chipSyncing={chipSyncing}
+            emptyMessage={readinessView.queueEmptyMessage}
             priceHistoryCoverage={snapshot?.priceHistoryCoverage}
             onSelect={(candidate) => setSelectedCandidateId(candidate.id)}
             onStockClick={handleStockClick}

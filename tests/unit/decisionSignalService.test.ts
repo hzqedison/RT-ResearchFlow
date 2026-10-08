@@ -247,15 +247,21 @@ describe('decisionSignalService', () => {
 
   it('历史回看支持精确信号日并返回可用日期', () => {
     const db = createDb()
-    emitDecisionSignal(db, baseSignal({ dedupKey: 'day-1', signalTime: Date.parse('2026-07-23T10:00:00+08:00') }))
-    emitDecisionSignal(db, baseSignal({ dedupKey: 'day-2', signalTime: Date.parse('2026-07-24T10:00:00+08:00') }))
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-07-25T10:00:00+08:00'))
+    try {
+      emitDecisionSignal(db, baseSignal({ dedupKey: 'day-1', signalTime: Date.parse('2026-07-23T10:00:00+08:00') }))
+      emitDecisionSignal(db, baseSignal({ dedupKey: 'day-2', signalTime: Date.parse('2026-07-24T10:00:00+08:00') }))
 
-    const result = getDecisionHistorySignals(db, { rangeDays: 30, tradeDate: '2026-07-23', limit: 100 })
-    expect(result.availableDates).toEqual(['2026-07-24', '2026-07-23'])
-    expect(result.selectedTradeDate).toBe('2026-07-23')
-    expect(result.total).toBe(1)
-    expect(result.items[0]?.title).toContain('浦发银行')
-    db.close()
+      const result = getDecisionHistorySignals(db, { rangeDays: 30, tradeDate: '2026-07-23', limit: 100 })
+      expect(result.availableDates).toEqual(['2026-07-24', '2026-07-23'])
+      expect(result.selectedTradeDate).toBe('2026-07-23')
+      expect(result.total).toBe(1)
+      expect(result.items[0]?.title).toContain('浦发银行')
+    } finally {
+      vi.useRealTimers()
+      db.close()
+    }
   })
 
   it('180天清理保留关注中的行动项', () => {

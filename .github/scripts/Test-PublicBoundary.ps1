@@ -46,7 +46,7 @@ foreach ($relativePath in $trackedFiles) {
   if ($textExtensions -notcontains $extension -and [System.IO.Path]::GetFileName($relativePath) -ne 'LICENSE') {
     continue
   }
-  if ((Get-Item -LiteralPath $fullPath).Length -gt 5MB) {
+  if ((Get-Item -LiteralPath $fullPath -Force).Length -gt 5MB) {
     continue
   }
 
@@ -69,7 +69,7 @@ if ($ArtifactDirectory) {
   }
 
   $forbiddenArtifactPath = '(?i)(^|[\\/])(?:\.env(?:\.|$)|[^\\/]+\.(?:db|sqlite|log|pem|pfx|p12|key)(?:-shm|-wal|\.bak)?$)'
-  foreach ($file in Get-ChildItem -LiteralPath $artifactRoot -Recurse -File) {
+  foreach ($file in Get-ChildItem -LiteralPath $artifactRoot -Recurse -File -Force) {
     if ($file.FullName -match $forbiddenArtifactPath) {
       $violations.Add("forbidden packaged file: $($file.FullName)")
     }
