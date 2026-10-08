@@ -39,7 +39,26 @@ async function assertNoFatalWindows(application: ElectronApplication) {
       console.error('[Mac installed startup] Fatal window detected', fatal)
     }
   }
-  if (fatalFound) throw new Error('FATAL_STARTUP_WINDOW_PRESENT')
+  if (fatalFound) {
+    try {
+      const lifecycle = await application.evaluate(({ app }) => {
+        const value = Reflect.get(process, Symbol.for('RT-ResearchFlow.main.diagnostic.v1')) as
+          { entryEvaluations?: number; bootstrapInvocations?: number; readySubscriptions?: number } | undefined
+        return {
+          entryEvaluations: Number.isSafeInteger(value?.entryEvaluations) ? value!.entryEvaluations : null,
+          bootstrapInvocations: Number.isSafeInteger(value?.bootstrapInvocations) ? value!.bootstrapInvocations : null,
+          readySubscriptions: Number.isSafeInteger(value?.readySubscriptions) ? value!.readySubscriptions : null,
+          readyListeners: app.listenerCount('ready'),
+          beforeQuitListeners: app.listenerCount('before-quit'),
+          activateListeners: app.listenerCount('activate'),
+        }
+      })
+      console.error('[Mac installed startup] Lifecycle counts', lifecycle)
+    } catch {
+      console.error('[Mac installed startup] Lifecycle counts unavailable')
+    }
+    throw new Error('FATAL_STARTUP_WINDOW_PRESENT')
+  }
 }
 
 async function openPanel(application: ElectronApplication) {

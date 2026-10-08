@@ -77,6 +77,20 @@ import {
   shouldAllowRendererPermission,
 } from './security/navigationPolicy'
 
+interface StartupDiagnostic {
+  entryEvaluations: number
+  bootstrapInvocations: number
+  readySubscriptions: number
+}
+
+const startupDiagnosticKey = Symbol.for('RT-ResearchFlow.main.diagnostic.v1')
+const diagnosticProcess = process as typeof process & { [key: symbol]: StartupDiagnostic | undefined }
+const startupDiagnostic: StartupDiagnostic = diagnosticProcess[startupDiagnosticKey] ?? {
+  entryEvaluations: 0, bootstrapInvocations: 0, readySubscriptions: 0,
+}
+startupDiagnostic.entryEvaluations += 1
+diagnosticProcess[startupDiagnosticKey] = startupDiagnostic
+
 let mainWindow: BrowserWindow | null = null
 let databaseReady = false
 let applicationStarted = false
@@ -293,6 +307,7 @@ function createWindow(): void {
 }
 
 async function bootstrap(): Promise<void> {
+  startupDiagnostic.bootstrapInvocations += 1
   if (applicationStopping) return
   // macOS needs native edit shortcuts, window management, and Command+Q.
   Menu.setApplicationMenu(process.platform === 'darwin'
@@ -526,6 +541,7 @@ app.on('second-instance', () => {
 if (!ownsApplicationInstance) {
   app.quit()
 } else if (applicationDataReady) {
+  startupDiagnostic.readySubscriptions += 1
   bootstrapTask = app.whenReady().then(bootstrap)
   void bootstrapTask.catch((error) => {
     if (applicationStopping) return
