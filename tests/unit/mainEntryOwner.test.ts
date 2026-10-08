@@ -56,5 +56,31 @@ describe('process-wide main entry owner', () => {
     const foreign = {}
     Object.defineProperty(foreign, mainEntryOwnerKey, { value: { protocol: 'foreign' } })
     expect(() => claimMainEntryOwner(foreign, 'build-A')).toThrow('MAIN_ENTRY_OWNER_CONFLICT')
+
+    const forgedThenable = Object.seal({
+      protocol: 'RT-ResearchFlow.main-owner.v1',
+      buildIdentity: 'build-A',
+      phase: 'starting',
+      startupPromise: { then: () => undefined, catch: () => undefined },
+      suppressedEvaluations: 0,
+    })
+    const forgedHost = {}
+    Object.defineProperty(forgedHost, mainEntryOwnerKey, {
+      value: forgedThenable, writable: false, configurable: false, enumerable: false,
+    })
+    expect(() => claimMainEntryOwner(forgedHost, 'build-A')).toThrow('MAIN_ENTRY_OWNER_CONFLICT')
+
+    const writableHost = {}
+    const plausibleOwner = Object.seal({
+      protocol: 'RT-ResearchFlow.main-owner.v1',
+      buildIdentity: 'build-A',
+      phase: 'starting',
+      startupPromise: Promise.resolve(),
+      suppressedEvaluations: 0,
+    })
+    Object.defineProperty(writableHost, mainEntryOwnerKey, {
+      value: plausibleOwner, writable: true, configurable: true, enumerable: false,
+    })
+    expect(() => claimMainEntryOwner(writableHost, 'build-A')).toThrow('MAIN_ENTRY_OWNER_CONFLICT')
   })
 })

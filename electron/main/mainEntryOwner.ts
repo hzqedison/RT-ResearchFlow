@@ -1,3 +1,5 @@
+import { types as utilTypes } from 'node:util'
+
 export type MainEntryPhase = 'starting' | 'ready' | 'failed'
 
 export interface MainEntryOwner {
@@ -56,6 +58,12 @@ export function claimMainEntryOwner(host: object, buildIdentity: string): MainEn
   if (!existing || typeof existing !== 'object' || !Object.isSealed(existing)) {
     throw new Error('MAIN_ENTRY_OWNER_CONFLICT')
   }
+  const hostDescriptor = Object.getOwnPropertyDescriptor(host, mainEntryOwnerKey)
+  if (!hostDescriptor || hostDescriptor.value !== existing
+    || hostDescriptor.writable !== false || hostDescriptor.configurable !== false
+    || hostDescriptor.enumerable !== false) {
+    throw new Error('MAIN_ENTRY_OWNER_CONFLICT')
+  }
   const owner = existing as MainEntryOwner
   const phaseDescriptor = Object.getOwnPropertyDescriptor(owner, 'phase')
   const countDescriptor = Object.getOwnPropertyDescriptor(owner, 'suppressedEvaluations')
@@ -65,9 +73,7 @@ export function claimMainEntryOwner(host: object, buildIdentity: string): MainEn
     || !Number.isSafeInteger(owner.suppressedEvaluations)
     || owner.suppressedEvaluations < 0
     || !phaseDescriptor?.writable || !countDescriptor?.writable
-    || !owner.startupPromise
-    || typeof owner.startupPromise.then !== 'function'
-    || typeof owner.startupPromise.catch !== 'function') {
+    || !utilTypes.isPromise(owner.startupPromise)) {
     throw new Error('MAIN_ENTRY_OWNER_CONFLICT')
   }
   owner.suppressedEvaluations += 1
