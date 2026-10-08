@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { readKnownCalendar, resolveCompletedTradeDate, resolveFactDates } from './dataReadinessService'
+import { getLastSettledCalendarDate } from './marketSettlementPolicy'
 import { getReadinessAttempt } from './diagnosticFactSyncService'
 import { evaluationCounts, factReceiptMessage, type DiagnosticReadiness, type EvaluationCounts } from '../../shared/dataReadiness'
 import {
@@ -305,7 +306,13 @@ function benchmarkQuality(db: Database.Database, now: number): DataQualityDatase
   const params = parts.flatMap(() => [...CORE_BENCHMARK_CODES])
   const asOf = expectedCompletedTradeDate(db, now)
   if (!asOf) {
-    const stats = db.prepare(`SELECT COUNT(*) AS total, MIN(trade_date) AS earliest_date, MAX(trade_date) AS latest_date FROM (${parts.join(' UNION ALL ')})`).get(...params) as { total: number; earliest_date: string | null; latest_date: string | null }
+    // A calendar-date ceiling excludes unavailable facts without guessing a trading session.
+    // Keep the established before-settlement boundary even when the local calendar is unknown.
+    const calendarUpperBound = getLastSettledCalendarDate(now)
+    const stats = db.prepare(`
+      SELECT COUNT(*) AS total, MIN(trade_date) AS earliest_date, MAX(trade_date) AS latest_date
+      FROM (SELECT DISTINCT code, trade_date FROM (${parts.join(' UNION ALL ')}) WHERE trade_date <= ?)
+    `).get(...params, calendarUpperBound) as { total: number; earliest_date: string | null; latest_date: string | null }
     return { key: 'benchmarks', title: '核心市场基准', status: stats.total ? 'degraded' : 'blocked', summary: '日历未知，无法证明核心基准截止日', recordCount: stats.total, earliestDate: stats.earliest_date, latestDate: stats.latest_date, sourceLabel: 'Tushare / 东方财富指数日线', affectedModules: ['趋势比较', '策略超额', '市场环境'], reasons: [reason('CALENDAR_UNAVAILABLE', '先补齐并检查交易日历，已有事实保持不变。', 'error')], action: { key: 'syncTradeCalendar', label: '补齐交易日历' } }
   }
   const rows = db.prepare(`

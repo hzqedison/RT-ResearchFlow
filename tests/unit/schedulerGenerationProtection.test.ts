@@ -360,6 +360,26 @@ function enableToken() {
   m.decryptApiKey.mockReturnValue('test-token')
   m.runStartupDailyCloseCatchUp.mockResolvedValue({ totalTradeDays: 0, syncedTradeDays: 0, failedTradeDays: 0 })
 }
+function installConceptCalendar(source: 'kpl' | 'dc' = 'kpl', missingDate?: string) {
+  // Monday 04:00 is before settlement. Prove every intervening day back to Friday,
+  // rather than reusing the legacy getLastNTradingDays fixture or guessing weekdays.
+  const calendar = new Map<string, number>([
+    ['20261009', 1], ['20261010', 0], ['20261011', 0], ['20261012', 1],
+  ])
+  if (missingDate) calendar.delete(missingDate)
+  const db = {
+    prepare(sql: string) {
+      if (sql.includes('SELECT concept_source')) return { get: () => ({ concept_source: source }) }
+      if (sql.includes('sqlite_master')) return { get: (name: string) => name === 'trade_cal' ? { name } : undefined }
+      if (sql.includes('SELECT is_open')) return { get: (date: string) => calendar.has(date) ? { is_open: calendar.get(date) } : undefined }
+      if (sql.includes('FROM kpl_concept_members') || sql.includes('FROM dc_concept_members')) return { all: () => [] }
+      // Preserve the original non-concept startup/count-query fixture behavior.
+      return { get: () => ({ c: 0 }) }
+    },
+  }
+  m.getDb.mockReturnValue(db)
+  return db
+}
 async function start() { service.startScheduler(); await flush() }
 
 describe('scheduler generation ownership with isolated services', () => {
@@ -622,7 +642,10 @@ describe('scheduler generation ownership with isolated services', () => {
   ] as const)('%s callback cannot rearm after stop', async (_name, now, method) => {
     vi.setSystemTime(new Date(now))
     const job = deferred<unknown>()
-    if (method === 'fetchKplConceptCons') enableToken()
+    if (method === 'fetchKplConceptCons') {
+      enableToken()
+      installConceptCalendar()
+    }
     if (method === 'syncTradeCalIfNeeded') {
       // The initial calendar refresh completes; only the next daily check is held.
       m[method].mockResolvedValueOnce(undefined).mockReturnValue(job.promise)
@@ -632,6 +655,7 @@ describe('scheduler generation ownership with isolated services', () => {
     await start()
     await vi.advanceTimersByTimeAsync(method === 'syncTradeCalIfNeeded' ? 86_400_000 : 1000)
     expect(m[method]).toHaveBeenCalled()
+    if (method === 'fetchKplConceptCons') expect(m.fetchKplConceptCons).toHaveBeenCalledWith('test-token', '20261009')
     service.stopScheduler()
     expect(await service.waitForSchedulerIdle(0)).toBe(false)
     job.resolve(method === 'fetchKplConceptCons' ? [] : method === 'refreshClosingHalfHourSnapshot'
@@ -639,6 +663,65 @@ describe('scheduler generation ownership with isolated services', () => {
     await flush()
     expect(vi.getTimerCount()).toBe(0)
     if (method === 'refreshMorningAuctionSnapshot') expect(m.runPremarketScenarioStage).not.toHaveBeenCalled()
+  })
+
+  it.each(['kpl', 'dc'] as const)('known concept calendar synchronizes only current source %s with a structured receipt', async source => {
+    vi.setSystemTime(new Date('2026-10-11T20:00:00Z'))
+    enableToken()
+    const db = installConceptCalendar(source)
+    const kplRows = [{ conCode: '600001.SH', tsCode: '000001.KP', conName: 'fixture', name: 'fixture', hotNum: 1, desc: null, fetchedAt: Date.now() }]
+    const dcRows = [{ tsCode: '600001.SH', themeCode: 'fixture', tradeDate: '20261009', name: 'fixture', themeName: 'fixture', industryCode: null, industry: null }]
+    m.fetchKplConceptCons.mockResolvedValue(kplRows)
+    m.fetchDcConceptCons.mockResolvedValue(dcRows)
+    expect(await service.runConceptMembersSyncJob()).toMatchObject({
+      outcome: 'success', source, targetDate: '20261009', insertedRows: 1, reasonCode: 'FACTS_SAVED', coverage: 'unknown',
+    })
+    if (source === 'kpl') {
+      expect(m.fetchKplConceptCons).toHaveBeenCalledWith('test-token', '20261009')
+      expect(m.clearAllAndReplace).toHaveBeenCalledWith(db, kplRows)
+      expect(m.fetchDcConceptCons).not.toHaveBeenCalled()
+      expect(m.upsertDcConceptMembers).not.toHaveBeenCalled()
+    } else {
+      expect(m.fetchDcConceptCons).toHaveBeenCalledWith('test-token', '20261009')
+      expect(m.upsertDcConceptMembers).toHaveBeenCalledWith(db, dcRows)
+      expect(m.fetchKplConceptCons).not.toHaveBeenCalled()
+      expect(m.clearAllAndReplace).not.toHaveBeenCalled()
+    }
+    expect(m.fetchThsIndex).not.toHaveBeenCalled()
+    expect(m.fetchLimitListDaily).not.toHaveBeenCalled()
+  })
+
+  it.each((['kpl', 'dc'] as const).flatMap(source =>
+    ['20261012', '20261011', '20261010', '20261009'].map(date => [source, date] as const),
+  ))('concept source %s fails closed when required calendar day %s is missing', async (source, missingDate) => {
+    vi.setSystemTime(new Date('2026-10-11T20:00:00Z'))
+    enableToken()
+    installConceptCalendar(source, missingDate)
+    expect(await service.runConceptMembersSyncJob()).toMatchObject({
+      outcome: 'blocked', source, targetDate: null, insertedRows: 0, reasonCode: 'CALENDAR_UNAVAILABLE', access: 'unknown',
+    })
+    expect(m.fetchKplConceptCons).not.toHaveBeenCalled()
+    expect(m.fetchDcConceptCons).not.toHaveBeenCalled()
+    expect(m.fetchThsIndex).not.toHaveBeenCalled()
+    expect(m.clearAllAndReplace).not.toHaveBeenCalled()
+    expect(m.upsertDcConceptMembers).not.toHaveBeenCalled()
+    expect(m.clearAllAndReplaceThsMembers).not.toHaveBeenCalled()
+  })
+
+  it('weekly concept callback with a calendar gap does not fetch and its retry chain is removed on stop', async () => {
+    vi.setSystemTime(new Date('2026-10-11T19:59:59Z'))
+    enableToken()
+    installConceptCalendar('kpl', '20261010')
+    await start()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(m.fetchKplConceptCons).not.toHaveBeenCalled()
+    expect(m.clearAllAndReplace).not.toHaveBeenCalled()
+    expect(await service.waitForSchedulerIdle(0)).toBe(true)
+    expect(vi.getTimerCount()).toBeGreaterThan(0)
+    service.stopScheduler()
+    expect(vi.getTimerCount()).toBe(0)
+    await vi.advanceTimersByTimeAsync(7 * 86_400_000)
+    expect(m.fetchKplConceptCons).not.toHaveBeenCalled()
   })
 
   it('after-close coordinator remains tracked through nested tasks but cannot rearm after stop', async () => {

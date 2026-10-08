@@ -563,6 +563,23 @@ D1/D2/D3/D12 与 R-ENTRY-OBS/R-ENTRY-COOLDOWN 均在最终组合关闭。实际�
 
 **最终结论：本轮授权的 23 + 3 + 3 数据/正常入口/UI 切片限定 PASS，范围内已知阻断清零，可交付下一集成环节。** 不等于 1.2 已发布或整个产品验收完成。没有用户 Mac 实采、真实权限确认、原生/DOM 渲染或跨版本证明；startup 补偿、安装包、Euclid base/workflow 均不在此 29 文件签字范围。未改业务源码/测试，未操作用户 profile、真实账户、主库、券商或订单。
 
+## 候选 A 组 dataQuality 修复后最小独立补验：PASS
+
+正式绑定 `electron/main/services/dataQualityService.ts` SHA256 `4c8850bdd34644df3bfb0b7278aea80ae0178d24ed225de6d5f796f50935c19d`；同时捕获 `tests/unit/benchmarkAsOfQuality.test.ts` SHA256 `90edbe5e0e94ab598f751949b86c771829749fbff9d4083edc62123984e0e1bc`。没有把前一版本 PASS 自动延伸到本次改动。
+
+独立在已有 Electron 纯 Node / Windows / ABI145、真实内存 SQLite、假传输下执行 **20/20，退出 0，8.02 秒**：原诊断联合 14 项 + 原真实 helper/正常入口正控 2 项 + 独立 as-of 4 项。未重跑 UI42、正常入口纯套件、Euclid 负责的 A13/B36 或其他已通过检查。
+
+- 原样 7/24 仅有 7/27 的未知/冲突日历两例：blocked、recordCount=0、earliest/latest=null、CALENDAR_UNAVAILABLE，4 条原始记录完全保留。
+- 日历未知时只用既有结算自然日期作上界，不推断交易日；日前边界包含 7/23，排除未结算 7/24 和未来 7/27。两个缓存按 code/date 去重为 4，原始各 12 行保留，仍 degraded/CALENDAR_UNAVAILABLE，不刷绿。
+- 已知日历下 30 个已完成交易日/四基准仍 reliable、120 条。诊断取消/分页/零写入、09:28 provisional 首次发布、09:30 新事实恢复且不重发的原联合行为继续通过。
+
+日志：`K:/AI/person/money/.tmp/astra-auction-entry-ec9932eb6af54670a67850098cdd93da/astra-dq-asof-results.log`。加载器实际核验 18 个冻结模块，确认运行的是上述新 dataQuality 哈希，明细 `K:/AI/person/money/.tmp/astra-auction-entry-ec9932eb6af54670a67850098cdd93da/astra-dq-asof-loaded-unique.json`。
+
+同一最终 manifest `K:/AI/person/money/.tmp/astra-auction-entry-ec9932eb6af54670a67850098cdd93da/acceptance-source-manifest-final.json` 已更新：原 29 行只替换 dataQuality，一并追加本次独立回归结论；另 28 项源哈希和历史失败证据不变。旧版完整 manifest 保存在 `acceptance-source-manifest-pre-dq-asof.json`。benchmark 测试以 supplementalValidationSources 单列，不擅自扩写原 29 范围。父任务 release 34 + 2 旧 CI 测试 = 36 文件，不等于本代理已验 36 文件；无 F3/T1/D0。
+
+**本次最小修复集成 PASS。** 未运行新 CI/build/install，也不改变旧候选 run 的失败事实；无真实用户 Mac 实采、原生渲染或跨版本证明。本节完成后停止写报告，供父任务冻结。
+
+
 
 
 
