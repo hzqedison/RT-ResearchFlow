@@ -6,6 +6,7 @@ native V8 execution, the packaged decoder and provider functions are real.
 
 import argparse
 import datetime
+import faulthandler
 import hashlib
 import importlib
 import importlib.metadata
@@ -28,7 +29,14 @@ def deny_network(*args, **kwargs):
     raise RuntimeError("Network access is forbidden in offline dependency acceptance")
 
 
-def verify(provider_directory, temporary_directory, expected_architecture):
+def stage(message):
+    print("RT offline acceptance: " + message, file=sys.stderr, flush=True)
+
+
+def verify(provider_directory, temporary_directory, expected_architecture,
+           native_evidence=None, native_evidence_sha256=None):
+    faulthandler.enable(file=sys.stderr, all_threads=True)
+    stage("bootstrap")
     require(sys.flags.isolated and sys.flags.no_site and sys.dont_write_bytecode,
             "Invoke this verifier with -I -S -B")
     require(sys.version_info[:2] == (3, 13), "Python 3.13 is required")
@@ -40,21 +48,12 @@ def verify(provider_directory, temporary_directory, expected_architecture):
     require(provider.is_dir() and temporary_parent.is_dir(), "Explicit provider and temporary directories are required")
     require(not any("site-packages" in item or "dist-packages" in item for item in sys.path),
             "External site-packages are present before bootstrap")
-    sys.path.insert(0, str(provider))
 
     socket.socket.connect = deny_network
     socket.socket.connect_ex = deny_network
     socket.socket.sendto = deny_network
     socket.create_connection = deny_network
     socket.getaddrinfo = deny_network
-    require(importlib.metadata.version("mootdx") == "0.11.7+rt.1", "The explicit derived mootdx wheel is missing")
-    require(importlib.metadata.version("mini-racer") == "0.12.4", "The pinned modern MiniRacer is missing")
-    try:
-        importlib.metadata.version("py-mini-racer")
-    except importlib.metadata.PackageNotFoundError:
-        pass
-    else:
-        raise RuntimeError("Conflicting legacy py-mini-racer must not be installed")
 
     with tempfile.TemporaryDirectory(prefix="rt-mootdx-offline-", dir=temporary_parent) as owned:
         owned = Path(owned).resolve()
@@ -62,9 +61,38 @@ def verify(provider_directory, temporary_directory, expected_architecture):
         os.environ["HOME"] = str(owned)
         os.environ["USERPROFILE"] = str(owned)
         os.environ["RT_MOOTDX_CACHE_ROOT"] = str(owned / "provider-cache")
+        native_adapter = None
+        if (native_evidence is None) != (native_evidence_sha256 is None):
+            raise RuntimeError("Native evidence and its SHA-256 must be supplied together")
+        if native_evidence is not None:
+            raw = Path(native_evidence).read_bytes()
+            require(hashlib.sha256(raw).hexdigest() == native_evidence_sha256,
+                    "The native evidence SHA-256 does not match")
+            document = json.loads(raw)
+            require(Path(document.get("site", "")).resolve(strict=True) == provider,
+                    "Native evidence refers to a different provider directory")
+            adapter_path = Path(__file__).resolve().parents[1] / "resources/python-runtime/miniracer_unicode_adapter.py"
+            adapter_source = adapter_path.read_bytes()
+            require(hashlib.sha256(adapter_source).hexdigest() == document.get("adapterSha256"),
+                    "The reviewed production adapter SHA-256 does not match")
+            namespace = {"__name__": "rt_native_adapter", "__file__": str(adapter_path)}
+            exec(compile(adapter_source, str(adapter_path), "exec"), namespace)
+            native_adapter = namespace["prepare_native_evidence"](
+                native_evidence, "mootdx", native_evidence_sha256)
+        else:
+            sys.path.insert(0, str(provider))
+        require(importlib.metadata.version("mootdx") == "0.11.7+rt.1", "The explicit derived mootdx wheel is missing")
+        require(importlib.metadata.version("mini-racer") == "0.12.4", "The pinned modern MiniRacer is missing")
+        try:
+            importlib.metadata.version("py-mini-racer")
+        except importlib.metadata.PackageNotFoundError:
+            pass
+        else:
+            raise RuntimeError("Conflicting legacy py-mini-racer must not be installed")
         modules = {}
         for name in ("mootdx", "tdxpy", "numpy", "pandas", "httpx", "tenacity", "py_mini_racer",
-                     "typing_extensions", "click", "prettytable", "tqdm", "mootdx.quotes", "mootdx.reader"):
+                      "typing_extensions", "click", "prettytable", "tqdm", "mootdx.quotes", "mootdx.reader"):
+            stage("import " + name)
             module = importlib.import_module(name)
             location = Path(module.__file__).resolve(strict=True)
             require(location.is_relative_to(provider), "A provider dependency escaped the isolated directory: " + name)
@@ -74,6 +102,7 @@ def verify(provider_directory, temporary_directory, expected_architecture):
         require(Path(holiday.__file__).resolve().is_relative_to(provider), "Holiday code is not the real provider code")
 
         mini_racer = modules["py_mini_racer"].MiniRacer
+        stage("native V8 initialization")
         with mini_racer() as engine:
             require(engine.eval("21 * 2") == 42, "Native V8 execution failed")
             require(engine.eval("'\\u4e2d\\u6587'") == "\u4e2d\u6587", "Native V8 Unicode execution failed")
@@ -102,6 +131,7 @@ def verify(provider_directory, temporary_directory, expected_architecture):
             return client
 
         try:
+            stage("real provider controlled HTTP and decoder")
             with patch.object(holiday.httpx, "Client", controlled_client):
                 frame = holiday.holidays()
         finally:
@@ -127,6 +157,7 @@ def verify(provider_directory, temporary_directory, expected_architecture):
         require(len(data) == 1 and data.iloc[0]["volume"] == 0 and data.iloc[0]["close"] == 10.5,
                 "The real provider/pandas conversion lost legitimate zero volume or price")
 
+        stage("all checks passed")
         return {
             "schemaVersion": 1,
             "mode": "offline-dependency-acceptance",
@@ -139,7 +170,9 @@ def verify(provider_directory, temporary_directory, expected_architecture):
             "checks": {"realProviderImports": True, "nativeV8AndUnicode": True,
                        "realDecoderDistinctFixtures": True, "realProviderControlledHTTP": True,
                        "privateCacheAndTraversalRejection": True, "realPandasZeroVolume": True},
-            "networkAccess": "denied",
+            "nativeAdapter": native_adapter,
+            "pythonSocketGuardEnabled": True,
+            "osNetworkSandboxEnabled": False,
             "providerReachable": None,
             "installedApplicationTested": False,
         }
@@ -150,5 +183,8 @@ if __name__ == "__main__":
     parser.add_argument("--provider-directory", required=True)
     parser.add_argument("--temporary-directory", required=True)
     parser.add_argument("--expected-architecture", choices=("x64", "arm64"), required=True)
+    parser.add_argument("--native-evidence")
+    parser.add_argument("--native-evidence-sha256")
     args = parser.parse_args()
-    print(json.dumps(verify(args.provider_directory, args.temporary_directory, args.expected_architecture), sort_keys=True))
+    print(json.dumps(verify(args.provider_directory, args.temporary_directory, args.expected_architecture,
+                            args.native_evidence, args.native_evidence_sha256), sort_keys=True))
