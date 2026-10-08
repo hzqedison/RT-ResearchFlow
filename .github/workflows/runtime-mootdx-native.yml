@@ -1,0 +1,144 @@
+name: Private runtime dependency feasibility (no installers)
+
+on:
+  push:
+    branches: [codex/verify-1.7]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mootdx-runtime-feasibility-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-dependencies:
+    if: github.repository == 'hzqedison/RT-ResearchFlow'
+    name: mootdx-${{ matrix.platform }}-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: windows
+            arch: x64
+          - runner: macos-15
+            platform: macos
+            arch: arm64
+          - runner: macos-15-intel
+            platform: macos
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: ${{ matrix.arch }}
+      - name: Assemble and execute real isolated dependencies
+        shell: python
+        env:
+          RT_EXPECTED_ARCH: ${{ matrix.arch }}
+          RT_EXPECTED_PLATFORM: ${{ matrix.platform }}
+        run: |
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import shutil
+          import subprocess
+          import sys
+          import urllib.request
+          import zipfile
+
+          workspace = Path.cwd().resolve()
+          temporary = Path(os.environ['RUNNER_TEMP']).resolve(strict=True)
+          lab = temporary / ('RT runtime \u8fd0\u884c ' + os.environ['GITHUB_RUN_ID'] + '-' + os.environ['GITHUB_RUN_ATTEMPT'])
+          if lab.exists():
+              raise RuntimeError('Refusing to mix an existing runtime feasibility directory')
+          lab.mkdir()
+          evidence = lab / 'evidence'
+          evidence.mkdir()
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as stream:
+              stream.write('RT_MOOTDX_LAB=' + str(lab) + '\n')
+          wheel = lab / 'mootdx-0.11.7-py3-none-any.whl'
+          url = 'https://files.pythonhosted.org/packages/bd/7c/dff7de8e9d29d49a22ffcb03f765cf829be5097019a760319d908009da54/mootdx-0.11.7-py3-none-any.whl'
+          with urllib.request.urlopen(url, timeout=30) as response:
+              source = response.read(108804)
+          if len(source) != 108803 or hashlib.sha256(source).hexdigest() != 'eab475f1d08b1c71ea51212c8b1b1038c4739798f7d95ad1a6fb7bb26e348ef2':
+              raise RuntimeError('The pinned upstream wheel changed')
+          wheel.write_bytes(source)
+
+          def execute(arguments, isolated=True, no_site=False, capture=False):
+              flags = ['-X', 'utf8', '-I', '-B'] if isolated else ['-X', 'utf8', '-B']
+              if no_site:
+                  flags.append('-S')
+              result = subprocess.run([sys.executable, *flags, *arguments], cwd=workspace,
+                                      check=True, capture_output=capture, text=True, encoding='utf-8')
+              if capture:
+                  print(result.stdout)
+                  if result.stderr:
+                      print(result.stderr, file=sys.stderr)
+              return result
+
+          execute(['tests/python/test_mootdx_compat_wheel.py', '--upstream-wheel', str(wheel),
+                   '--temporary-directory', str(lab)])
+          built = execute(['scripts/build-mootdx-compat-wheel.py', '--upstream-wheel', str(wheel),
+                           '--output-directory', str(lab / 'wheelhouse')], capture=True)
+          recipe = json.loads(built.stdout)
+          if recipe['sha256'] != '35f282624ed7a2a6908b4b847fba9119e7fb376cd00797606ee5ee97b6139f77':
+              raise RuntimeError('The derived wheel is not the reviewed compatibility recipe')
+          provider = lab / 'providers' / 'mootdx'
+          pip_report = lab / 'pip-resolution.json'
+          execute(['-m', 'pip', '--isolated', '--disable-pip-version-check', 'install', '--no-cache-dir',
+                   '--ignore-installed', '--only-binary=:all:', '--constraint',
+                   str(workspace / 'tests/fixtures/runtime/mootdx-compat-constraints.txt'),
+                   '--target', str(provider), '--report', str(pip_report), recipe['path']])
+          accepted = execute(['scripts/verify-mootdx-compat-runtime.py', '--provider-directory', str(provider),
+                              '--temporary-directory', str(lab), '--expected-architecture',
+                              os.environ['RT_EXPECTED_ARCH']], no_site=True, capture=True)
+          native = json.loads(accepted.stdout)
+          if native['providerReachable'] is not None or native['installedApplicationTested']:
+              raise RuntimeError('Offline feasibility must not claim source or installed-app acceptance')
+          dependencies = []
+          for item in json.loads(pip_report.read_text(encoding='utf-8'))['install']:
+              downloaded = item['download_info']
+              checksum = downloaded.get('archive_info', {}).get('hashes', {}).get('sha256', '')
+              if len(checksum) != 64 or any(character not in '0123456789abcdef' for character in checksum):
+                  raise RuntimeError('A resolved dependency has no valid SHA-256')
+              origin = downloaded['url']
+              if origin.startswith('file:'):
+                  if item['metadata']['name'].lower() != 'mootdx' or checksum != recipe['sha256']:
+                      raise RuntimeError('Unexpected local dependency in feasibility resolution')
+                  origin = 'local-derived-wheel:' + Path(recipe['path']).name
+              elif not origin.startswith('https://files.pythonhosted.org/'):
+                  raise RuntimeError('Unexpected dependency origin')
+              dependencies.append({'name': item['metadata']['name'], 'version': item['metadata']['version'],
+                                   'url': origin, 'sha256': checksum})
+          proof = {'schemaVersion': 1, 'sourceSha': os.environ['GITHUB_SHA'],
+                   'runId': os.environ['GITHUB_RUN_ID'], 'runAttempt': os.environ['GITHUB_RUN_ATTEMPT'],
+                   'targetPlatform': os.environ['RT_EXPECTED_PLATFORM'], 'nativeAcceptance': native,
+                   'derivedWheel': {key: value for key, value in recipe.items() if key != 'path'},
+                   'dependencies': sorted(dependencies, key=lambda item: item['name'].lower()),
+                   'limits': ['setup-python is used here, not the future bundled PBS interpreter',
+                              'this is not an installer or complete offline distribution',
+                              'per-platform hash locks and redistribution review remain required']}
+          (evidence / 'native-acceptance.json').write_text(json.dumps(proof, sort_keys=True, indent=2) + '\n', encoding='utf-8')
+          shutil.copyfile(recipe['path'], evidence / Path(recipe['path']).name)
+          with zipfile.ZipFile(wheel) as archive:
+              (evidence / 'MOOTDX-UPSTREAM-LICENSE.txt').write_bytes(archive.read('mootdx-0.11.7.dist-info/LICENSE'))
+          sums = ''.join(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name + '\n'
+                         for path in sorted(evidence.iterdir()))
+          (evidence / 'SHA256SUMS.txt').write_text(sums, encoding='ascii')
+      - name: Preserve public native dependency evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mootdx-native-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
+          path: ${{ env.RT_MOOTDX_LAB }}/evidence/*
+          if-no-files-found: error
+          retention-days: 7
