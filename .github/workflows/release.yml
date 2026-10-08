@@ -289,7 +289,14 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = 'com.tradewatcher.app'
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "$RELEASE_VERSION"
           executable="$app/Contents/MacOS/RT-ResearchFlow"
-          test "$(lipo -archs "$executable")" = "$RELEASE_ARCH"
+          case "$RELEASE_ARCH" in
+            x64) expected_macho_arch='x86_64' ;;
+            arm64) expected_macho_arch='arm64' ;;
+            *) printf 'Unsupported release architecture: %s\n' "$RELEASE_ARCH" >&2; exit 1 ;;
+          esac
+          actual_macho_arch="$(lipo -archs "$executable")"
+          printf 'Installed Mach-O architecture: %s; expected: %s\n' "$actual_macho_arch" "$expected_macho_arch"
+          test "$actual_macho_arch" = "$expected_macho_arch"
           printf 'TRADE_WATCH_PACKAGED_EXECUTABLE=%s\n' "$executable" >> "$GITHUB_ENV"
 
       - name: Test installed Windows application with synthetic data only
