@@ -2,15 +2,19 @@ import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MultiSourcePreference } from '../../electron/shared/dataSourceTypes'
 
-const mocked = vi.hoisted(() => ({ spawn: vi.fn(), mkdir: vi.fn(), input: '', envelope: {} as unknown }))
-vi.mock('electron', () => ({ app: { getPath: () => 'D:/rt-data-source-unit' } }))
+const mocked = vi.hoisted(() => ({
+  spawn: vi.fn(), mkdir: vi.fn(), input: '', envelope: {} as unknown,
+  dataRoot: process.platform === 'win32' ? 'D:/rt-data-source-unit' : '/tmp/rt-data-source-unit',
+  python: process.platform === 'win32' ? 'D:/Python/python.exe' : '/tmp/rt-data-source-unit/bin/python3',
+}))
+vi.mock('electron', () => ({ app: { getPath: () => mocked.dataRoot } }))
 vi.mock('node:child_process', () => ({ spawn: mocked.spawn }))
 vi.mock('node:fs/promises', () => ({ mkdir: mocked.mkdir }))
 
 import { callPythonDataSource, dataBridgeMessage, installSelectedDataSourceExtensions } from '../../electron/main/services/pythonDataSourceBridge'
 
 const config: MultiSourcePreference = {
-  dailyProviders: ['akshare'], reportProviders: [], wencaiEnabled: false, pythonPath: 'D:/Python/python.exe',
+  dailyProviders: ['akshare'], reportProviders: [], wencaiEnabled: false, pythonPath: mocked.python,
 }
 
 beforeEach(() => {
@@ -40,6 +44,7 @@ describe('Python data bridge encoding and source requirements', () => {
   it('uses an explicit UTF-8 flag even when isolated mode ignores environment variables', async () => {
     await expect(callPythonDataSource(config, { operation: 'akshare-limit-pool', tradeDate: '20261008' }))
       .resolves.toEqual([{ '代码': '000001', '名称': '平安银行' }])
+    expect(mocked.spawn.mock.calls[0][0]).toBe(mocked.python)
     expect(mocked.spawn.mock.calls[0][1]).toEqual(expect.arrayContaining(['-X', 'utf8', '-I']))
     expect(mocked.spawn.mock.calls[0][2]).toMatchObject({ shell: false, windowsHide: true })
   })
@@ -57,5 +62,10 @@ describe('Python data bridge encoding and source requirements', () => {
   })
   it('keeps arbitrary backend errors out of the user-facing message', () => {
     expect(dataBridgeMessage(new Error('secret-key=private'))).not.toContain('private')
+  })
+  it.each(['python', './python', 'relative/bin/python', 'python\0'])('rejects invalid configured interpreter %j before spawning', async pythonPath => {
+    await expect(callPythonDataSource({ ...config, pythonPath }, { operation: 'status' }))
+      .rejects.toThrow('PYTHON_UNAVAILABLE')
+    expect(mocked.spawn).not.toHaveBeenCalled()
   })
 })
