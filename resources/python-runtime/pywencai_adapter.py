@@ -119,6 +119,15 @@ def require_child():
         fail()
 
 
+def validate_pre_seal_owned_posix_root(value):
+    # A bootstrap keyword hook, never an environment or provider API option.
+    if (os.name != "posix" or type(value) is not int or not 1 < value <= 2147483647
+            or os.getpgrp() != value or os.getsid(0) != value
+            or os.getpgid(value) != value or os.getsid(value) != value):
+        fail()
+    return value
+
+
 class WindowsJob:
     """An owned suspended Node process is assigned before its first instruction."""
 
@@ -207,7 +216,9 @@ class WindowsJob:
             self.handle = None
 
 
-def run_token(node, node_sha, script, cache, deadline):
+def run_token(node, node_sha, script, cache, deadline, *, pre_seal_owned_posix_root=None):
+    if pre_seal_owned_posix_root is not None:
+        validate_pre_seal_owned_posix_root(pre_seal_owned_posix_root)
     if not node.is_absolute() or not script.is_absolute() or file_hash(node) != node_sha:
         fail()
     if file_hash(script) != SOURCE_HASHES["hexin-v.bundle.js"]:
@@ -222,7 +233,8 @@ def run_token(node, node_sha, script, cache, deadline):
         env = {key: os.environ[key] for key in ("SystemRoot", "WINDIR") if key in os.environ}
         env.update({"PATH": str(node.parent), "HOME": cwd, "USERPROFILE": cwd,
                     "TEMP": cwd, "TMP": cwd, "TMPDIR": cwd, "NODE_OPTIONS": "", "NODE_PATH": ""})
-        options = {"creationflags": 0x08000000 | 0x00000004} if os.name == "nt" else {"start_new_session": True}
+        options = ({"creationflags": 0x08000000 | 0x00000004} if os.name == "nt"
+                   else {"start_new_session": pre_seal_owned_posix_root is None})
         exceeded = threading.Event()
         buffers = [bytearray(), bytearray()]
         def drain(handle, target, cap):
@@ -243,6 +255,11 @@ def run_token(node, node_sha, script, cache, deadline):
                                        close_fds=True, **options)
             if os.name == "nt":
                 job = WindowsJob(process)
+            elif pre_seal_owned_posix_root is not None:
+                validate_pre_seal_owned_posix_root(pre_seal_owned_posix_root)
+                if (os.getpgid(process.pid) != pre_seal_owned_posix_root
+                        or os.getsid(process.pid) != pre_seal_owned_posix_root):
+                    fail()
             for handle, target, cap in ((process.stdout, buffers[0], STDOUT_BYTES), (process.stderr, buffers[1], STDERR_BYTES)):
                 thread = threading.Thread(target=drain, args=(handle, target, cap), daemon=True)
                 streams.append(thread)
@@ -255,7 +272,7 @@ def run_token(node, node_sha, script, cache, deadline):
             # Close the owned tree even on success, before waiting for pipe EOF.
             if job:
                 job.close()
-            elif os.name != "nt":
+            elif os.name != "nt" and pre_seal_owned_posix_root is None:
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
@@ -274,7 +291,7 @@ def run_token(node, node_sha, script, cache, deadline):
             if job:
                 job.close()
             if process is not None:
-                if os.name != "nt":
+                if os.name != "nt" and pre_seal_owned_posix_root is None:
                     try:
                         os.killpg(process.pid, signal.SIGKILL)
                     except ProcessLookupError:
@@ -522,7 +539,10 @@ class RequestFacade:
 
 
 class Controller:
-    def __init__(self, node, node_sha, package, cache, factory, *, _decoded_fixture=False):
+    def __init__(self, node, node_sha, package, cache, factory, *, _decoded_fixture=False, pre_seal_owned_posix_root=None):
+        if pre_seal_owned_posix_root is not None:
+            validate_pre_seal_owned_posix_root(pre_seal_owned_posix_root)
+        self.pre_seal_owned_posix_root = pre_seal_owned_posix_root
         self.node, self.node_sha, self.package, self.cache = node, node_sha, package, cache
         self.failed = False
         self.deadline = time.monotonic() + TOTAL_SECONDS
@@ -533,6 +553,8 @@ class Controller:
         self.facade = RequestFacade(self, factory)
 
     def check(self):
+        if self.pre_seal_owned_posix_root is not None:
+            validate_pre_seal_owned_posix_root(self.pre_seal_owned_posix_root)
         if self.failed or time.monotonic() >= self.deadline:
             self.failed = True
             fail()
@@ -540,6 +562,9 @@ class Controller:
     def token(self):
         self.check()
         try:
+            if self.pre_seal_owned_posix_root is not None:
+                return run_token(self.node, self.node_sha, self.package / "hexin-v.bundle.js", self.cache, self.deadline,
+                                 pre_seal_owned_posix_root=self.pre_seal_owned_posix_root)
             return run_token(self.node, self.node_sha, self.package / "hexin-v.bundle.js", self.cache, self.deadline)
         except BaseException:
             self.failed = True
@@ -651,10 +676,12 @@ def controlled_cache():
     return cache
 
 
-def install(manifest, root, site):
+def install(manifest, root, site, *, pre_seal_owned_posix_root=None):
     """Called after bootstrap's full resource/manifest verification."""
     try:
         require_child()
+        if pre_seal_owned_posix_root is not None:
+            validate_pre_seal_owned_posix_root(pre_seal_owned_posix_root)
         root, site = Path(root).resolve(strict=True), Path(site).resolve(strict=True)
         if manifest.get("kind") != "rt-private-python-runtime" or manifest.get("complete") is not True:
             fail()
@@ -677,7 +704,8 @@ def install(manifest, root, site):
             fail()
         package = verify_site(site)
         import requests
-        return Controller(node, node_sha, package, controlled_cache(), requests.Session).attach()
+        return Controller(node, node_sha, package, controlled_cache(), requests.Session,
+                          pre_seal_owned_posix_root=pre_seal_owned_posix_root).attach()
     except BaseException:
         fail()
 

@@ -27,6 +27,22 @@ PROVIDERS = ("akshare", "mootdx", "pywencai")
 FIXTURE_KIND = "rt-private-python-bootstrap-test-fixture"
 
 
+def validate_pre_seal_owned_posix_root(value):
+    # Only the explicit trusted staging CLI passes this value. Environment
+    # variables, request bodies and fixture envelopes cannot activate this mode.
+    if type(value) is int:
+        root_pid = value
+    elif isinstance(value, str) and value.isascii() and value.isdecimal() and not value.startswith("0"):
+        root_pid = int(value) if len(value) <= 10 else 0
+    else:
+        reject()
+    if (os.name != "posix" or not 1 < root_pid <= 2147483647
+            or os.getpgrp() != root_pid or os.getsid(0) != root_pid
+            or os.getpgid(root_pid) != root_pid or os.getsid(root_pid) != root_pid):
+        reject()
+    return root_pid
+
+
 def relative(value):
     if (not isinstance(value, str) or not value or "\\" in value or ":" in value
             or "\x00" in value or value.startswith("/")
@@ -126,7 +142,9 @@ process.stdin.on('end',()=>{try{
 '''
 
 
-def check_dependency_audits(root, manifest, index, generator_sha256=None):
+def check_dependency_audits(root, manifest, index, generator_sha256=None, *, pre_seal_owned_posix_root=None):
+    if pre_seal_owned_posix_root is not None:
+        pre_seal_owned_posix_root = validate_pre_seal_owned_posix_root(pre_seal_owned_posix_root)
     binding = manifest.get("dependencyAuditValidator", {})
     if binding.get("path") != "private_runtime_manifest.cjs":
         reject()
@@ -151,13 +169,18 @@ def check_dependency_audits(root, manifest, index, generator_sha256=None):
         reject()
     process = subprocess.Popen([str(executable), "--no-addons", "-e", AUDIT_NODE_SCRIPT], shell=False,
                                cwd=str(root), env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE, start_new_session=os.name != "nt",
+                               stderr=subprocess.PIPE, start_new_session=os.name != "nt" and pre_seal_owned_posix_root is None,
                                creationflags=0x08000000 if os.name == "nt" else 0)
     close_job, workers, outputs = None, [], [bytearray(), bytearray()]
     overflow, io_failed, lock = threading.Event(), threading.Event(), threading.Lock()
     try:
         if os.name == "nt":
             close_job = windows_job(process)
+        elif pre_seal_owned_posix_root is not None:
+            validate_pre_seal_owned_posix_root(pre_seal_owned_posix_root)
+            if (os.getpgid(process.pid) != pre_seal_owned_posix_root
+                    or os.getsid(process.pid) != pre_seal_owned_posix_root):
+                reject()
         def drain(stream, output):
             try:
                 while True:
@@ -207,7 +230,7 @@ def check_dependency_audits(root, manifest, index, generator_sha256=None):
     finally:
         if close_job:
             close_job()
-        elif os.name != "nt":
+        elif os.name != "nt" and pre_seal_owned_posix_root is None:
             try:
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
@@ -305,7 +328,10 @@ def main():
         return
     if sys.version_info[:2] != (3, 13) or not sys.flags.isolated or sys.flags.utf8_mode != 1 or not sys.flags.no_site or not sys.flags.dont_write_bytecode:
         reject()
-    if len(sys.argv) != 4:
+    owned_posix_root = None
+    if len(sys.argv) == 6 and sys.argv[4] == "--pre-seal-owned-posix-root":
+        owned_posix_root = validate_pre_seal_owned_posix_root(sys.argv[5])
+    elif len(sys.argv) != 4:
         reject()
     manifest_path = pathlib.Path(sys.argv[1])
     provider = sys.argv[2]
@@ -330,7 +356,10 @@ def main():
     if pathlib.Path(sys.executable).resolve(strict=True) != (root / relative(manifest["python"]["executable"])).resolve(strict=True):
         reject()
     index = check_inventory(root, manifest, manifest_path)
-    check_dependency_audits(root, manifest, index)
+    if owned_posix_root is None:
+        check_dependency_audits(root, manifest, index)
+    else:
+        check_dependency_audits(root, manifest, index, pre_seal_owned_posix_root=owned_posix_root)
     message = sys.stdin.buffer.read(1024 * 1024 + 1)
     if len(message) > 1024 * 1024:
         reject()
@@ -376,7 +405,10 @@ def main():
             reject()
         safe_adapter = {"__name__": "rt_private_pywencai_adapter", "__file__": str(safe_adapter_path)}
         exec(compile(safe_adapter_source, str(safe_adapter_path), "exec"), safe_adapter)
-        safe_adapter["install"](manifest, root, site)
+        if owned_posix_root is None:
+            safe_adapter["install"](manifest, root, site)
+        else:
+            safe_adapter["install"](manifest, root, site, pre_seal_owned_posix_root=owned_posix_root)
         script = safe_adapter["rewrite_trusted_bridge"](script)
     sys.stdin = io.StringIO(json.dumps(request, ensure_ascii=False, allow_nan=False))
     # This source is supplied only by the main-process bridge, never by an IPC caller.
