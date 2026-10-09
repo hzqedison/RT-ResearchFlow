@@ -5,16 +5,17 @@ on:
     branches:
       - 'codex/release-1.3'
       - 'codex/release-1.6'
+      - 'codex/release-1.7'
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Existing tested tag, for example v1.3.0, v1.6.0 or v1.6.0-beta.1
+        description: Existing tested tag, for example v1.7.0
         required: true
         type: string
       tested_run_id:
-        description: Original tag or exact authorized 1.3/1.6 branch Release run ID (reuse tested packages, never rebuild)
+        description: Original tag or exact authorized 1.3/1.6/1.7 branch Release run ID (reuse tested packages, never rebuild)
         required: true
         type: string
       publish:
@@ -28,11 +29,11 @@ permissions:
 
 # Each exact bootstrap branch, its tag and publish-only retries share one lock.
 concurrency:
-  group: release-${{ (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.3' && 'v1.3.0') || (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.6' && 'v1.6.0') || github.event.inputs.release_tag || github.ref_name }}
+  group: release-${{ (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.3' && 'v1.3.0') || (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.6' && 'v1.6.0') || (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.7' && 'v1.7.0') || github.event.inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
-  RELEASE_TAG: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.3' && 'v1.3.0') || (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.6' && 'v1.6.0') || github.event.inputs.release_tag || github.ref_name }}
+  RELEASE_TAG: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.3' && 'v1.3.0') || (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.6' && 'v1.6.0') || (github.event_name == 'push' && github.ref == 'refs/heads/codex/release-1.7' && 'v1.7.0') || github.event.inputs.release_tag || github.ref_name }}
   GH_REPO: ${{ github.repository }}
 
 jobs:
@@ -64,11 +65,12 @@ jobs:
             const bootstrapTags = {
               'refs/heads/codex/release-1.3': 'v1.3.0',
               'refs/heads/codex/release-1.6': 'v1.6.0',
+              'refs/heads/codex/release-1.7': 'v1.7.0',
             };
             const bootstrapTag = bootstrapTags[context.ref];
             const bootstrap = build && bootstrapTag !== undefined;
             if (build && (context.payload.deleted || (!bootstrap && context.ref !== 'refs/tags/' + tag))) {
-              throw new Error('Only existing release tags or the exact authorized 1.3/1.6 branches may build.');
+              throw new Error('Only existing release tags or the exact authorized 1.3/1.6/1.7 branches may build.');
             }
             if (bootstrap && tag !== bootstrapTag) throw new Error('Branch bootstrap must match its exact authorized tag.');
             // Check public releases before any tag resolution or build. Include private drafts.
@@ -544,6 +546,7 @@ jobs:
             const bootstrapTags = {
               'refs/heads/codex/release-1.3': 'v1.3.0',
               'refs/heads/codex/release-1.6': 'v1.6.0',
+              'refs/heads/codex/release-1.7': 'v1.7.0',
             };
             const bootstrap = context.eventName === 'push' && bootstrapTags[context.ref] === tag;
             async function assertTag() {

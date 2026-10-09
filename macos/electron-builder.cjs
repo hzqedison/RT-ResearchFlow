@@ -1,7 +1,7 @@
-const { execFileSync } = require('node:child_process')
 const { lstatSync, readlinkSync, readdirSync } = require('node:fs')
 const path = require('node:path')
 const base = require('../electron-builder.js')
+const { signAppPreservingRuntime } = require('./sign-app.cjs')
 
 function describeFramework(label, frameworkPath) {
   const entries = []
@@ -51,13 +51,11 @@ module.exports = {
   },
   // Personal builds need an ad-hoc signature on Apple Silicon. This is NOT
   // Developer ID signing or notarization and does not bypass Gatekeeper.
-  afterPack(context) {
+  async afterPack(context) {
     if (context.electronPlatformName !== 'darwin') return
     const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
     try {
-      execFileSync('/usr/bin/codesign', [
-        '--force', '--deep', '--sign', '-', '--timestamp=none', appPath,
-      ], { stdio: 'inherit' })
+      await signAppPreservingRuntime(appPath)
     } catch (error) {
       // Only public runtime filenames and symlink targets, never application data.
       // Keep the build failed rather than distributing an invalid signature.
@@ -68,3 +66,6 @@ module.exports = {
     }
   },
 }
+
+// Preserve the native Mac signing hook, then verify the installed runtime ledger.
+module.exports = require("../scripts/private-python-runtime-builder.cjs").withPrivatePythonPostPackValidation(module.exports)
