@@ -1481,6 +1481,9 @@ class TargetDerivedNativeTests(unittest.TestCase):
 
     def native_fixture(self, policy=None):
         policy = copy.deepcopy(POLICY if policy is None else policy)
+        # This synthetic fixture deliberately owns only one Windows-native asset.
+        for config in policy["targets"].values():
+            config["derivedWheels"] = []
         wheel = self.fixture_wheel("lxml", version="9.0+fixture",
                                    tags=("cp313-cp313-win_amd64",),
                                    extra_files={"lxml/fixture.pyd": b"isolated native member fixture"})
@@ -1535,10 +1538,16 @@ class TargetDerivedNativeTests(unittest.TestCase):
 
     def test_real_policy_selects_native_only_on_its_target(self):
         global_names = [wheel["distribution"] for wheel in POLICY["derivedWheels"]]
-        self.assertEqual([w["distribution"] for w in prep.derived_wheels(POLICY, "darwin-arm64")], global_names)
-        self.assertEqual([w["distribution"] for w in prep.derived_wheels(POLICY, "darwin-x64")], global_names)
-        scoped = POLICY["targets"]["win32-x64"]["derivedWheels"]
-        self.assertEqual(prep.derived_wheels(POLICY, "win32-x64"), POLICY["derivedWheels"] + scoped)
+        target_shas = set()
+        for target in prep.TARGETS:
+            scoped = POLICY["targets"][target]["derivedWheels"]
+            self.assertEqual(prep.derived_wheels(POLICY, target), POLICY["derivedWheels"] + scoped)
+            self.assertEqual([w["distribution"] for w in scoped], ["lxml"])
+            self.assertEqual(scoped[0]["nativeBuildInputs"]["target"], target)
+            self.assertEqual(scoped[0]["nativeBuildInputs"]["kind"], "rt-lxml-redistribution-inputs-v1")
+            self.assertEqual([w["distribution"] for w in prep.derived_wheels(POLICY, target)], global_names + ["lxml"])
+            target_shas.add(scoped[0]["asset"]["sha256"])
+        self.assertEqual(len(target_shas), len(prep.TARGETS))
         self.assertFalse(prep.source_receipt(None, prep.source_snapshot(POLICY_SHA))["sourceVerified"])
 
     def test_duplicate_and_foreign_target_selections_rejected(self):
@@ -1719,13 +1728,14 @@ class TargetDerivedNativeTests(unittest.TestCase):
 
     def test_redistribution_actual_final_mapping_has_no_license_auto_approval(self):
         root = Path(os.environ.get("RT_PREP_TEST_LXML_REDISTRIBUTION",
-                    "D:/RT-ResearchFlow-BuildCache/sol-lxml-redistribution-20261009-01"))
+                    "D:/RT-ResearchFlow-BuildCache/sol-lxml-redistribution-20261009-03"))
         cache = Path(os.environ.get("RT_PREP_TEST_LXML_ORIGINAL_CACHE",
-                     "D:/RT-ResearchFlow-BuildCache/sol-lxml-selection-20261009-01/provider-native-input-cache"))
-        if not (root / "handoff.json").is_file() or not cache.is_dir():
+                     "D:/RT-ResearchFlow-BuildCache/sol-lxml-redistribution-20261009-03/download-action-layout/b"))
+        if not (root / "consumer-input-contract.json").is_file() or not cache.is_dir():
             self.skipTest("Actual Hubble assets are not on this host")
-        handoff = json.loads((root / "handoff.json").read_bytes())
+        handoff = json.loads((root / "consumer-input-contract.json").read_bytes())
         mapped = prep.map_lxml_redistribution_policy(POLICY, handoff, root, cache)
+        handoff = prep.redistribution_consumer_handoff(handoff, root, cache)
         self.assertEqual(mapped["licenseApprovals"][:len(POLICY["licenseApprovals"])], POLICY["licenseApprovals"])
         original_keys = {(row["component"], row["version"], row["artifactSha256"], row["licenseSha256"])
                          for row in POLICY["licenseApprovals"]}
@@ -1743,28 +1753,22 @@ class TargetDerivedNativeTests(unittest.TestCase):
 
     def test_redistribution_actual_repack_three_target_sources_never_ship_originals(self):
         root = Path(os.environ.get("RT_PREP_TEST_LXML_REDISTRIBUTION",
-                    "D:/RT-ResearchFlow-BuildCache/sol-lxml-redistribution-20261009-01"))
+                    "D:/RT-ResearchFlow-BuildCache/sol-lxml-redistribution-20261009-03"))
         cache = Path(os.environ.get("RT_PREP_TEST_LXML_ORIGINAL_CACHE",
-                     "D:/RT-ResearchFlow-BuildCache/sol-lxml-selection-20261009-01/provider-native-input-cache"))
-        if not (root / "handoff.json").is_file() or not cache.is_dir():
+                     "D:/RT-ResearchFlow-BuildCache/sol-lxml-redistribution-20261009-03/download-action-layout/b"))
+        if not (root / "consumer-input-contract.json").is_file() or not cache.is_dir():
             self.skipTest("Actual Hubble assets are not on this host")
-        handoff = json.loads((root / "handoff.json").read_bytes())
+        handoff = json.loads((root / "consumer-input-contract.json").read_bytes())
         mapped = prep.map_lxml_redistribution_policy(POLICY, handoff, root, cache)
         for target in prep.TARGETS:
             with self.subTest(target=target):
                 wheel = next(w for w in prep.derived_wheels(mapped, target) if w["distribution"] == "lxml")
                 inputs = wheel["nativeBuildInputs"]
                 assets = self.base / target
-                assets.mkdir()
-                for value in (wheel["asset"], inputs["publicSourceAsset"]):
-                    source = root / target / ("wheel" if value == wheel["asset"] else "source") / value["filename"]
-                    prep.copy_asset(source, assets / value["filename"], value)
-                original = (cache if target == "win32-x64" else root / "inputs") / inputs["originalWheelFilename"]
-                (assets / inputs["originalWheelAsset"]["filename"]).write_bytes(original.read_bytes())
-                value = inputs["originalSourceAsset"]
-                prep.copy_asset(prep.verified_asset(cache, value), assets / value["filename"], value)
-                value = wheel["derived"]["upstreamAsset"]
-                prep.copy_asset(prep.verified_asset(cache, value), assets / value["filename"], value)
+                operation = prep.cache_lxml_redistribution_inputs(mapped, root, cache, assets, target=target)
+                self.assertEqual(operation["cacheRoots"], [str(assets)])
+                self.assertEqual(operation["seedReports"], {})
+                self.assertIsNone(operation["sourceReceipt"])
                 receipt = prep.reproduce(wheel, assets, self.base, mapped)
                 self.assertTrue(receipt["repackExecutedThisOperation"])
                 self.assertFalse(receipt["nativeBuildExecutedThisOperation"])
@@ -1784,6 +1788,69 @@ class TargetDerivedNativeTests(unittest.TestCase):
                 (assets / inputs["publicSourceAsset"]["filename"]).write_bytes(b"changed")
                 with self.assertRaises(prep.Invalid):
                     prep.reproduce(wheel, assets, self.base, mapped)
+
+    def final_consumer_fixture(self):
+        root = Path(os.environ.get("RT_PREP_TEST_LXML_REDISTRIBUTION",
+                    "D:/RT-ResearchFlow-BuildCache/sol-lxml-redistribution-20261009-03"))
+        if not (root / "consumer-input-contract.json").is_file():
+            self.skipTest("Actual final Hubble consumer assets are not on this host")
+        return root, root / "download-action-layout/b", json.loads((root / "consumer-input-contract.json").read_bytes())
+
+    def test_final_consumer_duplicate_output_is_rejected(self):
+        root, cache, contract = self.final_consumer_fixture()
+        contract["derivedOutputs"][-1] = copy.deepcopy(contract["derivedOutputs"][0])
+        with self.assertRaises(prep.Invalid):
+            prep.map_lxml_redistribution_policy(POLICY, contract, root, cache)
+
+    def test_final_consumer_checkout_hash_is_required(self):
+        root, cache, contract = self.final_consumer_fixture()
+        contract["checkoutFilePins"][0]["sha256"] = "0" * 64
+        with self.assertRaises(prep.Invalid):
+            prep.map_lxml_redistribution_policy(POLICY, contract, root, cache)
+
+    def test_final_consumer_hosted_source_hash_cannot_be_replaced(self):
+        root, cache, contract = self.final_consumer_fixture()
+        contract["cloudInput"]["downloadedMembers"]["b/source-materials.zip"]["sha256"] = "0" * 64
+        with self.assertRaises(prep.Invalid):
+            prep.map_lxml_redistribution_policy(POLICY, contract, root, cache, target="win32-x64")
+
+    def test_final_consumer_final_wheel_hash_cannot_be_replaced(self):
+        root, cache, contract = self.final_consumer_fixture()
+        next(item for item in contract["derivedOutputs"] if item["target"] == "darwin-arm64"
+             and item["role"] == "wheel")["sha256"] = "0" * 64
+        with self.assertRaises(prep.Invalid):
+            prep.map_lxml_redistribution_policy(POLICY, contract, root, cache, target="darwin-arm64")
+
+    def test_final_consumer_single_target_layout_cache_and_historical_profile(self):
+        root, cache, contract = self.final_consumer_fixture()
+        for target in prep.TARGETS:
+            with self.subTest(target=target):
+                consumer = self.base / (target + "-consumer")
+                for value in contract["derivedOutputs"]:
+                    if value["target"] == target:
+                        folder = consumer / value["role"]
+                        folder.mkdir(parents=True, exist_ok=True)
+                        pin = {key: value[key] for key in ("kind", "filename", "sha256", "size")}
+                        prep.copy_asset(prep.verified_asset(root / "assets", pin), folder / pin["filename"], pin)
+                official = root / "official-inputs"
+                original = cache if target == "win32-x64" else official
+                mapped = prep.map_lxml_redistribution_policy(POLICY, contract, consumer, original, official, target)
+                for other in prep.TARGETS:
+                    if other != target:
+                        self.assertEqual(mapped["targets"][other], POLICY["targets"][other])
+                selected = next(item for item in prep.derived_wheels(mapped, target) if item["distribution"] == "lxml")
+                self.assertEqual(selected["nativeBuildInputs"]["windowsInputProfile"],
+                                 "hosted-run-37896686196" if target == "win32-x64" else "local-lx3")
+                if target == "win32-x64":
+                    self.assertIsNone(selected["nativeBuildInputs"]["historicalNativeBuildInputs"])
+                output = self.base / (target + "-single-cache")
+                operations = prep.cache_lxml_redistribution_inputs(mapped, consumer, original, output, official, target)
+                self.assertEqual(operations["seedReports"], {})
+                self.assertIsNone(operations["sourceReceipt"])
+                self.assertEqual(len(list(output.iterdir())), 5 if target == "win32-x64" else 4)
+                receipt = prep.reproduce(selected, output, self.base, mapped)
+                self.assertTrue(receipt["repackExecutedThisOperation"])
+                self.assertFalse(receipt["nativeBuildExecutedThisOperation"])
 
 
 if __name__ == "__main__":

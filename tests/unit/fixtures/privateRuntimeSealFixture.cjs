@@ -10,7 +10,7 @@ const hash = value => crypto.createHash('sha256').update(value).digest('hex')
 const blobOid = value => crypto.createHash('sha1').update(Buffer.from('blob ' + value.length + '\0')).update(value).digest('hex')
 function makeFixture(sourceRoot, root, options = {}) {
   const sourceApi = require(path.join(sourceRoot, 'scripts/seal-private-python-runtime.cjs'))
-  const { TARGETS, REQUIRED_SOURCE, preparationBytes, digest, executionAssets, crc32 } = sourceApi
+  const { TARGETS, REQUIRED_SOURCE, PREPARATION_SOURCE, preparationBytes, digest, executionAssets, crc32 } = sourceApi
   const repoRoot = path.join(root, 'repo'), preparedRoot = path.join(root, 'prepared'), assetsRoot = path.join(root, 'assets'), outputRoot = path.join(root, 'output')
   fs.mkdirSync(repoRoot); fs.mkdirSync(preparedRoot); fs.mkdirSync(assetsRoot)
   const write = (base, name, bytes) => { const file = path.join(base, name); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file }
@@ -131,9 +131,7 @@ function makeFixture(sourceRoot, root, options = {}) {
   policy.licenseApprovals = [...allApprovals.values()]; policy.licenseRequirements = [...allRequirements.values()]
   const policyBytes = Buffer.from(JSON.stringify(policy)), policyHash = hash(policyBytes)
   write(repoRoot, 'resources/python-runtime/preparation.policy.json', policyBytes)
-  const snapshotNames = ['electron/shared/privatePythonRuntimeManifest.cjs', 'resources/python-runtime/bootstrap.py',
-    'resources/python-runtime/miniracer_unicode_adapter.py', 'resources/python-runtime/pywencai_adapter.py', 'scripts/build-mootdx-compat-wheel.py',
-    'scripts/build-provider-source-wheels.py', 'scripts/prepare-private-python-runtime.py'].sort()
+  const snapshotNames = [...PREPARATION_SOURCE]
   const snapshot = { policySha256: policyHash, files: snapshotNames.map(name => ({ path: name, sha256: hash(fs.readFileSync(path.join(repoRoot, name))) })) }
   const snapshotHash = hash(preparationBytes(snapshot)), sourceCommit = 'a'.repeat(40)
   for (const manifest of Object.values(manifests)) manifest.preparationPolicySha256 = policyHash
@@ -216,4 +214,3 @@ function makeFixture(sourceRoot, root, options = {}) {
     authority, manifests, candidateData, fragmentData, responses, prefix, archives, root }
 }
 module.exports = { makeFixture }
-

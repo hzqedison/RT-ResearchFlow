@@ -70,13 +70,13 @@ jobs:
           RT_TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
-          args=()
+          set --
           if [ "$RT_TARGET" = "win32-x64" ]; then
-            args=(--artifact-dir "$RUNNER_TEMP/lxml-hosted-inputs")
+            set -- --artifact-dir "$RUNNER_TEMP/lxml-hosted-inputs"
           fi
           python -X utf8 -B -I scripts/run-lxml-native-consumer-ci.py \
             --target "$RT_TARGET" \
-            --proof-dir "$RUNNER_TEMP/lxml-native-consumer-proof" "${args[@]}"
+            --proof-dir "$RUNNER_TEMP/lxml-native-consumer-proof" "$@"
       - name: Preserve only derived assets and source evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

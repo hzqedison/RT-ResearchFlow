@@ -471,7 +471,8 @@ def redistribution_receipt(wheel, assets, work, policy, execute=False):
                 or manifest.get("originalLxmlSdistSha256") != wheel["derived"]["upstreamSha256"]
                 or manifest.get("originalLxmlSdistRedistributed") is not False
                 or manifest.get("isoSchematronProvided") is not False
-                or manifest.get("nativeRecompiled") is not False):
+                or manifest.get("nativeRecompiled") is not False
+                or manifest.get("windowsInputProfile", "local-lx3") != inputs.get("windowsInputProfile", "local-lx3")):
             raise Invalid("Public source does not match the selected target/input")
     snapshot = recipe_snapshot(assets, wheel["derived"]["recipe"], policy)
     recipe_snapshot(assets, inputs["sourceRecipe"], policy)
@@ -483,7 +484,9 @@ def redistribution_receipt(wheel, assets, work, policy, execute=False):
         try:
             sys.dont_write_bytecode = True
             spec.loader.exec_module(module)
-            if module.PINS[inputs["target"]][:2] != (inputs["originalWheelFilename"], inputs["originalWheelAsset"]["sha256"]):
+            expected = (module.input_pin(inputs["target"], inputs.get("windowsInputProfile", "local-lx3"))
+                        if hasattr(module, "input_pin") else module.PINS[inputs["target"]])
+            if expected[:2] != (inputs["originalWheelFilename"], inputs["originalWheelAsset"]["sha256"]):
                 raise Invalid("Repack recipe does not bind the selected original artifact")
             source_pin = {"filename": source.name, "sha256": inputs["publicSourceAsset"]["sha256"],
                           "size": inputs["publicSourceAsset"]["size"], "target": inputs["target"],
@@ -2598,12 +2601,120 @@ def matching_native_build_history(policy, target, original_sha):
             return history.get("historicalNativeBuildInputs")
     return None
 
-def map_lxml_redistribution_policy(policy, handoff, asset_root, original_cache):
+def redistribution_asset_directory(root, target, role):
+    root = Path(root)
+    if (root / "assets").is_dir():
+        return root / "assets"
+    if (root / target / role).is_dir():
+        return root / target / role
+    return root / role
+
+
+def redistribution_official_directory(root, original_cache, official_inputs=None):
+    if official_inputs is not None:
+        return Path(official_inputs)
+    root = Path(root)
+    if (root / "official-inputs").is_dir():
+        return root / "official-inputs"
+    if (root / "inputs").is_dir():
+        return root / "inputs"
+    return Path(original_cache)
+
+
+def redistribution_consumer_handoff(contract, asset_root, original_cache, official_inputs=None, target=None):
+    """Consume independently pinned consumer JSON; local paths/verified flags confer no authority."""
+    selected = (target,) if target is not None else TARGETS
+    if target is not None and target not in TARGETS:
+        raise Invalid("Unknown redistribution target")
+    outputs = contract.get("derivedOutputs", [])
+    if (len(outputs) != len(TARGETS) * 2
+            or {(item.get("target"), item.get("role")) for item in outputs}
+                != {(name, role) for name in TARGETS for role in ("source", "wheel")}):
+        raise Invalid("Exact three-target consumer output pins are required")
+    pins = contract.get("checkoutFilePins", [])
+    for pin in pins:
+        path = ROOT / relative(pin["path"])
+        if (path.is_symlink() or not path.is_file() or path.stat().st_size != pin["size"]
+                or file_digest(path) != pin["sha256"]):
+            raise Invalid("Consumer checkout source bytes differ")
+    mapped = {"kind": "rt-lxml-redistribution-handoff-v1", "ISO_SchematronProvided": False,
+              "noOriginalWheelReproductionClaim": True, "sourceFilePins": pins,
+              "outputs": {}, "inputs": {}}
+    official_dir = redistribution_official_directory(asset_root, original_cache, official_inputs)
+    for name in selected:
+        pair = {item["role"]: {key: item[key] for key in ("kind", "filename", "size", "sha256")}
+                for item in outputs if item["target"] == name}
+        source = verified_asset(redistribution_asset_directory(asset_root, name, "source"), pair["source"])
+        wheel = verified_asset(redistribution_asset_directory(asset_root, name, "wheel"), pair["wheel"])
+        with zipfile.ZipFile(source) as archive:
+            source_manifest = json.loads(archive.read("RT_PUBLIC_SOURCE_MANIFEST.json"))
+        with zipfile.ZipFile(wheel) as archive:
+            facts = read_wheel(wheel)
+            proof = json.loads(archive.read("lxml-" + facts["version"] + ".dist-info/RT_REDISTRIBUTION.json"))
+        if (source_manifest.get("kind") != "rt-lxml-matched-public-source-v1"
+                or source_manifest.get("target") != name
+                or source_manifest.get("isoSchematronProvided") is not False
+                or source_manifest.get("nativeRecompiled") is not False
+                or source_manifest.get("originalLxmlSdistRedistributed") is not False
+                or proof.get("kind") != "rt-lxml-redistribution-wheel-v1"
+                or proof.get("target") != name or proof.get("isoSchematronProvided") is not False
+                or proof.get("nativeRecompiled") is not False
+                or proof.get("publicSource") != {**{key: pair["source"][key] for key in ("filename", "sha256", "size")},
+                    "target": name, "originalWheelSha256": source_manifest.get("originalWheelSha256")}
+                or proof.get("distributionVersion") != facts["version"]
+                or source_manifest.get("matchedDistributionVersion") != facts["version"]
+                or proof.get("originalWheelSha256") != source_manifest.get("originalWheelSha256")
+                or proof.get("excludedNamespace") != "lxml/isoschematron/**"
+                or source_manifest.get("excludedNamespace") != proof["excludedNamespace"]):
+            raise Invalid("Consumer matched public source/wheel identity differs")
+        for key, value in (("distributionVersion", facts["version"]),
+                           ("nativeRuntimeVersion", proof["nativeRuntimeVersion"]),
+                           ("excludedNamespace", proof["excludedNamespace"])):
+            if key in mapped and mapped[key] != value:
+                raise Invalid("Consumer target identities conflict")
+            mapped[key] = value
+        if name == "win32-x64":
+            cloud = contract["cloudInput"]
+            members = cloud["downloadedMembers"]
+            originals = [(member, value) for member, value in members.items() if member.endswith(".whl")]
+            if len(originals) != 1:
+                raise Invalid("Exactly one hosted baseline wheel is required")
+            member, pin = originals[0]
+            if relative(member) != member or not member.startswith("b/") or "/" in member[2:]:
+                raise Invalid("Hosted baseline member path differs")
+            filename = member[2:]
+            original = {"kind": "derived", "filename": filename, **pin}
+            verified_asset(Path(original_cache), original)
+            archive_pin = source_manifest["originalArchive"]
+            if members.get("b/" + archive_pin["filename"]) != {key: archive_pin[key] for key in ("sha256", "size")}:
+                raise Invalid("Hosted source archive differs from consumer pin")
+            verified_asset(Path(original_cache), {"kind": "derived", **archive_pin})
+            origin = {key: cloud[key] for key in ("repository", "runId", "jobId", "artifactId",
+                        "artifactHeadSha", "artifactName", "archiveSha256", "archiveSize")}
+        else:
+            originals = [item for item in contract["officialMacInputs"] if item.get("target") == name]
+            if len(originals) != 1:
+                raise Invalid("Exactly one official original target wheel is required")
+            original = {"kind": "download", **{key: originals[0][key] for key in ("filename", "sha256", "size", "url")}}
+            verified_asset(official_dir, original)
+            filename = original["filename"]
+            origin = {"kind": "official-pypi", "url": original["url"]}
+        if original["sha256"] != source_manifest["originalWheelSha256"]:
+            raise Invalid("Consumer original wheel differs from public-source binding")
+        mapped["inputs"][name] = {"filename": filename, "sha256": original["sha256"], "origin": origin}
+        mapped["outputs"][name] = {**pair, "nativeMemberPins": proof["nativeMemberPins"]}
+    return mapped
+
+
+def map_lxml_redistribution_policy(policy, handoff, asset_root, original_cache, official_inputs=None, target=None):
     """Map independently supplied exact Hubble pins; never invent license approvals."""
+    selected = (target,) if target is not None else TARGETS
+    if "derivedOutputs" in handoff:
+        handoff = redistribution_consumer_handoff(handoff, asset_root, original_cache, official_inputs, target)
     if (handoff.get("kind") != "rt-lxml-redistribution-handoff-v1"
             or handoff.get("ISO_SchematronProvided") is not False
             or handoff.get("noOriginalWheelReproductionClaim") is not True
-            or set(handoff.get("outputs", {})) != set(TARGETS)):
+            or set(handoff.get("outputs", {})) != set(selected)):
         raise Invalid("Incomplete exact redistribution handoff")
     result = json.loads(json.dumps(policy))
     pins = {}
@@ -2619,17 +2730,17 @@ def map_lxml_redistribution_policy(policy, handoff, asset_root, original_cache):
     result["recipePins"] = [pin for pin in result["recipePins"] if pin["path"] not in pins] + list(pins.values())
     upstream = next({key: value for key, value in item.items() if key != "id"}
                     for item in policy["lxmlWindowsSourceMaterials"] if item["id"] == "lxml")
-    for target in TARGETS:
+    for target in selected:
         output = handoff["outputs"][target]
-        wheel_path = verified_asset(Path(asset_root) / target / "wheel", output["wheel"])
-        source_path = verified_asset(Path(asset_root) / target / "source", output["source"])
+        wheel_path = verified_asset(redistribution_asset_directory(asset_root, target, "wheel"), output["wheel"])
+        source_path = verified_asset(redistribution_asset_directory(asset_root, target, "source"), output["source"])
         actual = read_wheel(wheel_path)
         if actual["distribution"].lower() != "lxml" or actual["version"] != handoff["distributionVersion"]:
             raise Invalid("Handoff selected distribution differs from actual wheel")
         with zipfile.ZipFile(source_path) as archive:
             source_manifest = json.loads(archive.read("RT_PUBLIC_SOURCE_MANIFEST.json"))
         original_record = handoff["inputs"][target]
-        original_path = (Path(original_cache) if target == "win32-x64" else Path(asset_root) / "inputs") / original_record["filename"]
+        original_path = (Path(original_cache) if target == "win32-x64" else redistribution_official_directory(asset_root, original_cache, official_inputs)) / original_record["filename"]
         if (original_path.is_symlink() or file_digest(original_path) != original_record["sha256"]
                 or source_manifest.get("originalWheelSha256") != original_record["sha256"]
                 or source_manifest.get("target") != target
@@ -2662,6 +2773,7 @@ def map_lxml_redistribution_policy(policy, handoff, asset_root, original_cache):
                     "sourceRecipe": pins["scripts/build-lxml-matched-public-source.py"],
                     "nativeMemberPins": output["nativeMemberPins"], "noticePins": notices,
                     "nativeRuntimeVersion": handoff["nativeRuntimeVersion"], "nativeRecompiled": False,
+                    "windowsInputProfile": source_manifest.get("windowsInputProfile", "local-lx3"),
                     "originalSdistRedistributed": False, "excludedNamespace": handoff["excludedNamespace"],
                     "historicalNativeBuildInputs": previous,
                     "historicalRecipesExecutableThisOperation": False}}
@@ -2687,20 +2799,21 @@ def map_lxml_redistribution_policy(policy, handoff, asset_root, original_cache):
     return result
 
 
-def cache_lxml_redistribution_inputs(policy, asset_root, original_cache, output):
+def cache_lxml_redistribution_inputs(policy, asset_root, original_cache, output, official_inputs=None, target=None):
     """Fresh caller-owned private cache; original unlicensed bytes never enter product."""
     output = owned_path(output)
     if output.exists() or output.is_symlink():
         raise Invalid("Redistribution input cache must be fresh")
     inputs = {}
-    for target in TARGETS:
+    official_dir = redistribution_official_directory(asset_root, original_cache, official_inputs)
+    for target in ((target,) if target is not None else TARGETS):
         wheel = next(item for item in derived_wheels(policy, target) if item["distribution"] == "lxml")
         native = wheel["nativeBuildInputs"]
-        entries = [(wheel["asset"], Path(asset_root) / target / "wheel" / wheel["asset"]["filename"]),
-                   (native["publicSourceAsset"], Path(asset_root) / target / "source" / native["publicSourceAsset"]["filename"]),
-                   (native["originalWheelAsset"], (Path(original_cache) if target == "win32-x64" else Path(asset_root) / "inputs") / native["originalWheelFilename"]),
-                   (native["originalSourceAsset"], Path(original_cache) / native["originalSourceAsset"]["filename"]),
-                   (wheel["derived"]["upstreamAsset"], Path(original_cache) / wheel["derived"]["upstreamAsset"]["filename"])]
+        entries = [(wheel["asset"], redistribution_asset_directory(asset_root, target, "wheel") / wheel["asset"]["filename"]),
+                   (native["publicSourceAsset"], redistribution_asset_directory(asset_root, target, "source") / native["publicSourceAsset"]["filename"]),
+                   (native["originalWheelAsset"], (Path(original_cache) if target == "win32-x64" else official_dir) / native["originalWheelFilename"]),
+                   (native["originalSourceAsset"], (Path(original_cache) if target == "win32-x64" else official_dir) / native["originalSourceAsset"]["filename"]),
+                   (wheel["derived"]["upstreamAsset"], official_dir / wheel["derived"]["upstreamAsset"]["filename"])]
         for value, source in entries:
             asset(value)
             if (source.is_symlink() or not source.is_file()
@@ -2746,6 +2859,8 @@ def main(argv=None):
     mapping.add_argument("--handoff-sha256", required=True)
     mapping.add_argument("--asset-root", type=Path, required=True)
     mapping.add_argument("--original-cache", type=Path, required=True)
+    mapping.add_argument("--official-inputs", type=Path)
+    mapping.add_argument("--target", choices=TARGETS)
     mapping.add_argument("--out", type=Path, required=True)
     mapping.add_argument("--input-cache", type=Path)
     mapping.add_argument("--operation-out", type=Path)
@@ -2763,14 +2878,14 @@ def main(argv=None):
             if not SHA.fullmatch(args.handoff_sha256) or digest(raw_handoff) != args.handoff_sha256:
                 raise Invalid("Independent redistribution handoff digest mismatch")
             report = map_lxml_redistribution_policy(policy, json.loads(raw_handoff),
-                                                     args.asset_root, args.original_cache)
+                                                     args.asset_root, args.original_cache, args.official_inputs, args.target)
             if bool(args.input_cache) != bool(args.operation_out):
                 raise Invalid("Input cache and operation output must be provided together")
             if args.input_cache:
                 operation_out = owned_path(args.operation_out)
                 if operation_out.exists() or operation_out.is_symlink() or not operation_out.parent.is_dir():
                     raise Invalid("Operation output must be fresh")
-                operations = cache_lxml_redistribution_inputs(report, args.asset_root, args.original_cache, args.input_cache)
+                operations = cache_lxml_redistribution_inputs(report, args.asset_root, args.original_cache, args.input_cache, args.official_inputs, args.target)
                 exclusive_bytes(operation_out, encoded(operations))
         elif args.command == "resolve":
             report = resolve(policy, policy_sha, args.target, args.work_root, args.operation_input)
