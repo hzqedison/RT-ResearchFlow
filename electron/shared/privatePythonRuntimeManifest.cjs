@@ -21,7 +21,7 @@ function wheelTarget(filename, target) {
   if (tags.length !== 3) fail('invalid wheel filename')
   const [python, abi, platform] = tags
   const pythonCompatible = python.split('.').some(p => p === 'py3' || p === 'cp313' ||
-    (abi === 'abi3' && /^cp3(?:[7-9]|1[0-3])$/.test(p)))
+    (abi === 'abi3' && /^cp3(?:[2-9]|1[0-3])$/.test(p)))
   if (!pythonCompatible) fail('wheel Python ABI mismatch')
   const platformCompatible = platform.split('.').some(p => p === 'any' ||
     (target === 'win32-x64' && p === 'win_amd64') ||
