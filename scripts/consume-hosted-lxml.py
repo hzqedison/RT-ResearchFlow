@@ -7,7 +7,7 @@ from pathlib import Path
 import stat
 import zipfile
 
-REPO_PINS = {'scripts/build-lxml-redistribution-wheel.py': '17c547bc3216628594508c32926501024afaa2a9de109adbf2a91870d6afc772', 'scripts/build-lxml-matched-public-source.py': 'b0baf7b569e211366211cb1921bc5311ace969f2697b8256feb5f29a1177e4e0', 'tests/python/test_build_lxml_redistribution_wheel.py': 'cb92913dde7fdb01f125e64a9f07383556d75b6833a4d172a858372e41e76189', 'tests/python/test_build_lxml_matched_public_source.py': '3d025bea3c33a6d1a409152edbed5e10360fd4abd44cdce7e78e43dc6b94fa19'}
+REPO_PINS = {'scripts/build-lxml-redistribution-wheel.py': '17c547bc3216628594508c32926501024afaa2a9de109adbf2a91870d6afc772', 'scripts/build-lxml-matched-public-source.py': 'd7b94a7b696d85c02a2e0ed5a3c158075fe2e147774f257f4cbe92beb8ab2d2c', 'tests/python/test_build_lxml_redistribution_wheel.py': 'cb92913dde7fdb01f125e64a9f07383556d75b6833a4d172a858372e41e76189', 'tests/python/test_build_lxml_matched_public_source.py': '1015427d238af8991ba73df1f59f09269213c80e08770641cabd2f412771383c'}
 ARCHIVE_SHA = "fa9cae8101dbb52f09239ac027ffd1ccc4877b173c352aa54bcf94c100cba8a4"
 PROFILE = "hosted-run-37896686196"
 BASELINE_SHA = "a27904ae1fd3684f8cc8ab4b3c5ab78b1ee3ad4ff8f7301ee24627bca099184c"
@@ -22,6 +22,7 @@ def main():
     group.add_argument("--artifact-dir")
     group.add_argument("--artifact-archive")
     p.add_argument("--official-inputs")
+    p.add_argument("--mac-native-inputs", help="Checked Mac native source/recipe directory; defaults to official-inputs")
     p.add_argument("--out", required=True)
     p.add_argument("--expected-source-sha256")
     p.add_argument("--expected-wheel-sha256")
@@ -69,7 +70,8 @@ def main():
         source_sha = source.SDIST_SHA
         wheel.checked(wheel_path, pin[1]); wheel.checked(source_path, source_sha)
         out = wheel.fresh_output(a.out)
-    s = source.build(source_path, source_sha, a.target, pin[1], out / "source", profile)
+    s = source.build(source_path, source_sha, a.target, pin[1], out / "source", profile,
+                     (a.mac_native_inputs or a.official_inputs) if a.target != "win32-x64" else None)
     w = wheel.build(wheel_path, pin[1], a.target, out / "source" / s["asset"]["filename"], s["asset"]["sha256"], out / "wheel", profile)
     matched = None
     if a.expected_source_sha256:

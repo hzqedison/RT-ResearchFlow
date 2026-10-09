@@ -1,9 +1,12 @@
 {
   "name": "rt-research-flow",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "RT-ResearchFlow - 资讯、AI研究、策略验证与本人确认交易的一体化工作台",
   "main": "./out/main/index.js",
-  "author": { "name": "hzqedison", "url": "https://github.com/hzqedison" },
+  "author": {
+    "name": "hzqedison",
+    "url": "https://github.com/hzqedison"
+  },
   "private": true,
   "license": "AGPL-3.0-only",
   "packageManager": "pnpm@10.14.0",
@@ -32,7 +35,10 @@
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit --pretty false",
     "typecheck:web": "tsc -p tsconfig.web.json --noEmit --pretty false",
     "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
-    "verify": "pnpm run typecheck && pnpm run lint && pnpm run test:unit && pnpm run build"
+    "verify": "pnpm run typecheck && pnpm run lint && pnpm run test:unit && pnpm run build",
+    "runtime:bundle": "node scripts/bundle-private-python-runtime.cjs",
+    "runtime:validate": "node scripts/validate-private-python-runtime.cjs",
+    "runtime:contract": "cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/privatePythonRuntime.contract.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
@@ -90,5 +96,10 @@
     "typescript-eslint": "^8.65.0",
     "vite": "^5.3.4",
     "vitest": "^2.0.4"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "app-builder-lib@24.13.3": "patches/app-builder-lib@24.13.3.patch"
+    }
   }
 }

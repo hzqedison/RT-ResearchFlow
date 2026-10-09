@@ -2,7 +2,7 @@ name: Native dependency reuse assembly
 
 on:
   push:
-    branches: [codex/verify-mac-1.7]
+    branches: [codex/verify-mac-1.7, codex/verify-lxml-materials-1.7]
     paths:
       - .github/workflows/lxml-redistribution-native.yml
       - scripts/run-lxml-native-consumer-ci.py
@@ -65,6 +65,15 @@ jobs:
           run-id: 37896686196
           name: lxml-native-relink-37896686196-1
           path: ${{ runner.temp }}/lxml-hosted-inputs
+      - name: Reuse complete verified Mac dependency sources
+        if: startsWith(matrix.target, 'darwin-')
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: hzqedison/RT-ResearchFlow
+          run-id: 37925323526
+          name: lxml-mac-public-materials
+          path: ${{ runner.temp }}/lxml-mac-public-materials
       - name: Assemble pinned dependencies with exact private interpreter
         shell: bash
         env:
@@ -74,6 +83,8 @@ jobs:
           set --
           if [ "$RT_TARGET" = "win32-x64" ]; then
             set -- --artifact-dir "$RUNNER_TEMP/lxml-hosted-inputs"
+          else
+            set -- --mac-native-inputs "$RUNNER_TEMP/lxml-mac-public-materials"
           fi
           python -X utf8 -B -I scripts/run-lxml-native-consumer-ci.py \
             --target "$RT_TARGET" \

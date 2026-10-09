@@ -34,16 +34,16 @@ MAC_INPUTS = [
 ]
 OUTPUTS = {
   "win32-x64": {
-    "source": "bb11d4eac221254d7ab23d40775b58e5e5861f2c6bef951ef6db5a5691b045e0",
-    "wheel": "445653b6f07f2cab913065e5ebc946e69f485839e038d4056b27c403fc1da1c7"
+    "source": "50569086381ddf5bb8ca35ed01bd6c480dad33b0bc18384182d59e51903db60d",
+    "wheel": "6d7435ecd2edf1f184dd661b57153412e51b1af8a0ef657cf5f01e60d853b221"
   },
   "darwin-arm64": {
-    "source": "2901bf8751ae2a25ac483f6233040e931cd8d7f7fda8321a1fd7ee1faf3eef98",
-    "wheel": "15c6b6ae73b7a1624293c8498bc3e6df813e21301eba649a97f10e7072e6aa15"
+    "source": "05151c1e93f922b8d30dc5d7007ee906437c2b66560f39fdbb6e708b46361b84",
+    "wheel": "3be8dfec49d3f81162ba3b63ead0638e2cebe65921de28ea0b58ba587aa19f6d"
   },
   "darwin-x64": {
-    "source": "3b590453ff2b63388e2ced2f20d7affc79626b13d3d19a7281f0cedc4155ac58",
-    "wheel": "0dab34eae6ec3423c326f1fe5c90f01c9ddc172f1380f03ba963e150ace73278"
+    "source": "7defad97b795547e04b436553cbfe903cde96c40242523bc5c9f9e3064ea1e25",
+    "wheel": "11a9a6fcc74a18e120ef36fcd4d1652c0e7684bb46025616d5af99de8f98cdf8"
   }
 }
 
@@ -66,6 +66,7 @@ def main():
     parser.add_argument("--target", required=True, choices=tuple(OUTPUTS))
     parser.add_argument("--proof-dir", required=True)
     parser.add_argument("--artifact-dir")
+    parser.add_argument("--mac-native-inputs")
     args = parser.parse_args()
     if (os.environ.get("GITHUB_ACTIONS") != "true" or
             os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"):
@@ -97,6 +98,8 @@ def main():
         "--expected-source-sha256", OUTPUTS[args.target]["source"],
         "--expected-wheel-sha256", OUTPUTS[args.target]["wheel"]]
     if args.target == "win32-x64":
+        if args.mac_native_inputs:
+            raise ValueError("Windows does not accept Mac source materials")
         if not args.artifact_dir:
             raise ValueError("Exact hosted artifact input required")
         roots = helper.validated_cache_roots([args.artifact_dir], temporary)
@@ -104,12 +107,15 @@ def main():
     else:
         if args.artifact_dir:
             raise ValueError("Mac accepts only fixed official inputs")
+        if not args.mac_native_inputs:
+            raise ValueError("Complete pinned Mac source materials required")
+        native_inputs = helper.validated_cache_roots([args.mac_native_inputs], temporary)[0]
         inputs = root / "official-inputs"
         inputs.mkdir()
         for asset in MAC_INPUTS:
             if "target" not in asset or asset["target"] == args.target:
                 download_official(asset, inputs / asset["filename"])
-        command.extend(["--official-inputs", str(inputs)])
+        command.extend(["--official-inputs", str(inputs), "--mac-native-inputs", native_inputs])
     result = subprocess.run(command, cwd=repo, env=helper.child_environment(home), timeout=240)
     if result.returncode:
         raise SystemExit(result.returncode)

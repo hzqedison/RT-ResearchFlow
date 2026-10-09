@@ -144,5 +144,66 @@ class PublicSourceTests(unittest.TestCase):
         with self.assertRaises(ValueError): module.build("missing", "a" * 64, "win32-x64", module.wheel.PINS["win32-x64"][1], "unused")
 
 
+    def mac_fixture(self, root):
+        pins = {}
+        for name, old in module.MAC_SOURCE_PINS.items():
+            out = io.BytesIO()
+            with tarfile.open(fileobj=out, mode="w:gz") as archive:
+                info = tarfile.TarInfo(name + "/COPYING.LIB")
+                data = (name + " full license\n").encode()
+                info.size = len(data); archive.addfile(info, io.BytesIO(data))
+            data = out.getvalue()
+            (Path(root) / old[0]).write_bytes(data)
+            pins[name] = (old[0], module.wheel.sha(data), old[2], old[3])
+        recipes = {}
+        for name, old in module.MAC_RECIPE_PINS.items():
+            data = ("fixed recipe " + name + "\n").encode()
+            (Path(root) / name).write_bytes(data)
+            recipes[name] = (module.wheel.sha(data), old[1])
+        return pins, recipes
+
+    def test_mac_requires_checked_native_inputs(self):
+        with self.assertRaises(ValueError):
+            module.mac_materials({"inputs/lxml-6.1.3.tar.gz": b"sanitized"}, None, "darwin-arm64")
+
+    def test_mac_full_sources_notices_and_offline_entry(self):
+        with tempfile.TemporaryDirectory() as root:
+            pins, recipes = self.mac_fixture(root)
+            with mock.patch.multiple(module, MAC_SOURCE_PINS=pins, MAC_RECIPE_PINS=recipes,
+                                     PUBLIC_SDIST_SHA=module.wheel.sha(b"sanitized")):
+                files = {"inputs/lxml-6.1.3.tar.gz": b"sanitized"}
+                proof = module.mac_materials(files, root, "darwin-arm64")
+            self.assertEqual(len(proof["sources"]), 4)
+            self.assertEqual(len(proof["fullNoticeFiles"]), 4)
+            self.assertEqual(files["native-notices/libiconv/libiconv/COPYING.LIB"], b"libiconv full license\n")
+            adapter = {"__file__": str(Path(root) / "rebuild-lxml-macos-public.py"), "__name__": "fixture_mac"}
+            for name, data in files.items():
+                path = Path(root) / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
+            exec(files["rebuild-lxml-macos-public.py"], adapter)
+            adapter["main"](["--check"])
+            with self.assertRaises(ValueError):
+                adapter["main"](["--check", "--iconv-source", "missing"])
+            with self.assertRaises(ValueError):
+                adapter["main"](["--check", "--iconv-source", str(Path(root) / pins["libiconv"][0]),
+                                 "--iconv-sha256", "0" * 64, "--iconv-version", "replacement"])
+            (Path(root) / "inputs" / pins["libiconv"][0]).write_bytes(b"tamper")
+            with self.assertRaises(ValueError): adapter["main"](["--check"])
+
+    def test_mac_changed_source_or_recipe_bytes_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            pins, recipes = self.mac_fixture(root)
+            with mock.patch.multiple(module, MAC_SOURCE_PINS=pins, MAC_RECIPE_PINS=recipes,
+                                     PUBLIC_SDIST_SHA=module.wheel.sha(b"sanitized")):
+                source = Path(root) / pins["libiconv"][0]
+                original = source.read_bytes(); source.write_bytes(original + b"tamper")
+                with self.assertRaises(ValueError):
+                    module.mac_materials({"inputs/lxml-6.1.3.tar.gz": b"sanitized"}, root, "darwin-x64")
+                source.write_bytes(original)
+                (Path(root) / "buildlibxml.py").write_bytes(b"tamper")
+                with self.assertRaises(ValueError):
+                    module.mac_materials({"inputs/lxml-6.1.3.tar.gz": b"sanitized"}, root, "darwin-x64")
+
+
+
 if __name__ == "__main__":
     unittest.main()

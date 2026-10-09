@@ -30,7 +30,7 @@ MEMBERS = ["lxml/" + name + ".cpython-313-darwin.so" for name in
 # Final consumer-derived bytes from successful native assembly 37917355513.
 FROZEN = {
     "darwin-arm64": {
-        "wheel": "15c6b6ae73b7a1624293c8498bc3e6df813e21301eba649a97f10e7072e6aa15",
+        "wheel": "3be8dfec49d3f81162ba3b63ead0638e2cebe65921de28ea0b58ba587aa19f6d",
         "filename": "lxml-6.1.3+rt.redistribution.1-1rtredistribution-cp313-cp313-macosx_10_13_universal2.whl",
         "size": 8532649,
         "members": [
@@ -44,7 +44,7 @@ FROZEN = {
         ],
     },
     "darwin-x64": {
-        "wheel": "0dab34eae6ec3423c326f1fe5c90f01c9ddc172f1380f03ba963e150ace73278",
+        "wheel": "11a9a6fcc74a18e120ef36fcd4d1652c0e7684bb46025616d5af99de8f98cdf8",
         "filename": "lxml-6.1.3+rt.redistribution.1-1rtredistribution-cp313-cp313-macosx_10_13_x86_64.whl",
         "size": 4580111,
         "members": [
