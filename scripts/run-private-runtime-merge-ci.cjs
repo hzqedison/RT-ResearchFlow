@@ -79,6 +79,7 @@ async function run(args, env = process.env) {
     console.log('stage=exact-prepared-artifact-download target=' + target)
     await consumer.downloadArchive(prefix + '/actions/artifacts/' + pin.artifactId + '/zip',
       archivePath, artifact, env, input)
+    console.log('stage=outer-archive-verified target=' + target)
     pythonCall(args.python, final.PREPARE_ZIP, [archivePath, proof], input, env)
     const summary = JSON.parse(fs.readFileSync(path.join(proof, 'summary.json')))
     const payload = path.join(proof, 'native-preparation-candidate.tar.gz')
@@ -91,7 +92,9 @@ async function run(args, env = process.env) {
         payloadPin?.filename !== path.basename(payload) || payloadPin.rawInputAssets !== false ||
         payloadPin.assetsRootIncluded !== false || fs.statSync(payload).size !== payloadPin.size ||
         payloadHash.digest('hex') !== payloadPin.sha256) fail('MERGE_HOST_PAYLOAD_BINDING')
+    console.log('stage=retained-payload-verified target=' + target)
     pythonCall(args.python, stage.EXTRACT, [payload, retained], input, env)
+    console.log('stage=retained-tree-extracted target=' + target)
     targets.push({ target, archivePath, archiveSize: pin.size, archiveSha256: pin.digest,
       artifactId: pin.artifactId, jobId: pin.jobId,
       candidateLockPath: path.join(retained, 'prepare/candidate-lock.json'),
