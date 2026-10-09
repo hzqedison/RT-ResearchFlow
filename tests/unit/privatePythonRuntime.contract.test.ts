@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, chmodSync, symlinkSync, readdirSync, copyFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, chmodSync, symlinkSync, readdirSync, copyFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, resolve, isAbsolute, delimiter } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import type { PrivatePythonRuntimeManifest, PrivateRuntimeFile, PrivateRuntimeWheel } from '../../electron/shared/privatePythonRuntimeTypes'
@@ -252,8 +252,27 @@ print(json.dumps({'version': '.'.join(map(str, sys.version_info[:3])), 'executab
   const native = JSON.parse(stage.stdout)
   expect(native.version).toMatch(/^3\.13\.\d+$/)
   value.python.version = native.version
-  value.node.version = process.versions.node
-  copyFileSync(process.execPath, join(root, value.node.executable))
+  // test:unit runs under Electron-as-Node. Its executable is not standalone
+  // Node once the bootstrap deliberately drops ELECTRON_RUN_AS_NODE. Select
+  // and probe the actual buildchain Node instead; never change that child gate.
+  const nodeCandidates = [process.env.DATA_SOURCE_NATIVE_NODE, process.env.npm_node_execpath,
+    ...(!process.versions.electron ? [process.execPath] : []),
+    ...(process.env.PATH || '').split(delimiter).filter(Boolean).map(directory => join(directory, process.platform === 'win32' ? 'node.exe' : 'node'))]
+  const nodeCandidate = nodeCandidates.find((path): path is string => !!path && isAbsolute(path) && existsSync(path))
+  expect(nodeCandidate, 'fixture requires a real standalone Node executable').toBeDefined()
+  const node = realpathSync.native(nodeCandidate!)
+  const nodeEnvironment = Object.fromEntries(['SystemRoot', 'WINDIR', 'TEMP', 'TMP']
+    .filter(key => process.env[key] !== undefined).map(key => [key, process.env[key]!]))
+  const nodeProbe = spawnSync(node, ['--no-addons', '-p', 'JSON.stringify({version:process.versions.node,electron:process.versions.electron||null})'], {
+    shell: false, windowsHide: true, encoding: 'utf8', timeout: 15_000, cwd: root, env: nodeEnvironment,
+  })
+  expect(nodeProbe.error).toBeUndefined()
+  expect(nodeProbe.status, nodeProbe.stderr).toBe(0)
+  const nodeIdentity = JSON.parse(nodeProbe.stdout)
+  expect(nodeIdentity.electron).toBeNull()
+  expect(nodeIdentity.version).toMatch(/^\d+\.\d+\.\d+$/)
+  value.node.version = nodeIdentity.version
+  copyFileSync(node, join(root, value.node.executable))
   chmodSync(join(root, value.node.executable), 0o755)
   const executableSha = hash(readFileSync(native.executable))
   for (const [provider, lock] of Object.entries(value.providers) as Array<[string, any]>) {
@@ -325,7 +344,10 @@ runpy.run_path(bootstrap, run_name='__main__')
 }
 
 beforeEach(() => {
-  owned = mkdtempSync(join(tmpdir(), 'rt-private-runtime-contract-'))
+  // Hosted Windows TEMP can be an 8.3/junction alias. The Python containment
+  // checker uses resolved paths; pass the same physical identity for both the
+  // tree and manifest instead of treating the alias as an unlisted manifest.
+  owned = realpathSync.native(mkdtempSync(join(realpathSync.native(tmpdir()), 'rt-private-runtime-contract-')))
   resources = join(owned, 'resources')
   runtimeRoot = join(resources, 'private-python-runtime')
   state.userData = join(owned, 'user-data')
@@ -339,7 +361,8 @@ afterEach(() => {
   if (originalResources) Object.defineProperty(process, 'resourcesPath', originalResources)
   else Reflect.deleteProperty(process, 'resourcesPath')
   const root = resolve(owned)
-  if (!root.startsWith(resolve(tmpdir()) + '\\') && !root.startsWith(resolve(tmpdir()) + '/')) throw new Error('unsafe fixture cleanup')
+  const temporaryRoot = resolve(realpathSync.native(tmpdir()))
+  if (!root.startsWith(temporaryRoot + '\\') && !root.startsWith(temporaryRoot + '/')) throw new Error('unsafe fixture cleanup')
   if (!root.split(/[\\/]/).pop()?.startsWith('rt-private-runtime-contract-')) throw new Error('unsafe fixture cleanup')
   rmSync(root, { recursive: true, force: true })
 })
