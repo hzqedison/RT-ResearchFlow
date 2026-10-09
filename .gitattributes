@@ -1,6 +1,0 @@
-# Shared audited inputs must have identical checkout bytes on every platform.
-resources/python-runtime/preparation.policy.json text eol=lf
-scripts/build-mootdx-compat-wheel.py text eol=lf
-scripts/build-provider-source-wheels.py text eol=lf
-patches/app-builder-lib@24.13.3.patch text eol=lf
-tests/fixtures/lxml-build-tools/** -text
