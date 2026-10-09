@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, chmodSync, symlinkSync, realpathSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, chmodSync, symlinkSync, readdirSync, copyFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -202,6 +202,128 @@ class MiniRacer:
   return value
 }
 
+function numpyFixture(root: string, value: PrivatePythonRuntimeManifest, version: string, asset: PrivateRuntimeWheel['asset']) {
+  const metadataPath = 'providers/akshare/site/numpy-' + version + '.dist-info/METADATA'
+  const tags = [asset.filename.slice(0, -4).split('-').slice(-3).join('-')]
+  const metadata = Buffer.from('Metadata-Version: 2.3\nName: numpy\nVersion: ' + version + '\nRequires-Python: >=3.13\n\n')
+  const wheel = Buffer.from('Wheel-Version: 1.0\nTag: ' + tags[0] + '\n\n')
+  for (const [path, bytes] of [[metadataPath, metadata], [metadataPath.replace(/METADATA$/, 'WHEEL'), wheel]] as const) {
+    mkdirSync(join(root, path, '..'), { recursive: true })
+    writeFileSync(join(root, path), bytes)
+    value.files.push({ path, kind: 'file', sha256: hash(bytes), size: bytes.length })
+  }
+  value.providers.akshare.wheels.push({ distribution: 'numpy', version, dependencies: [], requiresDist: [],
+    requiresPython: '>=3.13', tags, metadata: { path: metadataPath, sha256: hash(metadata) },
+    asset, licenses: value.providers.akshare.wheels[0].licenses })
+}
+
+function isolatedNativeFixture(root: string) {
+  // Real interpreter/Node, synthetic provider modules and closure facts. This is
+  // explicitly NOT a complete manifest, native V8 proof or release approval.
+  const value: any = fixture(root, process.platform as 'win32' | 'darwin', process.arch as 'x64' | 'arm64')
+  const python = process.env.DATA_SOURCE_NATIVE_PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
+  rmSync(join(root, 'python'), { recursive: true })
+  const stage = spawnSync(python, ['-X', 'utf8', '-I', '-S', '-B', '-c', String.raw`
+import json, pathlib, shutil, sys, sysconfig
+root = pathlib.Path(sys.argv[1]) / 'python'
+root.mkdir()
+stdlib = pathlib.Path(sysconfig.get_path('stdlib'))
+target = root / ('Lib' if sys.platform == 'win32' else 'lib/python3.13')
+shutil.copytree(stdlib, target, ignore=shutil.ignore_patterns('site-packages', 'dist-packages', '__pycache__', '*.pyc', 'test', 'tests', 'ensurepip'))
+prefix = pathlib.Path(sys.base_prefix)
+if sys.platform == 'win32':
+    executable = root / 'python.exe'
+    for library in prefix.glob('*.dll'):
+        shutil.copy2(library, root / library.name)
+    if (prefix / 'DLLs').is_dir():
+        shutil.copytree(prefix / 'DLLs', root / 'DLLs', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    paths = [root / 'python313.zip', root / 'DLLs', target, root]
+else:
+    executable = root / 'bin/python3.13'
+    executable.parent.mkdir()
+    for library in (prefix / 'lib').glob('*.dylib'):
+        shutil.copy2(library, root / 'lib' / library.name)
+    paths = [root / 'lib/python313.zip', target, target / 'lib-dynload']
+shutil.copy2(sys.executable, executable)
+print(json.dumps({'version': '.'.join(map(str, sys.version_info[:3])), 'executable': str(executable), 'paths': list(map(str, paths))}))
+`, root], { shell: false, windowsHide: true, encoding: 'utf8', timeout: 120_000 })
+  expect(stage.error).toBeUndefined()
+  expect(stage.status, stage.stderr).toBe(0)
+  const native = JSON.parse(stage.stdout)
+  expect(native.version).toMatch(/^3\.13\.\d+$/)
+  value.python.version = native.version
+  value.node.version = process.versions.node
+  copyFileSync(process.execPath, join(root, value.node.executable))
+  chmodSync(join(root, value.node.executable), 0o755)
+  const executableSha = hash(readFileSync(native.executable))
+  for (const [provider, lock] of Object.entries(value.providers) as Array<[string, any]>) {
+    const auditPath = join(root, lock.dependencyAudit.path)
+    const audit = JSON.parse(readFileSync(auditPath, 'utf8'))
+    const closurePath = join(root, audit.installedClosure.path)
+    const closure = JSON.parse(readFileSync(closurePath, 'utf8'))
+    audit.toolchain.executableSha256 = executableSha
+    audit.markerEnvironment.implementation_version = native.version
+    audit.markerEnvironment.python_full_version = native.version
+    closure.python = native.version
+    closure.environment = audit.markerEnvironment
+    const closureBytes = Buffer.from(JSON.stringify(closure))
+    writeFileSync(closurePath, closureBytes)
+    audit.installedClosure.sha256 = hash(closureBytes)
+    const auditBytes = Buffer.from(JSON.stringify(audit))
+    writeFileSync(auditPath, auditBytes)
+    lock.dependencyAudit.sha256 = hash(auditBytes)
+    const packageRoot = join(root, lock.site, provider)
+    mkdirSync(packageRoot, { recursive: true })
+    writeFileSync(join(packageRoot, '__init__.py'), String.raw`
+import pathlib, sys
+assert (sys.flags.isolated, sys.flags.utf8_mode, sys.flags.no_site, sys.flags.dont_write_bytecode) == (1, 1, 1, 1)
+sites = [pathlib.Path(p).resolve() for p in sys.path if '/providers/' in p.replace('\\', '/')]
+assert sites == [pathlib.Path(__file__).resolve().parent.parent]
+`)
+    if (provider === 'mootdx') {
+      writeFileSync(join(packageRoot, 'quotes.py'), 'class Quotes: pass\n')
+      writeFileSync(join(packageRoot, 'reader.py'), 'class Reader: pass\n')
+    }
+  }
+  delete value.complete
+  value.kind = 'rt-private-python-bootstrap-test-fixture'
+  value.releaseEligible = false
+  value.treeRoot = root
+  value.fixtureCacheRoot = join(owned, 'explicit-fixture-cache')
+  value.bootstrapSourceSha256 = hash(sourceBootstrap)
+  value.dependencyAuditGeneratorSha256 = hash(sourcePreparationGenerator)
+  value.files = []
+  function inventory(directory: string, prefix = '') {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = prefix + entry.name
+      if (path === 'manifest.json') continue
+      if (entry.isDirectory()) inventory(join(directory, entry.name), path + '/')
+      else {
+        expect(entry.isSymbolicLink()).toBe(false)
+        const bytes = readFileSync(join(directory, entry.name))
+        value.files.push({ path, kind: 'file', sha256: hash(bytes), size: bytes.length })
+      }
+    }
+  }
+  inventory(root)
+  const harness = String.raw`
+import json, runpy, sys
+bootstrap, manifest, provider, digest, paths = sys.argv[1:]
+sys.path = json.loads(paths)
+sys.argv = [bootstrap, '--isolated-test-fixture', manifest, provider, digest]
+runpy.run_path(bootstrap, run_name='__main__')
+`
+  function run(provider: string, input = value) {
+    const raw = Buffer.from(JSON.stringify(input))
+    writeFileSync(join(root, 'manifest.json'), raw)
+    return spawnSync(native.executable, ['-X', 'utf8', '-I', '-S', '-B', '-c', harness,
+      resolve('resources/python-runtime/bootstrap.py'), join(root, 'manifest.json'), provider, hash(raw), JSON.stringify(native.paths)], {
+      shell: false, windowsHide: true, encoding: 'utf8', timeout: 30_000,
+    })
+  }
+  return { value, run }
+}
+
 beforeEach(() => {
   owned = mkdtempSync(join(tmpdir(), 'rt-private-runtime-contract-'))
   resources = join(owned, 'resources')
@@ -285,18 +407,17 @@ describe('private Python complete offline contract', () => {
     const root = join(owned, 'mac-fixture')
     const value = fixture(root, 'darwin', 'arm64')
     const filename = 'numpy-2.0.0-cp313-cp313-macosx_14_0_arm64.whl'
-    value.providers.akshare.wheels.push({ distribution: 'numpy', version: '2.0.0', dependencies: [],
-      asset: { filename, url: 'https://example.invalid/' + filename, sha256: hash(filename), size: filename.length },
-      licenses: value.providers.akshare.wheels[0].licenses })
+    numpyFixture(root, value, '2.0.0', { kind: 'download', filename,
+      url: 'https://example.invalid/' + filename, sha256: hash(filename), size: filename.length })
     expect(value.minimumMacOS).toBe('12.0')
     expect(() => validateManifestShape(value)).toThrow(/platform/)
   })
   it.each(['darwin-arm64', 'darwin-x64'])('accepts only the explicit NumPy 2.5.3 compatible target %s', target => {
     const pins = JSON.parse(readFileSync(resolve('resources/python-runtime/asset-pins.pending.json'), 'utf8'))
     const arch = target === 'darwin-arm64' ? 'arm64' : 'x64'
-    const value = fixture(join(owned, 'numpy-' + arch), 'darwin', arch)
-    value.providers.akshare.wheels.push({ distribution: 'numpy', version: '2.5.3', dependencies: [],
-      asset: pins.nativeWheelCandidates.numpy[target], licenses: value.providers.akshare.wheels[0].licenses })
+    const root = join(owned, 'numpy-' + arch)
+    const value = fixture(root, 'darwin', arch)
+    numpyFixture(root, value, '2.5.3', { ...pins.nativeWheelCandidates.numpy[target], kind: 'download' })
     expect(validateManifestShape(value, target).minimumMacOS).toBe('12.0')
   })
   it('pins private Node without upgrading the Node 20 buildchain', () => {
@@ -519,9 +640,36 @@ print(json.dumps(result, ensure_ascii=False))
   })
   it('binds the pywencai child adapter to the actual product source digest', () => {
     const source = readFileSync(resolve('resources/python-runtime/pywencai_adapter.py'))
-    const bootstrap = readFileSync(resolve('resources/python-runtime/bootstrap.py'), 'utf8')
-    expect(bootstrap).toContain(`safe_adapter_sha256 = "${hash(source)}"`)
-    expect(bootstrap).toContain('providers/pywencai/pywencai_adapter.py')
+    const path = 'providers/pywencai/pywencai_adapter.py'
+    writeFileSync(join(runtimeRoot, path), source)
+    manifest.files.push({ path, kind: 'file', sha256: hash(source), size: source.length })
+    writeFileSync(join(runtimeRoot, 'manifest.json'), JSON.stringify(manifest))
+    const python = process.env.DATA_SOURCE_NATIVE_PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
+    const probe = String.raw`
+import json, pathlib, runpy, sys
+bootstrap, root, adapter = sys.argv[1:]
+root = pathlib.Path(root)
+manifest_path = root / 'manifest.json'
+namespace = runpy.run_path(bootstrap, run_name='inventory_contract_only')
+index = namespace['check_inventory'](root, json.loads(manifest_path.read_bytes()), manifest_path)
+print(json.dumps({'sha256': index[adapter]['sha256']}))
+`
+    const run = () => spawnSync(python, ['-X', 'utf8', '-I', '-S', '-B', '-c', probe,
+      resolve('resources/python-runtime/bootstrap.py'), runtimeRoot, path], {
+      shell: false, windowsHide: true, encoding: 'utf8', timeout: 15_000,
+    })
+    const positive = run()
+    expect(positive.error).toBeUndefined()
+    expect(positive.status, positive.stderr).toBe(0)
+    expect(JSON.parse(positive.stdout)).toEqual({ sha256: hash(source) })
+    const sentinel = join(owned, 'adapter-must-not-execute.txt')
+    writeFileSync(join(runtimeRoot, path), `import pathlib\npathlib.Path(${JSON.stringify(sentinel)}).write_text('UNTRUSTED')\n`)
+    const tampered = run()
+    expect(tampered.error).toBeUndefined()
+    expect(tampered.status).toBe(70)
+    expect(tampered.stderr.trim()).toBe('PRIVATE_RUNTIME_INVALID')
+    expect(tampered.stdout).toBe('')
+    expect(existsSync(sentinel)).toBe(false)
   })
   it.each(['threading.py', 'queue.py', 'importlib.py'])('rejects unlisted provider %s before its sentinel executes', filename => {
     const python = process.env.DATA_SOURCE_NATIVE_PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
@@ -560,48 +708,30 @@ exec(compile(source, bootstrap, "exec"), {"__name__": "__main__"})
     expect(existsSync(join(site, '__pycache__'))).toBe(false)
   })
   it.each(['akshare', 'mootdx', 'pywencai'])('enforces %s isolation and new source-hash gates without provider pycache', provider => {
-    const python = process.env.DATA_SOURCE_NATIVE_PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
+    const controlled = isolatedNativeFixture(runtimeRoot)
     const site = join(runtimeRoot, 'providers', provider, 'site')
-    writeFileSync(join(site, 'fixture_provider.py'), 'VALUE = "' + provider + '"\n')
-    mkdirSync(join(runtimeRoot, 'python/lib'), { recursive: true })
-    const raw = readFileSync(join(runtimeRoot, 'manifest.json'))
-    // This harness controls sys.path to model PBS containment; it does not claim
-    // the system interpreter is PBS. Final PBS imports/JIT remain separate gates.
-    const harness = String.raw`
-import contextlib, email.parser, hashlib, importlib, importlib.metadata, io, json, os, pathlib, sys, threading
-bootstrap, manifest, provider, digest, root, cache = sys.argv[1:]
-source = pathlib.Path(bootstrap).read_text(encoding="utf-8")
-sys.argv = [bootstrap, manifest, provider, digest]
-sys.path = [str(pathlib.Path(root) / "python" / "lib"), str(pathlib.Path(root) / "python" / "lib" / "python313.zip")]
-os.environ["HOME"] = cache
-os.environ["RT_MOOTDX_CACHE_ROOT"] = cache
-exec(compile(source, bootstrap, "exec"), {"__name__": "__main__"})
-`
-    const result = spawnSync(python, ['-X', 'utf8', '-I', '-S', '-B', '-c', harness,
-      join(runtimeRoot, 'bootstrap.py'), join(runtimeRoot, 'manifest.json'), provider, hash(raw), runtimeRoot, state.userData], {
-      shell: false, windowsHide: true, encoding: 'utf8', timeout: 15_000,
-      input: JSON.stringify({ request: { operation: 'status', query: '\u4e2d\u6587\u96f6\u503c' }, script: String.raw`
-import fixture_provider, json, sys
-request = json.loads(sys.stdin.read())
-print(json.dumps({"provider": fixture_provider.VALUE, "query": request["query"], "isolated": sys.flags.isolated, "utf8": sys.flags.utf8_mode, "no_site": sys.flags.no_site, "no_bytecode": sys.flags.dont_write_bytecode, "sites": [p for p in sys.path if "/providers/" in p.replace("\\", "/")]}, ensure_ascii=False))
-` }),
-    })
+    const result = controlled.run(provider)
     expect(result.error).toBeUndefined()
-    if (provider === 'pywencai') {
-      // The legacy fixture has neither the product adapter nor pinned sources.
-      // It must not acquire status success by bypassing the new child gate.
-      expect(result.status).toBe(70)
-      expect(result.stderr.trim()).toBe('PRIVATE_RUNTIME_INVALID')
-      expect(result.stdout).toBe('')
-      expect(existsSync(join(site, '__pycache__'))).toBe(false)
-      return
-    }
     expect(result.status, result.stderr).toBe(0)
     const output = JSON.parse(result.stdout)
+    expect(output.kind).toBe('rt-private-python-bootstrap-test-fixture')
+    expect(output.releaseEligible).toBe(false)
     expect(output.provider).toBe(provider)
-    expect(output.query).toBe('\u4e2d\u6587\u96f6\u503c')
-    expect([output.isolated, output.utf8, output.no_site, output.no_bytecode]).toEqual([1, 1, 1, 1])
-    expect(output.sites.map((p: string) => realpathSync.native(p))).toEqual([realpathSync.native(site)])
+    expect(output.imported).toBe(provider)
+    expect(output.dependencyAudits.map((report: { provider: string }) => report.provider)).toEqual(['akshare', 'mootdx', 'pywencai'])
+    expect(output.workerPid).toBeGreaterThan(0)
     expect(existsSync(join(site, '__pycache__'))).toBe(false)
-  })
+    for (const negativeInput of [
+      { ...controlled.value, bootstrapSourceSha256: hash('changed-bootstrap') },
+      { ...controlled.value, dependencyAuditGeneratorSha256: hash('changed-generator') },
+      { ...controlled.value, complete: true },
+      { ...controlled.value, releaseEligible: true },
+    ]) {
+      const negative = controlled.run(provider, negativeInput)
+      expect(negative.error).toBeUndefined()
+      expect(negative.status).toBe(70)
+      expect(negative.stderr.trim()).toBe('PRIVATE_RUNTIME_INVALID')
+      expect(negative.stdout).toBe('')
+    }
+  }, 180_000)
 })
