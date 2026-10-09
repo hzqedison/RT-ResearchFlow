@@ -165,8 +165,10 @@ def main():
         raise ValueError("Pinned Python version/architecture mismatch")
     if run([node_executable, "--version"], root, env, evidence, "node-identity").stdout.strip() != "v22.23.3":
         raise ValueError("Pinned Node version mismatch")
-    sdists = lab / "sdists"
-    sdists.mkdir()
+    # The audited recipe forbids outputs below the source cache parent.
+    # Keep inputs in a distinct cache subtree; never weaken that guard.
+    sdists = lab / "source-cache/sdists"
+    sdists.mkdir(parents=True)
     for item in SDISTS:
         download(item, sdists)
     wheels = lab / "provider-source-wheels-ci"
