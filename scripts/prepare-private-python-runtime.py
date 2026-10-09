@@ -283,12 +283,30 @@ def load_policy(path):
         if set(item) != {"path", "sha256"} or item["path"] not in RECIPES or not SHA.fullmatch(str(item["sha256"])):
             raise Invalid("Unapproved recipe pin")
     pins = policy.get("resolverCompatibilityPins")
-    if not isinstance(pins, dict) or set(pins) != {"darwin-arm64", "darwin-x64"}:
-        raise Invalid("Both Mac native compatibility pins are required")
+    if not isinstance(pins, dict) or set(pins) != {"win32-x64", "darwin-arm64", "darwin-x64"}:
+        raise Invalid("All native reviewed compatibility pins are required")
+    for target in ("win32-x64", "darwin-arm64", "darwin-x64"):
+        providers = pins[target]
+        expected = {"akshare"} | ({"pywencai"} if target.startswith("darwin") else set())
+        if not isinstance(providers, dict) or set(providers) != expected:
+            raise Invalid("Unknown native compatibility provider pin")
+        distributions = providers["akshare"]
+        if not isinstance(distributions, dict) or set(distributions) != {"pycparser"}:
+            raise Invalid("Unknown reviewed akshare compatibility distribution")
+        pin = distributions["pycparser"]
+        if (not isinstance(pin, dict) or set(pin) != {"version", "asset", "metadataSha256"}
+                or pin["version"] != "3.1"
+                or pin["metadataSha256"] != "f4a14c8bb8bcb1139830e9722da8725fc36c8e22ee0d13e5d094b5b354f80a9d"
+                or not isinstance(pin["asset"], dict)
+                or pin["asset"] != {
+                    "kind": "download", "filename": "pycparser-3.1-py3-none-any.whl",
+                    "url": "https://files.pythonhosted.org/packages/99/ce/b3ae9ee0324d991c860187be2a6ee436d27a3d02397eaddbb101ec901f3d/pycparser-3.1-py3-none-any.whl",
+                    "size": 48709,
+                    "sha256": "f09d358c840bd147b79e55f2bc494f18ea869dc897f5852a8f5766b74f787882"}):
+            raise Invalid("Reviewed pycparser original wheel evidence differs")
+        official(pin["asset"], policy)
     for target in ("darwin-arm64", "darwin-x64"):
         providers = pins[target]
-        if not isinstance(providers, dict) or set(providers) != {"pywencai"}:
-            raise Invalid("Unknown Mac compatibility provider pin")
         distributions = providers["pywencai"]
         if not isinstance(distributions, dict) or set(distributions) != {"debugpy"}:
             raise Invalid("Unknown Mac compatibility distribution pin")
