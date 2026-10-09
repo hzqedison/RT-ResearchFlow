@@ -53,6 +53,8 @@ RECIPES = {"scripts/build-provider-source-wheels.py", "scripts/build-mootdx-comp
 SHA = re.compile(r"^[a-f0-9]{64}$")
 MAX_ASSET = 1_500_000_000
 MAX_EXPANSION = 3_000_000_000
+MAC_DEBUGPY_COMPAT_SHA = "ec684553aba5b4066d4de510859922419febc710df7bba04fe9e7ef3de15d34f"
+MAC_DEBUGPY_METADATA_SHA = "331e35d868b289efd107aa991640ee2753465e95c8655e0bb5a68c7962e32034"
 
 
 class Invalid(ValueError):
@@ -175,6 +177,24 @@ def load_policy(path):
     for item in recipes:
         if set(item) != {"path", "sha256"} or item["path"] not in RECIPES or not SHA.fullmatch(str(item["sha256"])):
             raise Invalid("Unapproved recipe pin")
+    pins = policy.get("resolverCompatibilityPins")
+    if not isinstance(pins, dict) or set(pins) != {"darwin-arm64", "darwin-x64"}:
+        raise Invalid("Both Mac native compatibility pins are required")
+    for target in ("darwin-arm64", "darwin-x64"):
+        providers = pins[target]
+        if not isinstance(providers, dict) or set(providers) != {"pywencai"}:
+            raise Invalid("Unknown Mac compatibility provider pin")
+        distributions = providers["pywencai"]
+        if not isinstance(distributions, dict) or set(distributions) != {"debugpy"}:
+            raise Invalid("Unknown Mac compatibility distribution pin")
+        pin = distributions["debugpy"]
+        if (not isinstance(pin, dict) or set(pin) != {"version", "asset", "metadataSha256"}
+                or pin["version"] != "1.8.8" or pin["metadataSha256"] != MAC_DEBUGPY_METADATA_SHA
+                or not isinstance(pin["asset"], dict)
+                or pin["asset"].get("filename") != "debugpy-1.8.8-py2.py3-none-any.whl"
+                or pin["asset"].get("sha256") != MAC_DEBUGPY_COMPAT_SHA):
+            raise Invalid("Mac debugpy original wheel compatibility evidence differs")
+        official(pin["asset"], policy)
     return policy, digest(raw)
 
 
@@ -926,6 +946,7 @@ def resolve(policy, policy_sha, target, work_root, operation_input=None):
                 raise Invalid("Resolver report did not come from native PBS 3.13.16")
             stage = "freeze-resolved-wheels"
             wheels = [freeze_report_item(item, assets, policy, operations) for item in pip_report["install"]]
+            validate_resolver_pins(policy, target, provider, wheels)
             stage = "validate-closure"
             closure = validate_closure(tools, wheels, [provider + "==" + policy["providerVersions"][provider]], work)
             stage = "validate-native-wheel"
@@ -1512,6 +1533,8 @@ def resolution_constraints(policy, provider, assets, work, target="win32-x64", o
             versions[name] = metadata["version"]
         seed = {"sha256": digest(raw), "purpose": "version constraints only; NOT a final lock or resolver evidence"}
     versions["mini-racer"] = "0.12.4"
+    for name, pin in policy["resolverCompatibilityPins"].get(target, {}).get(provider, {}).items():
+        versions[name] = pin["version"]
     lines = []
     for wheel in policy["derivedWheels"]:
         key = re.sub(r"[-_.]+", "-", wheel["distribution"]).lower()
@@ -1521,6 +1544,15 @@ def resolution_constraints(policy, provider, assets, work, target="win32-x64", o
     path = work / (provider + "-constraints.txt")
     exclusive_bytes(path, ("\n".join(lines) + "\n").encode("ascii"))
     return path, seed
+
+
+def validate_resolver_pins(policy, target, provider, wheels):
+    for name, pin in policy["resolverCompatibilityPins"].get(target, {}).get(provider, {}).items():
+        found = [wheel for wheel in wheels if re.sub(r"[-_.]+", "-", wheel["distribution"]).lower() == name]
+        if (len(found) != 1 or found[0]["version"] != pin["version"]
+                or found[0]["asset"] != pin["asset"]
+                or found[0]["metadataSha256"] != pin["metadataSha256"]):
+            raise Invalid("Normal resolver did not select the exact reviewed Mac compatibility wheel")
 
 
 def freeze_report_item(item, assets, policy, operations=None):

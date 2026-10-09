@@ -122,6 +122,37 @@ def resolver_metadata(work, proof):
         except (ValueError, TypeError, AttributeError, OSError):
             # Incomplete failure reports must not hide the original preparation exit.
             continue
+    diagnostic = work / "resolve" / "failure-diagnostic.json"
+    if diagnostic.is_file() and not diagnostic.is_symlink() and diagnostic.stat().st_size <= 8192:
+        try:
+            value = json.loads(diagnostic.read_text(encoding="utf-8"))
+            source = value.get("source", {})
+            stages = ("create-provider-site", "build-constraints", "normal-pip-resolve",
+                      "parse-resolver-report", "freeze-resolved-wheels", "validate-closure",
+                      "validate-native-wheel", "commit-provider-evidence")
+            functions = ("resolve", "resolution_constraints", "run", "freeze_report_item",
+                         "validate_closure", "wheel_native_evidence", "checked_native", "macho_slices",
+                         "relative", "verified_asset", "file_digest", "exclusive_bytes", "official")
+            if (value.get("kind") == "rt-private-runtime-failure-diagnostic-v1" and
+                    value.get("provider") in ("akshare", "mootdx", "pywencai") and
+                    value.get("target") in ("win32-x64", "darwin-arm64", "darwin-x64") and
+                    value.get("stage") in stages and
+                    value.get("errorType") in ("Invalid", "Pending", "SubprocessError", "OSError",
+                                               "ValueError", "KeyError", "TypeError", "UnexpectedError") and
+                    isinstance(source.get("line"), int) and not isinstance(source.get("line"), bool) and
+                    0 <= source["line"] <= 100000 and
+                    isinstance(source.get("function"), str) and
+                    re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", source["function"])):
+                safe = {"schemaVersion": 1, "kind": value["kind"], "status": "failed", "phase": "resolve",
+                        "target": value["target"], "provider": value["provider"], "stage": value["stage"],
+                        "errorType": value["errorType"], "source": {"file": "scripts/prepare-private-python-runtime.py",
+                        "function": source["function"] if source["function"] in functions else "UNKNOWN",
+                        "line": source["line"]}}
+                name = "failure-diagnostic.json"
+                (proof / name).write_text(json.dumps(safe, indent=2) + "\n", encoding="utf-8")
+                copied.append(name)
+        except (ValueError, TypeError, AttributeError, KeyError, OSError):
+            pass
     return copied
 
 
@@ -179,8 +210,12 @@ def main():
                "--out", str(handoff)]
     print("stage=native-full-resolve-materialize target=" + args.target, flush=True)
     with log.open("wb") as out:
-        result = subprocess.run(command, cwd=repo, env=env, stdout=out,
-                                stderr=subprocess.STDOUT, timeout=1500)
+        try:
+            result = subprocess.run(command, cwd=repo, env=env, stdout=out,
+                                    stderr=subprocess.STDOUT, timeout=1500)
+        except subprocess.TimeoutExpired:
+            out.write(b"\nPRIVATE_RUNTIME_PREPARATION_TIMEOUT\n")
+            result = subprocess.CompletedProcess(command, 124)
     with log.open("rb") as stream:
         stream.seek(max(0, log.stat().st_size - 32768))
         print(stream.read().decode("utf-8", errors="replace"), flush=True)

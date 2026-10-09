@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import sys
 import struct
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -1063,6 +1064,63 @@ class PortableNativePreparationTests(unittest.TestCase):
             prep.main(["prepare", "--help"])
         self.assertEqual(result.exception.code, 0)
         self.assertIn("--operation-input", output.getvalue())
+
+    def test_direct_prepare_cli_help_exposes_operation_input(self):
+        result = subprocess.run([sys.executable, "-X", "utf8", "-B", "-I",
+                                 str(ROOT / "scripts/prepare-private-python-runtime.py"), "prepare", "--help"],
+                                capture_output=True, text=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("--operation-input", result.stdout)
+
+    def test_resolver_failure_diagnostic_is_bounded_and_keeps_failure(self):
+        policy = copy.deepcopy(POLICY)
+        policy["minimumFreeBytes"] = 0
+        work = self.base / "failed-resolve"
+        secret = "SECRET_ACCOUNT_PATH_AND_TOKEN"
+        with patch.object(prep, "PROVIDERS", ("pywencai",)), \
+             patch.object(prep, "pending_inputs", return_value=[]), \
+             patch.object(prep, "native_target", return_value="win32-x64"), \
+             patch.object(prep, "load_operations", return_value={"seedReports": {}}), \
+             patch.object(prep, "acquire"), \
+             patch.object(prep, "native_tools", return_value=(PBS, {})), \
+             patch.object(prep, "reproduce", return_value={}), \
+             patch.object(prep, "resolution_constraints", side_effect=prep.Invalid(secret)), \
+             self.assertRaises(prep.Invalid):
+            prep.resolve(policy, POLICY_SHA, "win32-x64", work)
+        raw = (work / "failure-diagnostic.json").read_text(encoding="utf-8")
+        self.assertNotIn(secret, raw)
+        self.assertNotIn(str(work), raw)
+        report = json.loads(raw)
+        self.assertEqual(set(report), {"schemaVersion", "kind", "status", "phase", "target", "provider", "stage", "errorType", "source"})
+        self.assertEqual((report["status"], report["provider"], report["stage"], report["errorType"]),
+                         ("failed", "pywencai", "build-constraints", "Invalid"))
+        self.assertEqual(report["source"]["file"], "scripts/prepare-private-python-runtime.py")
+        self.assertEqual(report["source"]["function"], "resolve")
+        self.assertGreater(report["source"]["line"], 0)
+        self.assertFalse((work / "candidate-lock.json").exists())
+
+    def test_mac_compatibility_pin_preserves_normal_dependencies_and_exact_original_wheel(self):
+        for target in ("darwin-arm64", "darwin-x64"):
+            pin = POLICY["resolverCompatibilityPins"][target]["pywencai"]["debugpy"]
+            self.assertEqual(pin["asset"]["sha256"], prep.MAC_DEBUGPY_COMPAT_SHA)
+            self.assertEqual(pin["metadataSha256"], prep.MAC_DEBUGPY_METADATA_SHA)
+            prep.official(pin["asset"], POLICY)
+            work = self.base / target
+            work.mkdir()
+            with patch.object(prep, "verified_asset", return_value=self.base / "approved.whl"):
+                constraints, _ = prep.resolution_constraints(POLICY, "pywencai", self.base, work, target)
+            self.assertIn("debugpy==1.8.8", constraints.read_text(encoding="ascii").splitlines())
+            self.assertNotIn("--no-deps", prep.pip_command(PBS, self.base, work, constraints, False))
+            wheel = {"distribution": "debugpy", "version": pin["version"], "asset": pin["asset"],
+                     "metadataSha256": pin["metadataSha256"]}
+            prep.validate_resolver_pins(POLICY, target, "pywencai", [wheel])
+            for changed in ("version", "asset", "metadataSha256"):
+                wrong = copy.deepcopy(wheel)
+                wrong[changed] = "wrong" if changed != "asset" else {**pin["asset"], "sha256": "0" * 64}
+                with self.assertRaises(prep.Invalid):
+                    prep.validate_resolver_pins(POLICY, target, "pywencai", [wrong])
+            with self.assertRaises(prep.Invalid):
+                prep.validate_resolver_pins(POLICY, target, "pywencai", [])
 
     def test_h67_approvals_and_h6_metadata_roles_are_exact_not_blanket_grants(self):
         batch = [row for row in POLICY["licenseApprovals"] if row["id"].startswith("astra-20261009-h-")]

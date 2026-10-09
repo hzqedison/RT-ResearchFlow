@@ -57,6 +57,38 @@
     "https://nodejs.org/dist/v22.23.3/",
     "https://files.pythonhosted.org/packages/"
   ],
+  "resolverCompatibilityPins": {
+    "darwin-arm64": {
+      "pywencai": {
+        "debugpy": {
+          "version": "1.8.8",
+          "asset": {
+            "kind": "download",
+            "filename": "debugpy-1.8.8-py2.py3-none-any.whl",
+            "url": "https://files.pythonhosted.org/packages/03/99/ec2190d03df5dbd610418919bd1c3d8e6f61d0a97894e11ade6d3260cfb8/debugpy-1.8.8-py2.py3-none-any.whl",
+            "sha256": "ec684553aba5b4066d4de510859922419febc710df7bba04fe9e7ef3de15d34f",
+            "size": 5157124
+          },
+          "metadataSha256": "331e35d868b289efd107aa991640ee2753465e95c8655e0bb5a68c7962e32034"
+        }
+      }
+    },
+    "darwin-x64": {
+      "pywencai": {
+        "debugpy": {
+          "version": "1.8.8",
+          "asset": {
+            "kind": "download",
+            "filename": "debugpy-1.8.8-py2.py3-none-any.whl",
+            "url": "https://files.pythonhosted.org/packages/03/99/ec2190d03df5dbd610418919bd1c3d8e6f61d0a97894e11ade6d3260cfb8/debugpy-1.8.8-py2.py3-none-any.whl",
+            "sha256": "ec684553aba5b4066d4de510859922419febc710df7bba04fe9e7ef3de15d34f",
+            "size": 5157124
+          },
+          "metadataSha256": "331e35d868b289efd107aa991640ee2753465e95c8655e0bb5a68c7962e32034"
+        }
+      }
+    }
+  },
   "recipePins": [
     {
       "path": "scripts/build-provider-source-wheels.py",
