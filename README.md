@@ -1,7 +1,7 @@
 <h1 align="center">RT-ResearchFlow</h1>
 <p align="center"><strong>从市场线索到研究、验证、执行与复盘，一个工作台完成。</strong></p>
 <p align="center">多来源行情 · AI 研究 · 研报与选股 · 策略验证 · 本人确认交易 · 本地研究记录</p>
-<p align="center"><strong>1.3 · 本人确认与持久防重复交易流程</strong> · 持续维护与迭代：<a href="https://github.com/hzqedison">hzqedison</a></p>
+<p align="center"><strong>产品维护与持续迭代：<a href="https://github.com/hzqedison">hzqedison</a></strong></p>
 <p align="center">
   <a href="https://github.com/hzqedison/RT-ResearchFlow/releases">下载安装</a> ·
   <a href="#核心功能">核心功能</a> ·
@@ -219,11 +219,9 @@ Windows 构建：`pnpm run dist:win`。Mac 构建在对应架构上执行 `node 
 </details>
 
 <details>
-<summary>开源许可与致谢</summary>
+<summary>许可证与版权说明</summary>
 
-本项目继续遵循 **AGPL-3.0-only**，完整条款见 [LICENSE](LICENSE)。持续迭代由 **hzqedison** 维护，当前新增与改进包括交易流程集成、多来源数据、配置体验和统一产品发布说明。
-
-基础代码、既有工作台和第三方组件的版权与许可证分别保留，具体来源见 [NOTICE.md](NOTICE.md)。产品展示不重复堆叠来源链接，但不删除必要署名、不声称所有基础代码均为重新原创，也不因此取得其他权利人的商业再许可权。
+本项目采用 **AGPL-3.0-only**，完整条款见 [LICENSE](LICENSE)。版权声明与第三方组件说明见 [NOTICE.md](NOTICE.md)。
 
 欢迎通过 [Issues](https://github.com/hzqedison/RT-ResearchFlow/issues) 反馈问题，只分享去敏结果，不公开账户资料或密钥。
 
