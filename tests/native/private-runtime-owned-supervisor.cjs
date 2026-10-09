@@ -2,7 +2,6 @@
 // Genuine process-ownership probes only. Not product bootstrap or installer QA.
 const fs = require('node:fs')
 const path = require('node:path')
-const os = require('node:os')
 const crypto = require('node:crypto')
 const assert = require('node:assert/strict')
 const { runOwnedPrivatePython } = require('../../scripts/private-runtime-owned-supervisor.cjs')

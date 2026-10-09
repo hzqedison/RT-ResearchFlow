@@ -20,6 +20,8 @@ export default tseslint.config(
       'targetPic/**',
       '*.config.js',
       'scripts/**',
+      // Preserve the third-party original bytes used by compatibility tests.
+      'tests/fixtures/runtime/mootdx-holiday.original.js',
     ],
   },
   {

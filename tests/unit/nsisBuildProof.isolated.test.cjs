@@ -3,7 +3,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
-const { createCompileRecorder, orderedEntries, parseArguments, sha256, main } =
+const { createCompileRecorder, orderedEntries, parseArguments, sha256 } =
   require('../../scripts/collect-nsis-build-proof.cjs')
 
 test('null BUILD_UNINSTALLER selects the actual uninstaller phase and preserves this', async () => {
