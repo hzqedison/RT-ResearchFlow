@@ -5,7 +5,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
 const assert = require('node:assert/strict')
-const { spawn } = require('node:child_process')
+const { spawn, spawnSync } = require('node:child_process')
 const { performance } = require('node:perf_hooks')
 const { runOwnedPrivatePython, posixLaunchArgs } = require('../../scripts/private-runtime-owned-supervisor.cjs')
 const REPO = path.resolve(__dirname, '../..')
@@ -13,6 +13,8 @@ const FLAGS = ['-X', 'utf8', '-I', '-S', '-B']
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
 const SCOPE = Object.freeze({ releaseEligible: false, productApproval: false, productRuntimeTested: false,
   productionReporterTested: false, providerBundleTested: false, licensingReviewed: false, installerTested: false })
+const FIXTURE_TIMING = Object.freeze({ outerDeadlineMs: 20000, startupGuardMs: 15000,
+  apiCancellationWindowMs: 2000, warmupTimeoutMs: 5000 })
 
 const COMMON = String.raw`
 import argparse, datetime, hashlib, json, os, pathlib, runpy, subprocess, sys, time
@@ -76,7 +78,7 @@ if cfg['scenario']=='root-first':
     atomic(base/'root-exit-intent.json',{'rootPid':root,'workerPid':worker.pid,'nodePid':node['pid'],
                                       'nodeAliveObservedAt':stamp(),'nonce':cfg['nonce']})
     os._exit(0)
-raise SystemExit(worker.wait(timeout=18))
+raise SystemExit(worker.wait(timeout=25))
 `
 
 const WORKER_PROBE = COMMON + String.raw`
@@ -89,6 +91,7 @@ root=bootstrap['validate_pre_seal_owned_posix_root'](args.pre_seal_owned_posix_r
 adapter['validate_pre_seal_owned_posix_root'](root)
 check(os.getpid()!=root and os.getppid()==root)
 atomic(base/'worker.json',identity('worker',root)); wait_ack('worker')
+if cfg['scenario']=='outer-timeout': wait_ack('api',seconds=20)
 original=subprocess.Popen
 expected=cfg['auditNodeExecutable'] if cfg['api']=='bootstrap.check_dependency_audits' else cfg['runnerNodeExecutable']
 observations=[]
@@ -115,6 +118,8 @@ class ObservedPopen(original):
 try:
     # Dedicated owned test worker only. Every Popen argument is forwarded unchanged.
     subprocess.Popen=ObservedPopen
+    atomic(base/'api-start.json',{'calledApi':cfg['api'],'startedAt':stamp(),'workerPid':os.getpid(),
+                                'rootPid':root,'nonce':cfg['nonce']})
     if cfg['api']=='bootstrap.check_dependency_audits':
         manifest=read_json(base/'manifest.json'); index={row['path']:row for row in manifest['files']}
         result=bootstrap['check_dependency_audits'](base,manifest,index,pre_seal_owned_posix_root=root)
@@ -129,16 +134,42 @@ try:
     check(len(observations)==1)
     atomic(base/'api-result.json',{'calledApi':cfg['api'],'observed':observed,'completedAt':stamp(),
                                  'releaseEligible':False,'productApproval':False,'nonce':cfg['nonce']})
+except BaseException as error:
+    import traceback
+    atomic(base/'worker-python-failure.json',{'exceptionType':type(error).__name__,'message':str(error),
+           'traceback':traceback.format_exc()[-8192:],'observedAt':stamp(),'nonce':cfg['nonce']})
+    raise
 finally:
     subprocess.Popen=original
 `
 
 const WATCHER_PROBE = COMMON + String.raw`
-import select
+import select, ctypes
 parser=argparse.ArgumentParser(); parser.add_argument('--config',required=True)
 args=parser.parse_args(); cfg=read_json(args.config); base=pathlib.Path(cfg['caseRoot'])
 check(sys.platform=='darwin' and cfg['releaseEligible'] is False and cfg['productApproval'] is False)
+libproc=ctypes.CDLL('/usr/lib/libproc.dylib',use_errno=True)
+libproc.proc_listpids.argtypes=[ctypes.c_uint32,ctypes.c_uint32,ctypes.c_void_p,ctypes.c_int]
+libproc.proc_listpids.restype=ctypes.c_int
+def group_members(pgid):
+    check(type(pgid) is int and pgid>1)
+    # Apple proc_info.h: PROC_PGRP_ONLY=2. A zero return with errno is an error,
+    # never an empty group. Bound buffers and reject possible truncation.
+    ctypes.set_errno(0); capacity=libproc.proc_listpids(2,pgid,None,0); error=ctypes.get_errno()
+    if error: raise OSError(error,os.strerror(error))
+    check(0<capacity<=262144 and capacity%ctypes.sizeof(ctypes.c_int)==0)
+    capacity=min(capacity+512,262144)
+    values=(ctypes.c_int*(capacity//ctypes.sizeof(ctypes.c_int)))()
+    ctypes.set_errno(0)
+    returned=libproc.proc_listpids(2,pgid,values,capacity); error=ctypes.get_errno()
+    if error: raise OSError(error,os.strerror(error))
+    check(0<=returned<capacity and returned%ctypes.sizeof(ctypes.c_int)==0)
+    pids=sorted(values[:returned//ctypes.sizeof(ctypes.c_int)])
+    check(len(pids)==len(set(pids)) and all(pid>1 for pid in pids))
+    return {'method':'darwin-libproc-PROC_PGRP_ONLY','pgid':pgid,'pids':pids,
+            'bytesReturned':returned,'errno':error,'observedAt':stamp()}
 queue=select.kqueue(); registered={}; exits={}; root=None; end=time.monotonic()+25
+group_live=None
 try:
     while len(exits)<3:
         check(time.monotonic()<end)
@@ -160,7 +191,23 @@ try:
             registered[role]=pid
             atomic(base/(role+'-registered.json'),{'pid':pid,'registeredAt':stamp(),
                     'aliveObservedAt':stamp(),'nonce':cfg['nonce'],'watcherPid':os.getpid()})
+            if role=='node':
+                group_live=group_members(root)
+                check(group_live['pids']==sorted(registered.values()))
+                atomic(base/'group-live.json',group_live)
             (base/(role+'.ack')).write_text(cfg['nonce'],encoding='ascii')
+        if cfg['scenario']=='outer-timeout':
+            launch=read_json(base/'outer-start.json'); timing=cfg['fixtureTiming']; now=time.time()*1000
+            check(launch['deadlineMs']==timing['outerDeadlineMs'])
+            if 'worker' not in registered and now>=launch['unixMs']+timing['startupGuardMs']:
+                raise RuntimeError('FIXTURE_STARTUP_DEADLINE')
+            if 'worker' in registered and not (base/'api.ack').exists() and now>=launch['unixMs']+launch['deadlineMs']-timing['apiCancellationWindowMs']:
+                check(not exits and now<launch['unixMs']+launch['deadlineMs']-1500)
+                os.kill(registered['worker'],0)
+                check(os.getpgid(registered['worker'])==root and os.getsid(registered['worker'])==root)
+                atomic(base/'api-release.json',{'releasedAt':stamp(),'workerPid':registered['worker'],
+                       'rootPid':root,'nonce':cfg['nonce']})
+                (base/'api.ack').write_text(cfg['nonce'],encoding='ascii')
         for event in queue.control(None,8,.01):
             if not event.fflags & select.KQ_NOTE_EXIT: continue
             roles=[role for role,pid in registered.items() if pid==event.ident]; check(len(roles)==1)
@@ -176,18 +223,28 @@ try:
                     check(not exits)
                     for pid in registered.values():
                         os.kill(pid,0); check(os.getpgid(pid)==root and os.getsid(pid)==root)
+                    membership=group_members(root); check(membership['pids']==sorted(registered.values()))
                     atomic(base/'timeout-live.json',{'rootPid':root,'workerPid':registered['worker'],
-                           'nodePid':registered['node'],'aliveObservedAt':stamp(),'nonce':cfg['nonce']})
-    # Root may already be gone: probe the known group, never root liveness.
+                           'nodePid':registered['node'],'aliveObservedAt':stamp(),'groupMembership':membership,
+                           'nonce':cfg['nonce']})
+    # Preserve signal-probe errors, including EPERM. They are NOT absence proof.
+    try: os.killpg(root,0); signal_probe={'errno':0,'observedAt':stamp()}
+    except OSError as error: signal_probe={'errno':error.errno,'message':str(error),'observedAt':stamp()}
+    # Independently enumerate the known kernel group twice after all NOTE_EXITs.
     limit=time.monotonic()+5
+    absent=[]
     while True:
-        try: os.killpg(root,0)
-        except ProcessLookupError: break
+        snapshot=group_members(root)
+        if not snapshot['pids']:
+            absent.append(snapshot)
+            if len(absent)==2: break
+        else: absent=[]
         check(time.monotonic()<limit); time.sleep(.02)
     evidence={'kind':'rt-posix-owned-chain-kernel-observation-v1','releaseEligible':False,'productApproval':False,
               'nonce':cfg['nonce'],'rootPid':root,'watcherPid':os.getpid(),'watcherPgid':os.getpgrp(),
               'watcherSid':os.getsid(0),'processes':[exits[role] for role in ('root','worker','node')],
-              'knownGroupAbsentObservedAt':stamp()}
+              'groupLiveObservation':group_live,'groupAbsentObservations':absent,'signalZeroProbe':signal_probe,
+              'knownGroupAbsentObservedAt':absent[-1]['observedAt']}
     atomic(base/'kernel-evidence.json',evidence); print(json.dumps(evidence,allow_nan=False))
 except BaseException as error:
     import traceback
@@ -214,6 +271,25 @@ function environment(root, node) {
   return { PATH: path.dirname(node), HOME: root, USERPROFILE: root, TEMP: root, TMP: root, TMPDIR: root,
     LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', PYTHONUTF8: '1', PYTHONDONTWRITEBYTECODE: '1',
     NODE_OPTIONS: '', NODE_PATH: '', PYTHONPATH: '' }
+}
+
+function warmNodeFixture(fixture, env) {
+  const executable = fixture.config.api === 'bootstrap.check_dependency_audits'
+    ? fixture.config.auditNodeExecutable : fixture.config.runnerNodeExecutable
+  assert.equal(sha(fs.readFileSync(executable)), fixture.config.runnerNodeSha256)
+  const startedAt = new Date().toISOString()
+  const result = spawnSync(executable, ['--no-addons', '--version'], { cwd: fixture.root, env, shell: false,
+    timeout: FIXTURE_TIMING.warmupTimeoutMs, killSignal: 'SIGKILL', maxBuffer: 8192 })
+  const observation = { ...SCOPE, executable, binarySha256: fixture.config.runnerNodeSha256,
+    pid: result.pid, startedAt, exitObservedAt: new Date().toISOString(), exitCode: result.status,
+    signal: result.signal, error: result.error ? result.error.message : null,
+    stdout: result.stdout ? result.stdout.toString('utf8') : '', stderr: result.stderr ? result.stderr.toString('utf8') : '' }
+  fs.writeFileSync(path.join(fixture.root, 'node-warmup.json'), JSON.stringify(observation), { flag: 'wx' })
+  assert.ifError(result.error); assert.ok(Number.isSafeInteger(result.pid) && result.pid > 1)
+  assert.equal(result.status, 0); assert.equal(result.signal, null)
+  assert.equal(observation.stdout.trim(), 'v' + process.versions.node); assert.equal(observation.stderr, '')
+  assert.equal(sha(fs.readFileSync(executable)), fixture.config.runnerNodeSha256)
+  return observation
 }
 
 function captureWatcher(python, filename, config, cwd, env) {
@@ -347,6 +423,17 @@ function validateKernelEvidence(evidence, fixture, runtime) {
   assert.equal(records[2].binarySha256, fixture.config.runnerNodeSha256)
   assert.equal(runtime.pid, records[2].pid); assert.equal(runtime.binarySha256, fixture.config.runnerNodeSha256)
   assert.equal(runtime.version, process.versions.node)
+  const liveGroup = evidence.groupLiveObservation
+  assert.equal(liveGroup.method, 'darwin-libproc-PROC_PGRP_ONLY')
+  assert.equal(liveGroup.errno, 0); assert.equal(liveGroup.pgid, evidence.rootPid)
+  assert.deepEqual(liveGroup.pids, records.map(row => row.pid).sort((a, b) => a - b))
+  assert.equal(evidence.groupAbsentObservations.length, 2)
+  for (const observation of evidence.groupAbsentObservations) {
+    assert.equal(observation.method, 'darwin-libproc-PROC_PGRP_ONLY'); assert.equal(observation.errno, 0)
+    assert.equal(observation.pgid, evidence.rootPid); assert.deepEqual(observation.pids, [])
+    assert.equal(observation.bytesReturned, 0)
+    assert.ok(Date.parse(observation.observedAt) >= Math.max(...evidence.processes.map(row => Date.parse(row.exitObservedAt))))
+  }
   assert.ok(Number.isFinite(Date.parse(evidence.knownGroupAbsentObservedAt)))
   return records
 }
@@ -358,7 +445,7 @@ async function runCase(base, python, node, pins, api, scenario) {
   const fixedArgs = [...FLAGS, pins.reporter.path, '--pre-seal-bootstrap-contract', fixture.configPath]
   const spec = { executable: python, args: fixedArgs,
     cwd: fixture.root, env, input: Buffer.alloc(0), shell: false, ownershipMode: 'posix-owned-session',
-    preSealPosixInherited: scenario === 'actual-reporter-gate', deadlineMs: scenario === 'outer-timeout' ? 12000 : 20000,
+    preSealPosixInherited: scenario === 'actual-reporter-gate', deadlineMs: FIXTURE_TIMING.outerDeadlineMs,
     stdoutByteCap: 65536, stderrByteCap: 8192 }
   let gateDerivation
   if (!fixedReporterCase) {
@@ -368,6 +455,7 @@ async function runCase(base, python, node, pins, api, scenario) {
     // substituted test successor never enters production reporter authority.
     spec.preSealPosixInherited = false
     fixture.config.pythonExecutable = python
+    fixture.config.fixtureTiming = FIXTURE_TIMING
     fixture.config.gateDerivation = gateDerivation.observation
     fs.writeFileSync(fixture.configPath, JSON.stringify(fixture.config))
   }
@@ -393,11 +481,12 @@ async function runCase(base, python, node, pins, api, scenario) {
       preSealPosixInherited: spec.preSealPosixInherited, observation,
       supervisorExit: { pid: execution.pid, exitCode: execution.exitCode, observedAt: new Date().toISOString() } }
   }
-  const watcher = captureWatcher(python, fixture.watcher, fixture.configPath, fixture.root, env)
+  const nodeWarmup = warmNodeFixture(fixture, env)
   const start = performance.now()
   const outerStartedAt = new Date().toISOString()
   fs.writeFileSync(path.join(fixture.root, 'outer-start.json'), JSON.stringify({ unixMs: Date.parse(outerStartedAt),
     startedAt: outerStartedAt, deadlineMs: spec.deadlineMs }), { flag: 'wx' })
+  const watcher = captureWatcher(python, fixture.watcher, fixture.configPath, fixture.root, env)
   let execution, error, outerReturnObservedAt
   try {
     try { execution = await runOwnedPrivatePython(spec) } catch (failure) { error = failure.message }
@@ -421,12 +510,26 @@ async function runCase(base, python, node, pins, api, scenario) {
         assert.equal(live.nonce, fixture.config.nonce)
         assert.equal(live.rootPid, evidence.rootPid); assert.equal(live.workerPid, records[1].pid)
         assert.equal(live.nodePid, runtime.pid)
+        assert.deepEqual(live.groupMembership.pids, records.map(row => row.pid).sort((a, b) => a - b))
+        assert.equal(live.groupMembership.errno, 0)
         const aliveMs = Date.parse(live.aliveObservedAt)
         assert.ok(aliveMs >= Date.parse(outerStartedAt) + spec.deadlineMs - 1100)
         assert.ok(aliveMs <= Date.parse(outerStartedAt) + spec.deadlineMs)
         for (const event of evidence.processes) {
           assert.ok(Date.parse(event.exitObservedAt) >= Date.parse(outerStartedAt) + spec.deadlineMs - 50)
         }
+        const release = JSON.parse(fs.readFileSync(path.join(fixture.root, 'api-release.json')))
+        const apiStart = JSON.parse(fs.readFileSync(path.join(fixture.root, 'api-start.json')))
+        assert.equal(release.nonce, fixture.config.nonce); assert.equal(apiStart.nonce, fixture.config.nonce)
+        assert.equal(release.workerPid, records[1].pid); assert.equal(apiStart.workerPid, records[1].pid)
+        assert.equal(apiStart.calledApi, api)
+        const scheduled = Date.parse(outerStartedAt) + spec.deadlineMs - FIXTURE_TIMING.apiCancellationWindowMs
+        assert.ok(Date.parse(release.releasedAt) >= scheduled)
+        assert.ok(Date.parse(apiStart.startedAt) >= Date.parse(release.releasedAt))
+        assert.ok(Date.parse(apiStart.startedAt) < Date.parse(outerStartedAt) + spec.deadlineMs - 1000)
+        const nodeExit = evidence.processes.find(row => row.role === 'node')
+        const internalCapMs = api === 'adapter.run_token' ? 5000 : 10000
+        assert.ok(Date.parse(nodeExit.exitObservedAt) < Date.parse(apiStart.startedAt) + internalCapMs)
         assert.ok(!fs.existsSync(path.join(fixture.root, 'api-result.json')))
       }
       if (scenario === 'root-first') {
@@ -438,9 +541,13 @@ async function runCase(base, python, node, pins, api, scenario) {
       controlRoute: 'ordinary-outer-supervisor-with-exact-exported-posix-gate-and-test-successor',
       productionReporterGateCoversThisApiCase: false,
       gateDerivation: gateDerivation.observation,
+      nodeWarmup, fixtureTiming: FIXTURE_TIMING,
       outerDeadlineMs: spec.deadlineMs, outerStartedAt, outerElapsedMs: elapsedMs, outerReturnObservedAt, supervisorError: error || null,
       timeoutLiveObservation: scenario === 'outer-timeout'
         ? JSON.parse(fs.readFileSync(path.join(fixture.root, 'timeout-live.json'))) : null,
+      apiReleaseObservation: scenario === 'outer-timeout'
+        ? JSON.parse(fs.readFileSync(path.join(fixture.root, 'api-release.json'))) : null,
+      apiStartObservation: JSON.parse(fs.readFileSync(path.join(fixture.root, 'api-start.json'))),
       node: { ...records[2], actualRuntime: runtime }, processes: records,
       kernelEvidence: evidence, fixtureTokenJsPinOverride: api === 'adapter.run_token',
       auditExecutableBinding: api === 'bootstrap.check_dependency_audits' ? 'owned-byte-identical-runner-copy-required-by-contained-root-API' : null }
@@ -489,4 +596,4 @@ if (require.main === module) {
     process.exitCode = 1
   })
 }
-module.exports = { runNative, parseArguments, environment, SCOPE, ROOT_PROBE, WORKER_PROBE, WATCHER_PROBE, deriveTestLaunchArgs }
+module.exports = { runNative, parseArguments, environment, SCOPE, FIXTURE_TIMING, ROOT_PROBE, WORKER_PROBE, WATCHER_PROBE, deriveTestLaunchArgs }

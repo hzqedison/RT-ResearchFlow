@@ -58,6 +58,16 @@ test('fixture scope is never product approval and watcher uses kernel observatio
   assert.match(harness.WATCHER_PROBE, /timeout-live\.json/)
   assert.match(harness.WATCHER_PROBE, /os\.kill\(pid,0\)/)
   assert.match(harness.WATCHER_PROBE, /os\.killpg\(root,0\)/)
+  assert.match(harness.WATCHER_PROBE, /libproc\.proc_listpids\(2,pgid,values,capacity\)/)
+  assert.match(harness.WATCHER_PROBE, /if error: raise OSError/)
+  assert.match(harness.WATCHER_PROBE, /groupAbsentObservations/)
+  assert.match(harness.WATCHER_PROBE, /FIXTURE_STARTUP_DEADLINE/)
+  assert.match(harness.WORKER_PROBE, /wait_ack\('api',seconds=20\)/)
+  assert.match(harness.WORKER_PROBE, /worker-python-failure\.json/)
+  assert.deepEqual(harness.FIXTURE_TIMING, { outerDeadlineMs: 20000, startupGuardMs: 15000,
+    apiCancellationWindowMs: 2000, warmupTimeoutMs: 5000 })
+  assert.ok(harness.FIXTURE_TIMING.apiCancellationWindowMs < 5000)
+  assert.ok(harness.FIXTURE_TIMING.startupGuardMs < harness.FIXTURE_TIMING.outerDeadlineMs - harness.FIXTURE_TIMING.apiCancellationWindowMs)
 })
 
 test('harness environment forwards no credentials, proxy or host PATH', () => {
@@ -106,14 +116,27 @@ test('native Mac separately tests fixed reporter rejection and real API chains w
     assert.equal(root.pid, root.pgid); assert.equal(root.pid, root.sid)
     assert.deepEqual(root.argv.slice(-2), ['--pre-seal-owned-posix-root', String(root.pid)])
     assert.equal(node.rootPid, root.pid)
+    assert.equal(row.nodeWarmup.exitCode, 0); assert.equal(row.nodeWarmup.signal, null)
+    assert.equal(row.nodeWarmup.binarySha256, node.binarySha256)
+    assert.equal(row.nodeWarmup.executable, node.executable)
+    assert.equal(row.nodeWarmup.stdout.trim(), 'v' + report.runnerNode.version)
+    assert.equal(row.kernelEvidence.groupLiveObservation.errno, 0)
+    for (const observation of row.kernelEvidence.groupAbsentObservations) {
+      assert.equal(observation.errno, 0); assert.deepEqual(observation.pids, [])
+      assert.equal(observation.bytesReturned, 0)
+    }
     if (row.scenario === 'outer-timeout') {
-      assert.equal(row.outerDeadlineMs, 12000)
+      assert.equal(row.outerDeadlineMs, 20000)
       assert.equal(row.timeoutLiveObservation.nodePid, node.pid)
       assert.equal(row.timeoutLiveObservation.workerPid, row.processes.find(process => process.role === 'worker').pid)
       assert.ok(Date.parse(row.timeoutLiveObservation.aliveObservedAt) <= Date.parse(row.outerStartedAt) + row.outerDeadlineMs)
       for (const event of row.kernelEvidence.processes) {
         assert.ok(Date.parse(event.exitObservedAt) >= Date.parse(row.outerStartedAt) + row.outerDeadlineMs - 50)
       }
+      const nodeExit = row.kernelEvidence.processes.find(process => process.role === 'node')
+      const cap = row.api === 'adapter.run_token' ? 5000 : 10000
+      assert.ok(Date.parse(nodeExit.exitObservedAt) < Date.parse(row.apiStartObservation.startedAt) + cap)
+      assert.ok(Date.parse(row.apiReleaseObservation.releasedAt) >= Date.parse(row.outerStartedAt) + row.outerDeadlineMs - 2000)
     }
   }
   for (const api of ['bootstrap.check_dependency_audits', 'adapter.run_token']) {
