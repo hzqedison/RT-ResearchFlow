@@ -186,6 +186,9 @@ jobs:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
       npm_config_electron_mirror: https://github.com/electron/electron/releases/download/
+      electron_config_cache: ${{ runner.temp }}/rt-release-cache/electron
+      ELECTRON_CACHE: ${{ runner.temp }}/rt-release-cache/electron
+      ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/rt-release-cache/electron-builder
     steps:
       - uses: actions/checkout@v4
         with:
@@ -224,8 +227,15 @@ jobs:
       - name: Check public boundary
         shell: pwsh
         run: ./.github/scripts/Test-PublicBoundary.ps1
+      # Cache downloads only, never node_modules, compiled native bindings,
+      # runtime approval, tested installers or mutable user/application data.
+      - name: Restore build-tool download cache for this exact native target
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/rt-release-cache
+          key: rt-release-tools-v1-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('pnpm-lock.yaml', 'electron-builder.js', 'patches/*.patch') }}
       - name: Install pinned native dependencies
-        run: pnpm install --frozen-lockfile --config.side-effects-cache=false
+        run: pnpm install --frozen-lockfile --prefer-offline --config.side-effects-cache=false
       - name: Verify pinned release source
         env:
           DATA_SOURCE_NATIVE_PYTHON: ${{ steps.python.outputs.python-path }}
@@ -684,3 +694,4 @@ jobs:
               .addRaw('All five release attachments passed downloaded-byte SHA-256 verification.\n\n')
               .addRaw('No source rebuild, real-account operation or production-device installation was performed by the publishing job.')
               .write();
+

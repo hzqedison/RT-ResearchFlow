@@ -3,6 +3,14 @@ name: Private runtime dependency feasibility (no installers)
 on:
   push:
     branches: [codex/verify-1.7]
+    paths:
+      - .github/workflows/runtime-mootdx-native.yml
+      - scripts/run-mootdx-native-ci.py
+      - scripts/build-mootdx-compat-wheel.py
+      - scripts/verify-mootdx-compat-runtime.py
+      - resources/python-runtime/miniracer_unicode_adapter.py
+      - tests/python/test_mootdx_compat_wheel.py
+      - tests/fixtures/runtime/mootdx-*
   workflow_dispatch:
 
 permissions:
@@ -10,7 +18,7 @@ permissions:
 
 concurrency:
   group: mootdx-runtime-feasibility-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   native-dependencies:
