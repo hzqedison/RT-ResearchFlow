@@ -177,7 +177,7 @@ function projectPlatform({ target, candidate, fragment, treeRoot, policy, policy
     expect(sha(preparationBytes(audit)) === prepared.dependencyAudit.sha256 ||
       hashFile(path.join(treeRoot, prepared.dependencyAudit.path)) === prepared.dependencyAudit.sha256, 'MERGE_AUDIT_HASH')
     providers[name] = { version: resolved.version, site: resolved.site, dependencyAudit: structuredClone(prepared.dependencyAudit),
-      ...(name === 'mootdx' ? { compatibility: 'modern-mini-racer' } : {}),
+      ...(name === 'mootdx' ? { compatibility: resolved.version === '0.11.7+rt.node.1' ? 'private-node-js-runtime' : 'modern-mini-racer' } : {}),
       wheels: resolved.wheels.map(raw => {
         const rows = audit.wheels.filter(row => row.name === canonical(raw.distribution))
         expect(rows.length === 1 && rows[0].version === raw.version && rows[0].wheelSha256 === raw.asset.sha256 &&
@@ -189,10 +189,11 @@ function projectPlatform({ target, candidate, fragment, treeRoot, policy, policy
   }
   const mini = fragment.inventory.find(row => row.path === 'miniracer_unicode_adapter.py' && row.kind === 'file')
   expect(mini, 'MERGE_MINIRACER_INVENTORY')
+  const nodeBackend = candidate.providers.akshare.version === '1.19.1+rt.node.1' && candidate.providers.mootdx.version === '0.11.7+rt.node.1'
   const context = { schemaVersion: 1, kind: 'rt-private-python-runtime', complete: true, releaseEligible: false,
     preparationPolicySha256: policySha256, platform, arch, ...(platform === 'darwin' ? { minimumMacOS: '12.0' } : {}),
     python, node, bootstrap: 'bootstrap.py', dependencyAuditValidator: structuredClone(fragment.dependencyAuditValidator),
-    miniRacerAdapter: { path: mini.path, sha256: mini.sha256, version: '0.12.4', windowsStrategy: 'win32-unicode-resource-prewarm-v1' },
+    miniRacerAdapter: { path: mini.path, sha256: mini.sha256, version: nodeBackend ? '1.0.0' : '0.12.4', windowsStrategy: nodeBackend ? 'private-node-js-runtime-v1' : 'win32-unicode-resource-prewarm-v1' },
     providers, sbom: structuredClone(fragment.sbom), files: structuredClone(fragment.inventory) }
   const generator = candidate.sourceSnapshot.files.find(row => row.path === 'scripts/prepare-private-python-runtime.py')
   return foundation.projectDependencyGraphs(treeRoot, context, generator.sha256)

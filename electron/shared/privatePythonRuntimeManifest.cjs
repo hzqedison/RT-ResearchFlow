@@ -6,7 +6,7 @@ const crypto = require('node:crypto')
 const PROVIDERS = ['akshare', 'mootdx', 'pywencai']
 const TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64']
 const MANIFEST = 'manifest.json'
-const RECIPES = ['scripts/build-mootdx-compat-wheel.py', 'scripts/build-provider-source-wheels.py', 'scripts/rebuild-lxml-native.py', 'scripts/build-lxml-redistribution-wheel.py', 'scripts/build-lxml-matched-public-source.py']
+const RECIPES = ['scripts/build-mootdx-compat-wheel.py', 'scripts/build-akshare-node-wheel.py', 'scripts/build-private-node-js-runtime-wheel.py', 'scripts/build-provider-source-wheels.py', 'scripts/rebuild-lxml-native.py', 'scripts/build-lxml-redistribution-wheel.py', 'scripts/build-lxml-matched-public-source.py']
 
 function fail(reason) { throw new Error('PRIVATE_RUNTIME_INVALID: ' + reason) }
 function record(value) {
@@ -188,8 +188,9 @@ function validateManifestShape(manifest, target) {
   if (!record(auditValidator) || auditValidator.path !== 'private_runtime_manifest.cjs' || !sha(auditValidator.sha256) ||
       inventory.get(auditValidator.path)?.kind !== 'file' || inventory.get(auditValidator.path)?.sha256 !== auditValidator.sha256) fail('trusted dependency audit validator missing')
   const adapter = manifest.miniRacerAdapter
-  if (!record(adapter) || adapter.path !== 'miniracer_unicode_adapter.py' || adapter.version !== '0.12.4' ||
-      adapter.windowsStrategy !== 'win32-unicode-resource-prewarm-v1' || !sha(adapter.sha256) ||
+  const nodeBackend = adapter?.version === '1.0.0' && adapter?.windowsStrategy === 'private-node-js-runtime-v1'
+  const legacyBackend = adapter?.version === '0.12.4' && adapter?.windowsStrategy === 'win32-unicode-resource-prewarm-v1'
+  if (!record(adapter) || adapter.path !== 'miniracer_unicode_adapter.py' || (!nodeBackend && !legacyBackend) || !sha(adapter.sha256) ||
       inventory.get(adapter.path)?.kind !== 'file' || inventory.get(adapter.path)?.sha256 !== adapter.sha256) fail('trusted MiniRacer adapter missing')
   if (!record(manifest.providers) || Object.keys(manifest.providers).sort().join(',') !== [...PROVIDERS].sort().join(',')) fail('all providers required')
   for (const provider of PROVIDERS) {
@@ -224,15 +225,33 @@ function validateManifestShape(manifest, target) {
       }
     }
     if (!manifest.files.some(f => f.path.startsWith(value.site + '/'))) fail('provider site empty')
-    if (provider === 'akshare' && value.version !== '1.19.1') fail('AKShare pin changed')
+    if (provider === 'akshare' && value.version !== (nodeBackend ? '1.19.1+rt.node.1' : '1.19.1')) fail('AKShare pin changed')
+    if (provider === 'akshare' && nodeBackend && (!primary.derived ||
+        primary.derived.upstreamVersion !== '1.19.1' || primary.derived.recipe.path !== 'scripts/build-akshare-node-wheel.py' ||
+        primary.derived.upstreamSha256 !== '8ab82d4a468d2c384df02de470df3a44e8b899fd8cfe116bceff52dd7b804df9' ||
+        primary.asset.sha256 !== '96c5b503f1d12c70b9aa0e21936e7cf550afec1d7e6681b7da014754820853eb' ||
+        primary.asset.size !== 5650385)) fail('AKShare Node derivative identity mismatch')
     if (provider === 'pywencai' && value.version !== '0.13.1') fail('pywencai pin changed')
-    if (provider === 'akshare' || provider === 'mootdx') {
+    if ((provider === 'akshare' || provider === 'mootdx') && nodeBackend) {
+      const engine = distributions.get('rt-private-node-js-runtime')
+      if (engine?.version !== '1.0.0' || engine.asset?.sha256 !== '78c47e46cc404d81c52f6ad39774889611609fbce7db60005914aae55062fc08' ||
+          engine.asset?.size !== 61762 || !engine.derived ||
+          engine.derived.recipe.path !== 'scripts/build-private-node-js-runtime-wheel.py' ||
+          distributions.has('mini-racer') || distributions.has('py-mini-racer')) fail('private Node backend identity unresolved')
+    }
+    if ((provider === 'akshare' || provider === 'mootdx') && !nodeBackend) {
       const racer = distributions.get('mini-racer')
       if (racer?.version !== '0.12.4' ||
           distributions.has('py-mini-racer')) fail('modern MiniRacer compatibility unresolved')
     }
     if (distributions.has('mini-racer') && distributions.get('mini-racer').version !== '0.12.4') fail('MiniRacer adapter version mismatch')
-    if (provider === 'mootdx' && (value.compatibility !== 'modern-mini-racer' || !primary.derived ||
+    if (provider === 'mootdx' && nodeBackend && (value.compatibility !== 'private-node-js-runtime' || !primary.derived ||
+        primary.derived.upstreamVersion !== '0.11.7' || value.version !== '0.11.7+rt.node.1' ||
+        primary.derived.recipe.path !== 'scripts/build-mootdx-compat-wheel.py' ||
+        primary.derived.upstreamSha256 !== 'eab475f1d08b1c71ea51212c8b1b1038c4739798f7d95ad1a6fb7bb26e348ef2' ||
+        primary.asset.sha256 !== '96217b04c7a0a9b9d1e350997de0922f0f8b9cb1f0b8a7c34a99540b32670109' ||
+        primary.asset.size !== 414052)) fail('mootdx Node derivative identity mismatch')
+    if (provider === 'mootdx' && !nodeBackend && (value.compatibility !== 'modern-mini-racer' || !primary.derived ||
         primary.derived.upstreamVersion !== '0.11.7' || value.version !== '0.11.7+rt.1' ||
         primary.derived.upstreamSha256 !== 'eab475f1d08b1c71ea51212c8b1b1038c4739798f7d95ad1a6fb7bb26e348ef2' ||
         primary.asset.sha256 !== '35f282624ed7a2a6908b4b847fba9119e7fb376cd00797606ee5ee97b6139f77' ||

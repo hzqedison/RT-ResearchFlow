@@ -49,7 +49,7 @@ ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "resources/python-runtime/preparation.policy.json"
 TARGETS = ("win32-x64", "darwin-arm64", "darwin-x64")
 PROVIDERS = ("akshare", "mootdx", "pywencai")
-RECIPES = {"scripts/build-provider-source-wheels.py", "scripts/build-mootdx-compat-wheel.py",
+RECIPES = {"scripts/build-provider-source-wheels.py", "scripts/build-mootdx-compat-wheel.py", "scripts/build-akshare-node-wheel.py", "scripts/build-private-node-js-runtime-wheel.py",
            "scripts/rebuild-lxml-native.py", "scripts/build-lxml-redistribution-wheel.py",
            "scripts/build-lxml-matched-public-source.py"}
 SHA = re.compile(r"^[a-f0-9]{64}$")
@@ -186,10 +186,10 @@ REVIEWED_LXML_WINDOWS_SOURCES = [
      "url": "https://github.com/lxml/libxml2-win-binaries/archive/4e8ae01f61145dc823ce2ae1d79f06241b7b46de.tar.gz"}]
 
 LIMITED_PURPOSE_WHEELS = {
-    "mootdx": ("0.11.7+rt.1", "35f282624ed7a2a6908b4b847fba9119e7fb376cd00797606ee5ee97b6139f77",
+    "mootdx": ("0.11.7+rt.node.1", "96217b04c7a0a9b9d1e350997de0922f0f8b9cb1f0b8a7c34a99540b32670109",
                {"AUTHORS.rst": "6e7b7bde9bf124e306122b8aabe46eb81e12a37ea74777d708b79c958aab051c",
                 "LICENSE": "ee03a051e103766e566b0a3ac0532daa665bb063cf8f30de46fd7c7ac9d00ec6",
-                "METADATA": "2396fc7f7d0ef66a10131945db5bac5e42243df2aa2efad87f6d26770b400521"}),
+                "METADATA": "3c34b74003b3dc9dbb6c2b4bff58e3f4232187c9e2980f0646c5354eb2cd9e0e"}),
     "tdxpy": ("0.2.7", "5514d35608fac2c7b2acf693de6f41ba7ccda58207b65a3f374c89887560737c",
               {"LICENSE": "fd2d2d610584198f900995e2d3ce121a2fd50c61416a74bb3de40cc88dffa2dd",
                "METADATA": "e2763ae0262af4f042ea0e817f9c4252cd291caa589d0586b818e002f0ca8100"})}
@@ -850,9 +850,34 @@ def reproduce(wheel, assets, work, policy):
             blob, files = module.read_source(Path(assets), specs[0])
             normalized_recipe_sha = digest(snapshot.read_bytes().replace(b"\r\n", b"\n"))
             data, _ = module.wheel_bytes(specs[0], blob, files, normalized_recipe_sha)
+        elif provenance["recipe"]["path"] == "scripts/build-private-node-js-runtime-wheel.py":
+            if wheel["distribution"] != "rt-private-node-js-runtime" or wheel["version"] != "1.0.0":
+                raise Invalid("Private Node backend derived identity mismatch")
+            expected = policy["privateNodeBackendSource"]
+            if provenance["upstreamAsset"] != expected["asset"]:
+                raise Invalid("Private Node source archive differs from the reviewed source pin")
+            extracted = Path(work) / ("node-source-" + provenance["upstreamSha256"])
+            members = {entry["path"] for entry in expected["files"]}
+            safe_extract(source, extracted, expected["archivePrefix"], members)
+            for entry in expected["files"]:
+                path = extracted / relative(entry["path"])
+                actual_source = ROOT / relative(entry["path"])
+                if (path.is_symlink() or not path.is_file() or path.stat().st_size != entry["size"]
+                        or file_digest(path) != entry["sha256"] or actual_source.is_symlink()
+                        or not actual_source.is_file() or file_digest(actual_source) != entry["sha256"]):
+                    raise Invalid("Archived backend source differs from actual consumed repository bytes")
+            # The unchanged recipe reads its adjacent repository LICENSE.
+            exclusive_bytes(snapshot.parent.parent / "LICENSE", (extracted / "LICENSE").read_bytes())
+            output = Path(work) / ("private-node-js-runtime-" + provenance["upstreamSha256"])
+            result = module.build(extracted / "scripts/private-node-js-runtime", output, expected["sourceBindingSha256"])
+            if result["recipeSha256"] != provenance["recipe"]["sha256"]:
+                raise Invalid("Private Node recipe receipt differs from executed recipe")
+            data = (output / result["wheel"]["filename"]).read_bytes()
         else:
-            if wheel["distribution"] != "mootdx" or wheel["version"] != module.DERIVED_VERSION:
-                raise Invalid("Mootdx derived identity mismatch")
+            expected_name = {"scripts/build-mootdx-compat-wheel.py": "mootdx",
+                             "scripts/build-akshare-node-wheel.py": "akshare"}.get(provenance["recipe"]["path"])
+            if wheel["distribution"] != expected_name or wheel["version"] != module.DERIVED_VERSION:
+                raise Invalid("Provider derived identity mismatch")
             output = Path(work) / ("derived-" + provenance["id"])
             relative(output.name)
             if output.exists():
@@ -1091,8 +1116,9 @@ def pending_inputs(policy, target):
         official(config[component]["asset"], policy)
     derived_wheels(policy, target)
     identities = {(wheel.get("distribution"), wheel.get("version")) for wheel in policy.get("derivedWheels", [])}
-    if identities != {("jsonpath", "0.82.2"), ("PyExecJS", "1.5.1"), ("mootdx", "0.11.7+rt.1")}:
-        pending.append("Exactly three reviewed derived wheels and their complete upstream pins are required")
+    if identities != {("jsonpath", "0.82.2"), ("PyExecJS", "1.5.1"), ("mootdx", "0.11.7+rt.node.1"),
+                      ("akshare", "1.19.1+rt.node.1"), ("rt-private-node-js-runtime", "1.0.0")}:
+        pending.append("Exactly five reviewed derived wheels and complete source pins are required")
     if target not in (policy.get("toolchain") or {}):
         pending.append("Exact PBS pip/toolchain inputs are not locked")
     elif target.startswith("darwin"):
@@ -1129,7 +1155,8 @@ def load_operations(path, policy_sha, target, work_root):
             raise Invalid("Operation input exceeds size budget")
         raw = source.read_bytes()
         value = json.loads(raw)
-    if (not isinstance(value, dict) or set(value) != set(default) or value["schemaVersion"] != 1 or value["kind"] != default["kind"]
+    optional = {"reviewedMaterialsRoot", "reviewedMaterialsArchive"}
+    if (not isinstance(value, dict) or set(value) - optional != set(default) or value["schemaVersion"] != 1 or value["kind"] != default["kind"]
             or not isinstance(value["cacheRoots"], list) or not isinstance(value["seedReports"], dict)
             or set(value["seedReports"]) - set(PROVIDERS)):
         raise Invalid("Unknown operation input; authorization overrides are forbidden")
@@ -1138,13 +1165,19 @@ def load_operations(path, policy_sha, target, work_root):
         raise Invalid("Duplicate operation cache root")
     seeds = {name: str(operation_location(item)) for name, item in value["seedReports"].items()}
     receipt = str(operation_location(value["sourceReceipt"])) if value["sourceReceipt"] is not None else None
+    material_root = str(operation_location(value["reviewedMaterialsRoot"], True)) if value.get("reviewedMaterialsRoot") is not None else None
+    material_archive = str(operation_location(value["reviewedMaterialsArchive"])) if value.get("reviewedMaterialsArchive") is not None else None
     work = owned_path(work_root)
+    if material_root is not None and (Path(material_root).is_relative_to(work) or work.is_relative_to(Path(material_root))):
+        raise Invalid("Reviewed materials and fresh output must not overlap")
+    if material_archive is not None and Path(material_archive).is_relative_to(work):
+        raise Invalid("Reviewed material ZIP cannot live in mutable fresh output")
     if any(Path(root).is_relative_to(work) or work.is_relative_to(Path(root)) for root in caches):
         raise Invalid("Fresh output and readonly cache roots must not overlap")
     return {"schemaVersion": 1, "kind": "rt-private-runtime-operation-receipt-v1", "operationId": work.name,
             "target": target, "platform": sys.platform, "machine": platform.machine(), "pythonABI": sysconfig.get_config_var("SOABI"),
             "policySha256": policy_sha, "inputSha256": digest(raw), "cacheRoots": caches, "seedReports": seeds,
-            "sourceReceipt": receipt, "workRoot": str(work), "tempRoot": str(work / "temp"), "outputRoot": str(work),
+            "sourceReceipt": receipt, "reviewedMaterialsRoot": material_root, "reviewedMaterialsArchive": material_archive, "workRoot": str(work), "tempRoot": str(work / "temp"), "outputRoot": str(work),
             "startedAt": datetime.now(timezone.utc).isoformat()}
 
 
@@ -1425,6 +1458,73 @@ def preflight_closures(candidate, tools, work):
             for name in PROVIDERS}
 
 
+
+def retain_reviewed_materials(policy, operations, tree, candidate):
+    """Pinned public source/notices only; never import or publish raw input archives."""
+    contract = policy.get("reviewedLicenseMaterials")
+    if not isinstance(contract, dict):
+        raise Invalid("Reviewed material input is not pinned")
+    root_value = operations.get("reviewedMaterialsRoot")
+    archive_value = operations.get("reviewedMaterialsArchive")
+    if root_value is None or archive_value is None:
+        raise Invalid("Pinned reviewed material ZIP and readonly extracted root are required")
+    materials_root = operation_location(root_value, True)
+    archive_path = operation_location(archive_value)
+    pin = contract["artifact"]
+    if archive_path.stat().st_size != pin["size"] or file_digest(archive_path) != pin["zipSha256"]:
+        raise Invalid("Reviewed public material artifact ZIP differs from exact pin")
+    helper_path = ROOT / relative(contract["helper"]["path"])
+    manifest_path = ROOT / relative(contract["manifest"]["path"])
+    if (helper_path.is_symlink() or file_digest(helper_path) != contract["helper"]["sha256"]
+            or manifest_path.is_symlink() or file_digest(manifest_path) != contract["manifest"]["sha256"]):
+        raise Invalid("Reviewed material source bytes changed")
+    spec = importlib.util.spec_from_file_location("rt_reviewed_license_materials", helper_path)
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    try:
+        sys.dont_write_bytecode = True
+        spec.loader.exec_module(module)
+        description = module.manifest()
+        members = {"materials/" + entry["id"]: entry for entry in description["materials"]}
+        if len(members) != 44:
+            raise Invalid("Exact reviewed material count differs")
+        seen = set()
+        with zipfile.ZipFile(archive_path) as archive:
+            for item in archive.infolist():
+                name = relative(item.filename)
+                if item.is_dir() or stat.S_ISLNK(item.external_attr >> 16) or name in seen:
+                    raise Invalid("Unexpected or duplicate material artifact member")
+                seen.add(name)
+                entry = members.get(name)
+                if entry is None:
+                    if name != "material-receipt.json" or item.file_size > 131072:
+                        raise Invalid("Unregistered material artifact member")
+                    archived_receipt = archive.read(item)
+                    if archived_receipt != (materials_root / name).read_bytes():
+                        raise Invalid("Material collection receipt changed after download")
+                    receipt = json.loads(archived_receipt)
+                    if (receipt.get("kind") != "astra-reviewed-public-material-collection-v1"
+                            or receipt.get("manifestSha256") != contract["manifest"]["sha256"]
+                            or receipt.get("rawBinaryInputArchivesIncluded") is not False
+                            or receipt.get("sourcesExecuted") is not False
+                            or receipt.get("releaseEligible") is not False):
+                        raise Invalid("Unexpected material collection receipt")
+                else:
+                    if item.file_size != entry["size"] or digest(archive.read(item)) != entry["sha256"]:
+                        raise Invalid("Material ZIP member differs from approved digest")
+                    module.checked_material(materials_root, entry)
+        if seen != set(members) | {"material-receipt.json"}:
+            raise Invalid("Material artifact is incomplete")
+        selected = {wheel["asset"]["sha256"] for provider in candidate["providers"].values()
+                    for wheel in provider["wheels"]}
+        retained = module.retain_materials(materials_root, tree, candidate["target"], selected)
+    finally:
+        sys.dont_write_bytecode = previous
+    return {**retained, "artifact": pin, "artifactZipSha256Verified": True,
+            "collectionReceiptSha256": digest(archived_receipt),
+            "rawInputAssetsIncluded": False, "formalApprovalAutomaticallyApplied": False}
+
+
 def materialize(policy, policy_sha, candidate_path, assets, work_root, operation_input=None):
     raw = Path(candidate_path).read_bytes()
     candidate = json.loads(raw)
@@ -1503,6 +1603,12 @@ def materialize(policy, policy_sha, candidate_path, assets, work_root, operation
         evidence[provider] = {"offlineInstallExecuted": True, "requirementsSha256": file_digest(requirement_path),
                               "installedClosure": closure, "installedClosureEvidence": closure_reference,
                               "dependencyAudit": audit_reference}
+        print("installed " + provider + ": " + str(len(provider_lock["wheels"])) + " verified distributions", flush=True)
+    # Retain exact public source/notice materials before license decisions, SBOM and inventory.
+    reviewed_materials = retain_reviewed_materials(policy, operations, tree, candidate)
+    for provider, provider_lock in candidate["providers"].items():
+        site = tree / provider_lock["site"]
+        audit_reference = evidence[provider]["dependencyAudit"]
         for wheel in provider_lock["wheels"]:
             for member, expected_sha in wheel["notices"].items():
                 path = site / relative(member)
@@ -1517,7 +1623,6 @@ def materialize(policy, policy_sha, candidate_path, assets, work_root, operation
                 else:
                     licenses.append(license_item(policy, wheel["distribution"], wheel["version"],
                                                  wheel["asset"]["sha256"], installed_path, expected_sha))
-        print("installed " + provider + ": " + str(len(provider_lock["wheels"])) + " verified distributions", flush=True)
     bound_source_copy(candidate, "resources/python-runtime/pywencai_adapter.py", tree / "providers/pywencai/pywencai_adapter.py")
     licenses += retain_native_licenses(tree, work, policy, candidate, local_assets, tools)
     supplement_licenses, supplement_evidence = retain_license_supplements(tree, work, policy, candidate, local_assets)
@@ -1529,7 +1634,7 @@ def materialize(policy, policy_sha, candidate_path, assets, work_root, operation
                               ("electron/shared/privatePythonRuntimeManifest.cjs", "private_runtime_manifest.cjs")):
         bound_source_copy(candidate, source_name, tree / name)
     macho = mac_tree_evidence(tree, candidate["target"])
-    native = basic_native_evidence(tree, tools, work, candidate["target"])
+    native = basic_native_evidence(tree, tools, work, candidate["target"], candidate)
     sbom = candidate_sbom(candidate, licenses)
     exclusive_bytes(tree / "sbom.spdx.json", encoded(sbom))
     applicability = target_license_applicability(tree, policy, candidate, supplement_evidence, limited_purpose, lxml_sources)
@@ -1551,6 +1656,7 @@ def materialize(policy, policy_sha, candidate_path, assets, work_root, operation
                   providers={name: {"version": lock["version"], "site": lock["site"], "dependencyAudit": evidence[name]["dependencyAudit"],
                                     "installedClosure": evidence[name]["installedClosureEvidence"]} for name, lock in candidate["providers"].items()},
                    sbom={"path": "sbom.spdx.json", "sha256": file_digest(tree / "sbom.spdx.json"), "format": "SPDX-2.3"},
+                    reviewedMaterialsEvidence=reviewed_materials,
                     licenseSupplementEvidence=supplement_evidence,
                     licenseApplicabilityEvidence=applicability,
                     lxmlWindowsSourceEvidence=lxml_sources,
@@ -1575,7 +1681,12 @@ def source_snapshot(policy_sha):
     paths = ["scripts/prepare-private-python-runtime.py", "scripts/build-provider-source-wheels.py", "scripts/build-mootdx-compat-wheel.py",
              "resources/python-runtime/bootstrap.py", "resources/python-runtime/miniracer_unicode_adapter.py", "electron/shared/privatePythonRuntimeManifest.cjs",
              "resources/python-runtime/pywencai_adapter.py", "scripts/rebuild-lxml-native.py",
-             "scripts/build-lxml-redistribution-wheel.py", "scripts/build-lxml-matched-public-source.py"]
+             "scripts/build-lxml-redistribution-wheel.py", "scripts/build-lxml-matched-public-source.py",
+             "scripts/build-akshare-node-wheel.py", "scripts/build-private-node-js-runtime-wheel.py",
+             "scripts/private-node-js-runtime/rt_private_node_js_runtime/__init__.py",
+             "scripts/private-node-js-runtime/rt_private_node_js_runtime/worker.cjs", "LICENSE",
+             "resources/python-runtime/reviewed-materials/fetch-runtime-license-materials-ci.py",
+             "resources/python-runtime/reviewed-materials/runtime-license-materials.json"]
     for path in paths:
         source = ROOT / relative(path)
         if source.is_symlink() or not source.resolve().is_relative_to(ROOT.resolve()):
@@ -1936,7 +2047,9 @@ def resolution_constraints(policy, provider, assets, work, target="win32-x64", o
                 raise Invalid("Unsafe seed requirement")
             versions[name] = metadata["version"]
         seed = {"sha256": digest(raw), "purpose": "version constraints only; NOT a final lock or resolver evidence"}
-    versions["mini-racer"] = "0.12.4"
+    # Stale seed engine entries are constraints only, never retained provider roots.
+    versions.pop("mini-racer", None)
+    versions.pop("py-mini-racer", None)
     for name, pin in policy["resolverCompatibilityPins"].get(target, {}).get(provider, {}).items():
         versions[name] = pin["version"]
     lines = []
@@ -2236,7 +2349,7 @@ def retain_limited_purpose_sources(tree, policy, candidate, assets):
         raise Invalid("Derived mootdx source recipe differs from reviewed recipe")
     originals["mootdx"]["derivedSource"] = {"upstreamPath": upstream_path, "upstreamSha256": upstream["sha256"],
                                               "recipePath": recipe_path, "recipeSha256": derived["recipe"]["sha256"],
-                                              "installedChangeRecord": "providers/mootdx/site/mootdx-0.11.7+rt.1.dist-info/RT-COMPATIBILITY.json"}
+                                              "installedChangeRecord": "providers/mootdx/site/mootdx-0.11.7+rt.node.1.dist-info/RT-COMPATIBILITY.json"}
     change = tree / originals["mootdx"]["derivedSource"]["installedChangeRecord"]
     if not change.is_file():
         raise Invalid("Derived mootdx modification record is missing")
@@ -2420,34 +2533,57 @@ sys.addaudithook(socket_audit)
 '''
 
 
-def basic_native_evidence(tree, tools, work, target="win32-x64"):
+def basic_native_evidence(tree, tools, work, target="win32-x64", candidate=None):
     code = SMOKE_NETWORK_GUARD + r'''
 import importlib,json,pathlib,socket,subprocess,sys
 tree=pathlib.Path(sys.argv[1])
 provider=sys.argv[2];site=tree/'providers'/provider/'site'
 sys.path[:]=[str(site)]+[p for p in sys.path if 'site-packages' not in p.lower()]
-module=importlib.import_module(provider)
-result={'provider':provider,'imported':True,'pythonSocketGuarded':True,'networkSandboxVerified':False,
+binding=json.loads(pathlib.Path(sys.argv[3]).read_bytes())
+adapter_path=tree/'miniracer_unicode_adapter.py'
+adapter={'__name__':'rt_native_provider_adapter','__file__':str(adapter_path)}
+exec(compile(adapter_path.read_bytes(),str(adapter_path),'exec'),adapter)
+bootstrap_path=tree/'bootstrap.py'
+bootstrap={'__name__':'rt_native_bootstrap_core','__file__':str(bootstrap_path)}
+exec(compile(bootstrap_path.read_bytes(),str(bootstrap_path),'exec'),bootstrap)
+result={'provider':provider,'pythonSocketGuarded':True,'networkSandboxVerified':False,
         'networkIsolationScope':'Python socket APIs only; native code and Node are not OS-network-sandboxed',
-        'requestScope':'imports and local evaluation only; no provider request API invoked'}
-if provider=='akshare':
- import jsonpath
- result['zeroVolumePreserved']=jsonpath.jsonpath({'volume':0},'$.volume')==[0]
- if not result['zeroVolumePreserved']:raise ValueError('zero volume lost')
-if provider=='pywencai':
- import execjs
- runtime=execjs.get('Node');result['privateNodeEval']=runtime.eval('40+2')
- if result['privateNodeEval']!=42:raise ValueError('Node smoke failed')
+        'requestScope':'imports and local evaluation only; no provider request API invoked',
+        'formalBootstrapTested':False}
+try:
+ if provider in ('akshare','mootdx'):
+  result['privateNodeBackend']=adapter['prepare_site'](
+   provider,site,tree,{row['path']:row for row in binding['files']},binding['wheels'],binding['node'],
+   windows_job_factory=bootstrap['windows_job'] if sys.platform=='win32' else None)
+ module=importlib.import_module(provider);result['imported']=True
+ if provider=='akshare':
+  import jsonpath
+  result['zeroVolumePreserved']=jsonpath.jsonpath({'volume':0},'$.volume')==[0]
+  if not result['zeroVolumePreserved']:raise ValueError('zero volume lost')
+ if provider=='pywencai':
+  import execjs
+  runtime=execjs.get('Node');result['privateNodeEval']=runtime.eval('40+2')
+  if result['privateNodeEval']!=42:raise ValueError('Node smoke failed')
+finally:
+ adapter['close_provider_engines']()
+result['ownedProviderEnginesClosed']=True
 print(json.dumps(result))
 '''
+    if candidate is None:
+        raise Invalid("Native provider smoke requires its actual candidate bindings")
+    ledger = inventory(tree)
+    node_binding = {**candidate["node"], "executable": "node/node.exe" if target == "win32-x64" else "node/bin/node"}
     original_path = os.environ.get("PATH", "")
-    # Node selection belongs to an explicitly scoped child environment; no global PATH mutation.
     result = {}
     for provider in PROVIDERS:
         env = controlled_environment(work)
         node = node_executable(tree / "node", target)
         env["PATH"] = str(node.parent) + os.pathsep + (str(Path(env.get("SystemRoot", "C:/Windows")) / "System32") if target == "win32-x64" else "/usr/bin:/bin")
-        command = [str(python_executable(tree / "python", target)), "-X", "utf8", "-B", "-I", "-c", code, str(tree), provider]
+        binding_path = work / (provider + "-engine-input.json")
+        exclusive_bytes(binding_path, encoded({"files": ledger, "node": node_binding,
+                                             "wheels": candidate["providers"][provider]["wheels"]}))
+        command = [str(python_executable(tree / "python", target)), "-X", "utf8", "-B", "-I", "-S", "-c",
+                   code, str(tree), provider, str(binding_path)]
         completed = bounded_process(command, work, timeout=120, env=env)
         exclusive_bytes(work / (provider + "-import-evidence.json"), encoded({"exit": completed.returncode, "stdout": completed.stdout, "stderr": completed.stderr}))
         if completed.returncode:

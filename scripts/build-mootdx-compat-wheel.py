@@ -18,8 +18,8 @@ import zipfile
 
 
 UPSTREAM_VERSION = "0.11.7"
-DERIVED_VERSION = "0.11.7+rt.1"
-MINI_RACER_VERSION = "0.12.4"
+DERIVED_VERSION = "0.11.7+rt.node.1"
+NODE_BACKEND_VERSION = "1.0.0"
 UPSTREAM_SHA256 = "eab475f1d08b1c71ea51212c8b1b1038c4739798f7d95ad1a6fb7bb26e348ef2"
 UPSTREAM_URL = (
     "https://files.pythonhosted.org/packages/bd/7c/"
@@ -27,8 +27,8 @@ UPSTREAM_URL = (
     "mootdx-0.11.7-py3-none-any.whl"
 )
 UPSTREAM_DIST = "mootdx-0.11.7.dist-info"
-DERIVED_DIST = "mootdx-0.11.7+rt.1.dist-info"
-WHEEL_NAME = "mootdx-0.11.7+rt.1-py3-none-any.whl"
+DERIVED_DIST = "mootdx-0.11.7+rt.node.1.dist-info"
+WHEEL_NAME = "mootdx-0.11.7+rt.node.1-py3-none-any.whl"
 
 
 def digest(data):
@@ -95,7 +95,7 @@ def derive_files(upstream):
     metadata = replace_once(
         metadata,
         "Requires-Dist: py-mini-racer (>=0.6.0,<0.7.0)\n",
-        "Requires-Dist: mini-racer (==" + MINI_RACER_VERSION + ")\n",
+        "Requires-Dist: rt-private-node-js-runtime (==" + NODE_BACKEND_VERSION + ")\n",
         "V8 dependency",
     )
     files[metadata_name] = metadata.encode("utf-8")
@@ -107,19 +107,19 @@ def derive_files(upstream):
 
     holiday_name = "mootdx/utils/holiday.py"
     holiday = files[holiday_name].decode("utf-8")
-    holiday = replace_once(holiday, "from py_mini_racer import py_mini_racer", "from py_mini_racer import MiniRacer", "modern V8 import")
+    holiday = replace_once(holiday, "from py_mini_racer import py_mini_racer", "from rt_private_node_js_runtime import MiniRacer", "modern V8 import")
     holiday = replace_once(holiday, "httpx.Client(verify=False)", "httpx.Client(verify=True, timeout=10.0)", "verified HTTPS")
     holiday = replace_once(holiday, "        js_code = py_mini_racer.MiniRacer()\n        js_code.eval(JS_DECODE)",
-                           "        with MiniRacer() as js_code:\n            js_code.eval(JS_DECODE)", "V8 lifetime")
+                           "        with MiniRacer() as js_code:\n            js_code.eval(JS_DECODE + '\\n;void 0;')", "V8 lifetime")
     holiday = replace_once(holiday, "        dict_list = js_code.call(", "            dict_list = js_code.call(", "V8 call")
     lines = holiday.splitlines(keepends=True)
     warning_count = error_count = 0
     for index, line in enumerate(lines):
         if line.startswith("        logging.warning("):
-            lines[index] = "        logging.warning('mini-racer==0.12.4 is missing from the provider runtime')\n"
+            lines[index] = "        logging.warning('rt-private-node-js-runtime==1.0.0 is missing from the provider runtime')\n"
             warning_count += 1
         elif line.startswith("        raise MootdxModuleNotFoundError("):
-            lines[index] = "        raise MootdxModuleNotFoundError('The required mini-racer provider runtime is unavailable')\n"
+            lines[index] = "        raise MootdxModuleNotFoundError('The required private Node provider runtime is unavailable')\n"
             error_count += 1
     if warning_count != 1 or error_count != 1:
         raise ValueError("The pinned V8 error-message precondition failed")
@@ -148,8 +148,8 @@ def derive_files(upstream):
         "name": "mootdx",
         "version": DERIVED_VERSION,
         "upstream": {"version": UPSTREAM_VERSION, "url": UPSTREAM_URL, "sha256": UPSTREAM_SHA256},
-        "replacementDependency": {"name": "mini-racer", "version": MINI_RACER_VERSION},
-        "changes": ["explicit derived distribution identity", "modern MiniRacer API and closed contexts",
+        "replacementDependency": {"name": "rt-private-node-js-runtime", "version": NODE_BACKEND_VERSION},
+        "changes": ["explicit derived distribution identity", "explicit private Node API and closed contexts",
                     "verified bounded holiday HTTPS", "explicit private cache root with traversal rejection"],
         "upstreamLicenseSha256": digest(upstream[UPSTREAM_DIST + "/LICENSE"]),
         "limits": ["native compatibility requires real target-architecture tests",

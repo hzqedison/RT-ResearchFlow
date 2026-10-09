@@ -312,15 +312,21 @@ def isolated_fixture_main(arguments):
     namespace = {"__name__": "rt_private_miniracer_adapter", "__file__": str(adapter_path)}
     exec(compile(adapter_path.read_bytes(), str(adapter_path), "exec"), namespace)
     sys.path.insert(0, str(site))
-    native = namespace["prepare_site"](provider, site, root, index, manifest["providers"][provider]["wheels"])
-    import importlib
-    module = importlib.import_module(provider)
-    if provider == "mootdx":
-        importlib.import_module("mootdx.quotes")
-        importlib.import_module("mootdx.reader")
-    print(json.dumps({"kind": FIXTURE_KIND, "releaseEligible": False, "provider": provider,
-                      "imported": module.__name__, "dependencyAudits": reports, "miniRacer": native,
-                      "workerPid": os.getpid()}, ensure_ascii=False, allow_nan=False))
+    try:
+        native = namespace["prepare_site"](provider, site, root, index, manifest["providers"][provider]["wheels"], manifest.get("node"),
+                                           windows_job_factory=windows_job if sys.platform == "win32" else None)
+        import importlib
+        module = importlib.import_module(provider)
+        if provider == "mootdx":
+            importlib.import_module("mootdx.quotes")
+            importlib.import_module("mootdx.reader")
+        response = json.dumps({"kind": FIXTURE_KIND, "releaseEligible": False, "provider": provider,
+                          "imported": module.__name__, "dependencyAudits": reports, "miniRacer": native,
+                          "workerPid": os.getpid()}, ensure_ascii=False, allow_nan=False)
+    finally:
+        namespace["close_provider_engines"]()
+    print(response)
+
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--isolated-test-fixture":
@@ -393,26 +399,43 @@ def main():
     # The adapter's own imports run on stdlib-only paths. Its complete inventory
     # and site verification precedes selection of the sole provider import path.
     # Serial initialization happens before any provider import or provider thread.
-    namespace["prepare_miniracer"](manifest_path, provider, sys.argv[3])
-    if provider == "pywencai":
-        safe_adapter_path = root / "providers/pywencai/pywencai_adapter.py"
-        if safe_adapter_path.is_symlink() or not contained(root, safe_adapter_path):
-            reject()
-        safe_adapter_source = safe_adapter_path.read_bytes()
-        safe_adapter_row = next((row for row in manifest["files"] if row["path"] == "providers/pywencai/pywencai_adapter.py"), None)
-        safe_adapter_sha256 = safe_adapter_row.get("sha256") if safe_adapter_row else None
-        if safe_adapter_row is None or safe_adapter_row.get("kind") != "file" or hashlib.sha256(safe_adapter_source).hexdigest() != safe_adapter_sha256 or safe_adapter_row.get("sha256") != safe_adapter_sha256:
-            reject()
-        safe_adapter = {"__name__": "rt_private_pywencai_adapter", "__file__": str(safe_adapter_path)}
-        exec(compile(safe_adapter_source, str(safe_adapter_path), "exec"), safe_adapter)
-        if owned_posix_root is None:
-            safe_adapter["install"](manifest, root, site)
-        else:
-            safe_adapter["install"](manifest, root, site, pre_seal_owned_posix_root=owned_posix_root)
-        script = safe_adapter["rewrite_trusted_bridge"](script)
-    sys.stdin = io.StringIO(json.dumps(request, ensure_ascii=False, allow_nan=False))
-    # This source is supplied only by the main-process bridge, never by an IPC caller.
-    exec(compile(script, "<trusted-data-source-bridge>", "exec"), {"__name__": "__main__"})
+    previous_stdout = sys.stdout
+    pending_stdout = io.StringIO()
+    sys.stdout = pending_stdout
+    try:
+        namespace["prepare_miniracer"](manifest_path, provider, sys.argv[3],
+                                        pre_seal_owned_posix_root=owned_posix_root,
+                                        windows_job_factory=windows_job if sys.platform == "win32" else None)
+        if provider == "pywencai":
+            safe_adapter_path = root / "providers/pywencai/pywencai_adapter.py"
+            if safe_adapter_path.is_symlink() or not contained(root, safe_adapter_path):
+                reject()
+            safe_adapter_source = safe_adapter_path.read_bytes()
+            safe_adapter_row = next((row for row in manifest["files"] if row["path"] == "providers/pywencai/pywencai_adapter.py"), None)
+            safe_adapter_sha256 = safe_adapter_row.get("sha256") if safe_adapter_row else None
+            if safe_adapter_row is None or safe_adapter_row.get("kind") != "file" or hashlib.sha256(safe_adapter_source).hexdigest() != safe_adapter_sha256 or safe_adapter_row.get("sha256") != safe_adapter_sha256:
+                reject()
+            safe_adapter = {"__name__": "rt_private_pywencai_adapter", "__file__": str(safe_adapter_path)}
+            exec(compile(safe_adapter_source, str(safe_adapter_path), "exec"), safe_adapter)
+            if owned_posix_root is None:
+                safe_adapter["install"](manifest, root, site)
+            else:
+                safe_adapter["install"](manifest, root, site, pre_seal_owned_posix_root=owned_posix_root)
+            script = safe_adapter["rewrite_trusted_bridge"](script)
+        sys.stdin = io.StringIO(json.dumps(request, ensure_ascii=False, allow_nan=False))
+        # This source is supplied only by the main-process bridge, never by an IPC caller.
+        try:
+            exec(compile(script, "<trusted-data-source-bridge>", "exec"), {"__name__": "__main__"})
+        except SystemExit as exit_error:
+            if exit_error.code not in (None, 0):
+                raise
+    finally:
+        try:
+            namespace["close_provider_engines"]()
+        finally:
+            sys.stdout = previous_stdout
+    # Success is published only after every owned JS context and pipe has exited.
+    previous_stdout.write(pending_stdout.getvalue())
 
 
 if __name__ == "__main__":

@@ -73,8 +73,8 @@ def validate_resources(manifest_path, expected_sha256):
         invalid()
     root = filename.parent.resolve(strict=True)
     adapter = manifest.get("miniRacerAdapter", {})
-    if (adapter.get("path") != ADAPTER_NAME or adapter.get("version") != VERSION
-            or adapter.get("windowsStrategy") != STRATEGY
+    if (adapter.get("path") != ADAPTER_NAME or (adapter.get("version"), adapter.get("windowsStrategy")) not in
+            ((VERSION, STRATEGY), (NODE_BACKEND_VERSION, NODE_BACKEND_STRATEGY))
             or adapter.get("sha256") != digest(Path(__file__).read_bytes())):
         invalid()
     entries = manifest.get("files")
@@ -125,7 +125,97 @@ def validate_resources(manifest_path, expected_sha256):
     return manifest, root, inventory
 
 
-def prepare_miniracer(manifest_path, provider, expected_manifest_sha256):
+
+NODE_BACKEND_VERSION = "1.0.0"
+NODE_BACKEND_STRATEGY = "private-node-js-runtime-v1"
+NODE_MODULE_SHA256 = "ce766a0844836e5024036319c03f591a05684feb7d2d521cf09edb451b6da6db"
+NODE_WORKER_SHA256 = "2d458a2514dc483ebcc0621013da398422a1bae54f5d892759cca91d6c399ea2"
+NODE_WHEEL_SHA256 = "78c47e46cc404d81c52f6ad39774889611609fbce7db60005914aae55062fc08"
+_owned_backend = None
+
+
+def close_provider_engines():
+    """Drain all configured contexts; failure prevents a business response."""
+    if _owned_backend is not None:
+        _owned_backend.close_all()
+
+
+def prepare_node_backend(provider, site, root, inventory, wheels, node_spec,
+                         *, pre_seal_owned_posix_root=None, windows_job_factory=None):
+    global _owned_backend
+    engines = [wheel for wheel in wheels
+               if canonical(wheel.get("distribution", "")) == "rt-private-node-js-runtime"]
+    if (provider not in ("akshare", "mootdx") or len(engines) != 1
+            or engines[0].get("version") != NODE_BACKEND_VERSION
+            or engines[0].get("asset", {}).get("sha256") != NODE_WHEEL_SHA256
+            or any(canonical(wheel.get("distribution", "")) in ("mini-racer", "py-mini-racer")
+                   for wheel in wheels) or not isinstance(node_spec, dict)
+            or node_spec.get("version") != "22.23.3"):
+        invalid()
+    def verified_file(filename, expected=None):
+        if filename.is_symlink():
+            invalid()
+        resolved = inside(root, filename)
+        entry = inventory.get(resolved.relative_to(root).as_posix(), {})
+        if (entry.get("kind") != "file" or not resolved.is_file()
+                or resolved.stat().st_size != entry.get("size")
+                or digest(resolved.read_bytes()) != entry.get("sha256")
+                or (expected is not None and entry.get("sha256") != expected)):
+            invalid()
+        return resolved, entry["sha256"]
+    distribution = importlib.metadata.distribution("rt-private-node-js-runtime")
+    if distribution.version != NODE_BACKEND_VERSION or distribution.locate_file("").resolve(strict=True) != site:
+        invalid()
+    module_path, _ = verified_file(site / "rt_private_node_js_runtime/__init__.py", NODE_MODULE_SHA256)
+    worker_path, worker_sha = verified_file(site / "rt_private_node_js_runtime/worker.cjs", NODE_WORKER_SHA256)
+    executable_name = relative_name(node_spec.get("executable"))
+    if executable_name != ("node/node.exe" if sys.platform == "win32" else "node/bin/node"):
+        invalid()
+    node_path, node_sha = verified_file(root / executable_name)
+    cache_value = os.environ.get("HOME", "")
+    if not cache_value or not Path(cache_value).is_absolute():
+        invalid()
+    cache = Path(cache_value)
+    if cache.is_symlink() or not cache.is_dir() or root == cache.resolve() or root in cache.resolve().parents:
+        invalid()
+    if sys.platform == "win32" and not callable(windows_job_factory):
+        invalid()
+    if sys.platform not in ("win32", "darwin"):
+        invalid()
+    backend = importlib.import_module("rt_private_node_js_runtime")
+    if Path(backend.__file__).resolve(strict=True) != module_path:
+        invalid()
+    backend.configure(node_path, node_sha, worker_path, worker_sha, cache,
+                      pre_seal_owned_posix_root=pre_seal_owned_posix_root,
+                      windows_job_factory=windows_job_factory if sys.platform == "win32" else None)
+    _owned_backend = backend
+    decoder = None
+    if provider == "mootdx":
+        path, _ = verified_file(site / "mootdx/utils/holiday.js", HOLIDAY_DECODER_SHA256)
+        decoder = path.read_text(encoding="utf-8")
+    try:
+        with backend.MiniRacer() as engine:
+            if engine.eval("6 * 7") != 42 or engine.eval("'\\u4e2d\\u6587'") != "\u4e2d\u6587":
+                invalid()
+            if engine.eval(ICU_PROBE_JS) is not True:
+                invalid()
+            if decoder is not None:
+                engine.eval(decoder + "\n;void 0;")
+                for encoded, expected in HOLIDAY_FIXTURES:
+                    days = engine.call("d", encoded)
+                    if [day[:10] for day in days] != expected:
+                        invalid()
+    except BaseException:
+        close_provider_engines()
+        raise
+    return {"provider": provider, "version": NODE_BACKEND_VERSION,
+            "strategy": NODE_BACKEND_STRATEGY, "required": True, "contexts": 1,
+            "hookUsed": False, "resourcesVerified": True, "icuVerified": True,
+            "decoderVerified": decoder is not None,
+            "decoderFixtures": len(HOLIDAY_FIXTURES) if decoder is not None else 0}
+
+
+def prepare_miniracer(manifest_path, provider, expected_manifest_sha256, *, pre_seal_owned_posix_root=None, windows_job_factory=None):
     if (provider not in ("akshare", "mootdx", "pywencai") or not sys.flags.isolated
             or not sys.flags.no_site or not sys.flags.dont_write_bytecode or sys.flags.utf8_mode != 1):
         invalid()
@@ -144,10 +234,11 @@ def prepare_miniracer(manifest_path, provider, expected_manifest_sha256):
     # have passed validation. The already-loaded adapter uses stdlib imports only.
     if not provider_sites:
         sys.path.insert(0, str(site))
-    return prepare_site(provider, site, root, inventory, provider_lock.get("wheels", []))
+    return prepare_site(provider, site, root, inventory, provider_lock.get("wheels", []), manifest.get("node"),
+                        pre_seal_owned_posix_root=pre_seal_owned_posix_root, windows_job_factory=windows_job_factory)
 
 
-def prepare_site(provider, site, root, inventory, wheels):
+def prepare_site(provider, site, root, inventory, wheels, node_spec=None, *, pre_seal_owned_posix_root=None, windows_job_factory=None):
     """Shared product initialization core; callers must first verify a hash ledger."""
     if not site.is_dir():
         invalid()
@@ -156,6 +247,9 @@ def prepare_site(provider, site, root, inventory, wheels):
                       if item and (Path(item).resolve(strict=False) == site or "providers" in Path(item).parts)]
     if provider_sites != [site]:
         invalid()
+    if any(canonical(wheel.get("distribution", "")) == "rt-private-node-js-runtime" for wheel in wheels):
+        return prepare_node_backend(provider, site, root, inventory, wheels, node_spec,
+                                    pre_seal_owned_posix_root=pre_seal_owned_posix_root, windows_job_factory=windows_job_factory)
     racers = [wheel for wheel in wheels if canonical(wheel.get("distribution", "")) == "mini-racer"]
     if not racers:
         if provider in ("akshare", "mootdx"):

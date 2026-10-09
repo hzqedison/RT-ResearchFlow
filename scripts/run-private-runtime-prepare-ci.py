@@ -266,6 +266,100 @@ def validated_cache_roots(values, temporary):
     return roots
 
 
+
+class ReviewedMaterialRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, newurl):
+        parsed = urllib.parse.urlsplit(newurl)
+        hostname = parsed.hostname or ""
+        if (parsed.scheme != "https" or parsed.port is not None or parsed.username
+                or parsed.password or not (
+                    hostname == "api.github.com"
+                    or hostname.endswith(".blob.core.windows.net")
+                    or hostname.endswith(".actions.githubusercontent.com"))):
+            raise ValueError("Unexpected reviewed material download redirect")
+        redirected = super().redirect_request(request, fp, code, message, headers, newurl)
+        if redirected is not None:
+            redirected.remove_header("Authorization")
+        return redirected
+
+
+def download_reviewed_material_archive(pin, destination):
+    """Fetch only a successful pinned public artifact; never forward its API token."""
+    repository = "hzqedison/RT-ResearchFlow"
+    if (pin.get("repository") != repository
+            or type(pin.get("runId")) is not int or pin["runId"] <= 0
+            or type(pin.get("artifactId")) is not int or pin["artifactId"] <= 0
+            or type(pin.get("size")) is not int or not 0 < pin["size"] < 200_000_000
+            or not re.fullmatch(r"[a-f0-9]{64}", str(pin.get("zipSha256")))
+            or not re.fullmatch(r"[a-f0-9]{40}", str(pin.get("sourceCommit")))
+            or pin.get("name") != "runtime-reviewed-public-materials"):
+        raise ValueError("Incomplete reviewed public material artifact pin")
+    token = os.environ.get("SOURCE_VERIFICATION_TOKEN")
+    if not token:
+        raise ValueError("Hosted artifact verification token is required")
+    base = "https://api.github.com/repos/" + repository + "/actions/"
+    opener = urllib.request.build_opener(ReviewedMaterialRedirect())
+
+    def request(path, accept="application/vnd.github+json"):
+        value = urllib.request.Request(base + path, headers={
+            "Accept": accept, "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "RT-ResearchFlow-reviewed-material-consumer"})
+        value.add_unredirected_header("Authorization", "Bearer " + token)
+        return value
+
+    def metadata(path):
+        with opener.open(request(path), timeout=60) as response:
+            raw = response.read(524289)
+        if len(raw) > 524288:
+            raise ValueError("Reviewed artifact metadata budget exceeded")
+        value = json.loads(raw)
+        if not isinstance(value, dict):
+            raise ValueError("Unexpected reviewed artifact metadata")
+        return value
+
+    artifact = metadata("artifacts/" + str(pin["artifactId"]))
+    run = metadata("runs/" + str(pin["runId"]))
+    origin = artifact.get("workflow_run", {})
+    if (artifact.get("id") != pin["artifactId"] or artifact.get("expired") is not False
+            or artifact.get("name") != pin["name"] or artifact.get("size_in_bytes") != pin["size"]
+            or artifact.get("digest") != "sha256:" + pin["zipSha256"]
+            or origin.get("id") != pin["runId"] or origin.get("repository_id") != 1408465497
+            or origin.get("head_repository_id") != 1408465497
+            or origin.get("head_sha") != pin["sourceCommit"]
+            or run.get("id") != pin["runId"] or run.get("status") != "completed"
+            or run.get("conclusion") != "success" or run.get("head_sha") != pin["sourceCommit"]):
+        raise ValueError("Reviewed artifact did not match its successful immutable producer")
+    total = 0
+    with opener.open(request("artifacts/" + str(pin["artifactId"]) + "/zip"), timeout=180) as response:
+        with destination.open("xb") as output:
+            while True:
+                chunk = response.read(min(131072, pin["size"] - total + 1))
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > pin["size"]:
+                    raise ValueError("Reviewed material ZIP exceeded pinned size")
+                output.write(chunk)
+    if total != pin["size"] or digest(destination) != pin["zipSha256"]:
+        raise ValueError("Reviewed material ZIP differs from its pinned bytes")
+    return str(destination)
+
+
+def validated_material_archive(value, temporary):
+    candidate = pathlib.Path(value)
+    resolved = candidate.resolve(strict=True)
+    temporary = temporary.resolve(strict=True)
+    if (not candidate.is_absolute() or not resolved.is_relative_to(temporary)
+            or not resolved.is_file() or resolved == temporary):
+        raise ValueError("Material archive must be a real file below RUNNER_TEMP")
+    current = candidate
+    while current != temporary:
+        if current.is_symlink() or current.is_junction():
+            raise ValueError("Material archive must not traverse links")
+        current = current.parent
+    return str(resolved)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True,
@@ -273,6 +367,8 @@ def main():
     parser.add_argument("--proof-dir", required=True)
     parser.add_argument("--cache-root", action="append", default=[],
                         help="Exact derived-input cache below this runner temporary directory")
+    parser.add_argument("--reviewed-materials-root", help="Readonly extracted reviewed artifact below RUNNER_TEMP")
+    parser.add_argument("--reviewed-materials-archive", help="Exact original artifact ZIP below RUNNER_TEMP")
     parser.add_argument("--retain-payload", action="store_true",
                         help="Retain prepared tree/evidence without raw input assets; not formal approval")
     args = parser.parse_args()
@@ -293,6 +389,19 @@ def main():
     policy = json.loads(policy_path.read_text(encoding="utf-8"))
     asset = policy["targets"][args.target]["python"]["asset"]
     lab = pathlib.Path(tempfile.mkdtemp(prefix="RT runtime \u8fd0\u884c ", dir=temporary))
+    material_root = None
+    material_archive = None
+    if policy.get("reviewedLicenseMaterials") is not None:
+        if not args.reviewed_materials_root:
+            raise ValueError("Reviewed public material root is required by policy")
+        material_root = validated_cache_roots([args.reviewed_materials_root], temporary)[0]
+        if args.reviewed_materials_archive:
+            material_archive = validated_material_archive(args.reviewed_materials_archive, temporary)
+        else:
+            material_archive = download_reviewed_material_archive(
+                policy["reviewedLicenseMaterials"]["artifact"], lab / "reviewed-materials.zip")
+    elif args.reviewed_materials_root or args.reviewed_materials_archive:
+        raise ValueError("Unpinned reviewed material inputs are refused")
     home = lab / "home"
     home.mkdir()
     env = child_environment(home)
@@ -322,7 +431,9 @@ def main():
     ops = lab / "operations.json"
     ops.write_text(json.dumps({"schemaVersion": 1,
         "kind": "rt-private-runtime-operation-input-v1", "cacheRoots": cache_roots,
-        "seedReports": {}, "sourceReceipt": str(receipt)}), encoding="utf-8")
+        "seedReports": {}, "sourceReceipt": str(receipt),
+        "reviewedMaterialsRoot": material_root,
+        "reviewedMaterialsArchive": material_archive}), encoding="utf-8")
     work = lab / "prepare"
     handoff = lab / "handoff.json"
     log = proof / "prepare.log"
@@ -366,6 +477,11 @@ def main():
         "resources/python-runtime/pywencai_adapter.py", "scripts/build-mootdx-compat-wheel.py",
         "scripts/build-provider-source-wheels.py", "scripts/rebuild-lxml-native.py",
         "scripts/build-lxml-redistribution-wheel.py", "scripts/build-lxml-matched-public-source.py",
+        "scripts/build-akshare-node-wheel.py", "scripts/build-private-node-js-runtime-wheel.py",
+        "scripts/private-node-js-runtime/rt_private_node_js_runtime/__init__.py",
+        "scripts/private-node-js-runtime/rt_private_node_js_runtime/worker.cjs", "LICENSE",
+        "resources/python-runtime/reviewed-materials/fetch-runtime-license-materials-ci.py",
+        "resources/python-runtime/reviewed-materials/runtime-license-materials.json",
         "scripts/run-private-runtime-prepare-ci.py",
         "scripts/collect-private-runtime-ci-source.py", ".github/workflows/private-runtime-prepare-native.yml")
     summary = {"kind": "rt-private-runtime-native-preparation-candidate-v1",

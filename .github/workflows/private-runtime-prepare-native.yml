@@ -11,6 +11,11 @@ on:
       - scripts/prepare-private-python-runtime.py
       - scripts/build-provider-source-wheels.py
       - scripts/build-mootdx-compat-wheel.py
+      - scripts/build-akshare-node-wheel.py
+      - scripts/build-private-node-js-runtime-wheel.py
+      - scripts/private-node-js-runtime/**
+      - resources/python-runtime/reviewed-materials/**
+      - LICENSE
       - scripts/rebuild-lxml-native.py
       - scripts/build-lxml-redistribution-wheel.py
       - scripts/build-lxml-matched-public-source.py
@@ -87,6 +92,14 @@ jobs:
             --target "$RT_TARGET" \
             --derived-dir "$RUNNER_TEMP/rt-lxml-reuse/lxml-native-consumer-proof/derived" \
             --work-root "$RUNNER_TEMP/rt-private-inputs" "$@"
+      - name: Reuse exact reviewed public license materials
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: hzqedison/RT-ResearchFlow
+          run-id: 37945573000
+          name: runtime-reviewed-public-materials
+          path: ${{ runner.temp }}/rt-reviewed-materials
       - name: Use private PBS for actual native resolve and materialize
         shell: bash
         env:
@@ -97,6 +110,7 @@ jobs:
           --target "$RT_TARGET"
           --proof-dir "$RUNNER_TEMP/private-runtime-prepare-proof"
           --retain-payload
+          --reviewed-materials-root "$RUNNER_TEMP/rt-reviewed-materials"
           --cache-root "$RUNNER_TEMP/rt-private-inputs/private-cache"
       - name: Preserve unapproved native inputs and evidence for checked assembly
         if: always()
