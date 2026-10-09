@@ -247,10 +247,19 @@ function mergeFromIndex({ index, policyBytes }) {
   const lockBytes = preparationBytes(lock), projectedLockSha256 = sha(lockBytes)
   const formalLockSha256 = finalized.structuralValidationPassed ? projectedLockSha256 : null
   if (formalLockSha256) for (const target of TARGETS) bindings[target].formalLockSha256 = formalLockSha256
-  const missingLicenseComponents = TARGETS.flatMap(target =>
-    Object.entries(platforms[target].providers).flatMap(([provider, value]) =>
+  const missingLicenseComponents = TARGETS.flatMap(target => {
+    const platform = platforms[target]
+    const runtimes = ['python', 'node'].flatMap(runtime => {
+      const value = platform[runtime]
+      return value.licenses.length === 0
+        ? [{ target, runtime, component: value.distribution || runtime, version: value.version, artifactSha256: value.asset.sha256 }]
+        : []
+    })
+    const wheels = Object.entries(platform.providers).flatMap(([provider, value]) =>
       value.wheels.filter(wheel => wheel.licenses.length === 0).map(wheel =>
-        ({ target, provider, component: wheel.distribution, version: wheel.version, artifactSha256: wheel.asset.sha256 }))))
+        ({ target, provider, component: wheel.distribution, version: wheel.version, artifactSha256: wheel.asset.sha256 })))
+    return [...runtimes, ...wheels]
+  })
   const receipt = { schemaVersion: 1, kind: 'rt-private-runtime-structural-merge-receipt-v1',
     structuralOnly: true, releaseEligible: false, sourceVerified: false, nativeBootstrapVerified: false,
     preparationPolicySha256: policySha256, sourceCommit: index.sourceCommit, prepareRunId: index.runId,
