@@ -95,7 +95,8 @@ function childCapture(executable, args, options, timeout, outCap, errCap, compil
 const WINDOWS_LOADER = String.raw`$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';[Console]::InputEncoding=[Text.UTF8Encoding]::new($false);[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);
 function QuoteArg([string]$v){'"'+[regex]::Replace([regex]::Replace($v,'(\\*)"','$1$1\"'),'(\\+)$','$1$1')+'"'}
 try {
-  $body=[Console]::In.ReadToEnd()|ConvertFrom-Json;
+  $phase=[IO.Path]::Combine([Environment]::CurrentDirectory,'rt-loader-phase');[IO.File]::WriteAllText($phase,'input-wait');
+  $body=[Console]::In.ReadToEnd()|ConvertFrom-Json;[IO.File]::WriteAllText($phase,'payload-read');
   $start=[Diagnostics.ProcessStartInfo]::new([string]$body.executable);
   $start.Arguments=(($body.args|ForEach-Object {QuoteArg ([string]$_)}) -join ' ');
   $start.WorkingDirectory=[string]$body.cwd;
@@ -104,12 +105,12 @@ try {
   $start.EnvironmentVariables.Clear();
   foreach($p in $body.env.psobject.Properties){$start.EnvironmentVariables[$p.Name]=[string]$p.Value}
   $start.EnvironmentVariables['SystemRoot']=$env:SystemRoot;$start.EnvironmentVariables['WINDIR']=$env:WINDIR;
-  $proc=[Diagnostics.Process]::new();$proc.StartInfo=$start;[void]$proc.Start();
+  $proc=[Diagnostics.Process]::new();$proc.StartInfo=$start;[void]$proc.Start();[IO.File]::WriteAllText($phase,'process-started');
   $out=$proc.StandardOutput.BaseStream.CopyToAsync([Console]::OpenStandardOutput());
   $err=$proc.StandardError.BaseStream.CopyToAsync([Console]::OpenStandardError());
   $inputBytes=[Convert]::FromBase64String([string]$body.inputBase64);
-  $proc.StandardInput.BaseStream.Write($inputBytes,0,$inputBytes.Length);$proc.StandardInput.Close();
-  $proc.WaitForExit();$code=$proc.ExitCode;[Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($out,$err));$proc.Dispose();exit $code
+  $proc.StandardInput.BaseStream.Write($inputBytes,0,$inputBytes.Length);$proc.StandardInput.Close();[IO.File]::WriteAllText($phase,'input-sent');
+  $proc.WaitForExit();[IO.File]::WriteAllText($phase,'process-exited');$code=$proc.ExitCode;[Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($out,$err));[IO.File]::WriteAllText($phase,'streams-drained');$proc.Dispose();exit $code
 }catch{exit 124}`
 async function runWindows(spec) {
   const pin = spec.nativeHostSource

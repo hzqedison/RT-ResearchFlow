@@ -70,6 +70,14 @@ public static class RTPrivateRuntimeOwnedJobHost {
       if(rule.AccessControlType==AccessControlType.Allow && sid!=user && sid!="S-1-5-18" && sid!="S-1-5-32-544")throw new IOException("cache-acl");
     }
   }
+  static string LoaderPhase(string root) {
+    try {
+      string path=Path.Combine(root,"rt-loader-phase");
+      if(!File.Exists(path) || (File.GetAttributes(path)&FileAttributes.ReparsePoint)!=0 || new FileInfo(path).Length>32)return "not-observed";
+      string phase=File.ReadAllText(path);
+      return "|input-wait|payload-read|process-started|input-sent|process-exited|streams-drained|".IndexOf("|"+phase+"|",StringComparison.Ordinal)>=0?phase:"not-observed";
+    }catch{return "not-observed";}
+  }
   static void Drain(Stream input,Stream output,int cap) {
     var buffer=new byte[4096];int total=0,count;
     try{while((count=input.Read(buffer,0,buffer.Length))>0){total+=count;if(total>cap){Interlocked.Exchange(ref failed,1);return;}if(output!=null){output.Write(buffer,0,count);output.Flush();}else{Interlocked.Add(ref stderrBytes,count);}}}
@@ -101,7 +109,7 @@ public static class RTPrivateRuntimeOwnedJobHost {
       var error=Task.Factory.StartNew(()=>Drain(process.StandardError.BaseStream,null,8192));
       process.StandardInput.BaseStream.Write(input,0,input.Length);process.StandardInput.BaseStream.Flush();process.StandardInput.Close();
       var clock=Stopwatch.StartNew();
-      while(!process.WaitForExit(10)){if(Interlocked.CompareExchange(ref failed,0,0)!=0)throw new IOException("pipe-io");if(clock.ElapsedMilliseconds>=deadline)throw new IOException("child-deadline");}
+      while(!process.WaitForExit(10)){if(Interlocked.CompareExchange(ref failed,0,0)!=0)throw new IOException("pipe-io");if(clock.ElapsedMilliseconds>=deadline)throw new IOException("child-deadline-"+LoaderPhase(args[1]));}
       int code=process.ExitCode;
       // Root exit alone is insufficient. Query the live owned Job, retaining
       // its handle until the kernel has observed every member exit.
@@ -120,7 +128,7 @@ public static class RTPrivateRuntimeOwnedJobHost {
     }catch(Exception error){
       // Only internally fixed codes are returned. Never print native exception
       // text containing a local path, script, environment or credential.
-      string known="|arguments|deadline|nonce|cache-root|cache-reparse|cache-not-empty|cache-owner|cache-acl|input-cap|windows-directory|create-job|job-limits|assign-job|child-deadline|query-job|leftover-descendant|pipe-drain|pipe-io|child-stderr|";
+      string known="|arguments|deadline|nonce|cache-root|cache-reparse|cache-not-empty|cache-owner|cache-acl|input-cap|windows-directory|create-job|job-limits|assign-job|child-deadline-not-observed|child-deadline-input-wait|child-deadline-payload-read|child-deadline-process-started|child-deadline-input-sent|child-deadline-process-exited|child-deadline-streams-drained|query-job|leftover-descendant|pipe-drain|pipe-io|child-stderr|";
       string code=known.IndexOf("|"+error.Message+"|",StringComparison.Ordinal)>=0?error.Message:"native-operation";
       Console.Error.Write("RT_PRIVATE_RUNTIME_JOB_HOST_FAILED:"+code);return 124;
     }
