@@ -3,7 +3,7 @@
 
 Policy is a read-only human input. Missing reviewed pins/licenses produce
 PRIVATE_RUNTIME_PENDING, never invented URLs, approvals or a locked manifest.
-Only the two existing hash-approved recipes may execute. Preparation and
+Only hash-approved recipes may execute; retained native inputs are not rebuilt. Preparation and
 final assembler/bootstrap acceptance are deliberately different gates.
 
 Candidate kinds in this file are NOT the official runtime manifest schema.
@@ -49,7 +49,9 @@ ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "resources/python-runtime/preparation.policy.json"
 TARGETS = ("win32-x64", "darwin-arm64", "darwin-x64")
 PROVIDERS = ("akshare", "mootdx", "pywencai")
-RECIPES = {"scripts/build-provider-source-wheels.py", "scripts/build-mootdx-compat-wheel.py"}
+RECIPES = {"scripts/build-provider-source-wheels.py", "scripts/build-mootdx-compat-wheel.py",
+           "scripts/rebuild-lxml-native.py", "scripts/build-lxml-redistribution-wheel.py",
+           "scripts/build-lxml-matched-public-source.py"}
 SHA = re.compile(r"^[a-f0-9]{64}$")
 MAX_ASSET = 1_500_000_000
 MAX_EXPANSION = 3_000_000_000
@@ -110,10 +112,13 @@ def asset(value, download_only=False):
         raise Invalid("Invalid asset size")
     if value["kind"] == "download":
         parsed = urllib.parse.urlsplit(value["url"])
+        url_name = urllib.parse.unquote(parsed.path.rsplit("/", 1)[-1])
+        reviewed_alias = any(value == {key: content for key, content in item.items() if key != "id"}
+                             for item in globals().get("REVIEWED_LXML_WINDOWS_SOURCES", ()))
         if (parsed.scheme != "https" or not parsed.hostname or parsed.username is not None
                 or parsed.password is not None or parsed.query or parsed.fragment
                 or parsed.port not in {None, 443}
-                or urllib.parse.unquote(parsed.path.rsplit("/", 1)[-1]) != value["filename"]):
+                or (url_name != value["filename"] and not reviewed_alias)):
             raise Invalid("Unsafe/mismatched download URL")
     return value
 
@@ -127,6 +132,99 @@ def official(value, policy):
     decoded = urllib.parse.unquote(parsed.path)
     if any(part in {".", ".."} for part in decoded.split("/")):
         raise Invalid("Download URL escapes its official prefix")
+    return value
+
+
+REVIEWED_LICENSE_SUPPLEMENTS = {
+    "tix": {
+        "asset": {"kind": "download", "filename": "tix-8.4.3.6.tar.gz", "size": 1836451,
+                  "sha256": "f7b21d115867a41ae5fd7c635a4c234d3ca25126c3661eb36028c6e25601f85e",
+                  "url": "https://github.com/python/cpython-source-deps/archive/tix-8.4.3.6.tar.gz"},
+        "archivePrefix": "cpython-source-deps-tix-8.4.3.6",
+        "members": [
+            {"sourceMember": "cpython-source-deps-tix-8.4.3.6/docs/license.html_lib",
+             "target": "licenses/tix-8.4.3.6/docs/license.html_lib",
+             "sha256": "9149f81c6efd1c3cef68742b67dc6f1b6211f32f425f3b6d24cf5279668cfd27"},
+            {"sourceMember": "cpython-source-deps-tix-8.4.3.6/docs/license.tcltk",
+             "target": "licenses/tix-8.4.3.6/docs/license.tcltk",
+             "sha256": "def74f610b8682dd12a772954ee8ad07d304cdf106abb6e030f71ee489419d1a"},
+            {"sourceMember": "cpython-source-deps-tix-8.4.3.6/license.terms",
+             "target": "licenses/tix-8.4.3.6/license.terms",
+             "sha256": "91ff35309038fcfab853c8634b7b743a179c211d8ff3cb174b579c8af3c3072d"}]},
+    "libzmq": {
+        "asset": {"kind": "download", "filename": "zeromq-4.3.5.tar.gz", "size": 2530237,
+                  "sha256": "6653ef5910f17954861fe72332e68b03ca6e4d9c7160eb3a8de5a5a913bfab43",
+                  "url": "https://github.com/zeromq/libzmq/releases/download/v4.3.5/zeromq-4.3.5.tar.gz"},
+        "target": "licenses/sources/zeromq-4.3.5.tar.gz"},
+    "notice": {"target": "licenses/third-party/runtime-NOTICES.txt"}}
+
+REVIEWED_DISTRIBUTION_SCOPE = {
+    "kind": "rt-private-runtime-limited-purpose-review-v1",
+    "purpose": "noncommercial-open-source-learning-and-testing",
+    "commercialUse": "not-reviewed-or-promised",
+    "wholeProductLicense": "unchanged",
+    "reviewReference": "resources/python-runtime/license-review.md#astra-license-applicability-t-20261009"}
+
+REVIEWED_LXML_WINDOWS_SOURCES = [
+    {"id": "lxml", "kind": "download", "filename": "lxml-6.1.3.tar.gz", "size": 4211198,
+     "sha256": "45222d94ddd511536f3b2f7d9deae3b2339b4ce0f075f1ca25703b07cad9dd21",
+     "url": "https://files.pythonhosted.org/packages/23/ad/28ecd7cb894d172f3c9c80a075eeeb2017ac62e3632cee05a5f9493547eb/lxml-6.1.3.tar.gz"},
+    {"id": "libiconv", "kind": "download", "filename": "libiconv-880a1fa8.tar.gz", "size": 5313881,
+     "sha256": "89dd45d7f074ddae04dcd25cc4ceace3432c04b72dc36a6508854aac713f3eb6",
+     "url": "https://github.com/winlibs/libiconv/archive/880a1fa8b5581e37e136a7b051947d3ea39097b6.tar.gz"},
+    {"id": "libxml2", "kind": "download", "filename": "libxml2-bb846788.tar.gz", "size": 4225102,
+     "sha256": "5182396205f97b183d34ab8dadd7693523c7d4e2137394aec02514a5a9a9dcf0",
+     "url": "https://github.com/winlibs/libxml2/archive/bb84678855e3407fc88180295c992f9c984e28e0.tar.gz"},
+    {"id": "libxslt", "kind": "download", "filename": "libxslt-c0076eaa.tar.gz", "size": 2705214,
+     "sha256": "d687aaf48527e042d942dccbc74fbcd150588522305e63d3e91785d9b6590677",
+     "url": "https://github.com/winlibs/libxslt/archive/c0076eaa6e0d1f99e01107e8db225a308eb1e543.tar.gz"},
+    {"id": "zlib", "kind": "download", "filename": "zlib-0089522e.tar.gz", "size": 1559272,
+     "sha256": "e2af9f28fcdf723e464b40af73fdeed07ce3e581a9ea110702c1ba733983f8a0",
+     "url": "https://github.com/winlibs/zlib/archive/0089522e62e6b5d4950e62bd20f0cb06a9288413.tar.gz"},
+    {"id": "build-recipe", "kind": "download", "filename": "libxml2-win-binaries-4e8ae01f.tar.gz", "size": 4262,
+     "sha256": "cd155987f5269d04acb549d8664b50b1ea0bf3580e1ab709587a03e4bda4396e",
+     "url": "https://github.com/lxml/libxml2-win-binaries/archive/4e8ae01f61145dc823ce2ae1d79f06241b7b46de.tar.gz"}]
+
+LIMITED_PURPOSE_WHEELS = {
+    "mootdx": ("0.11.7+rt.1", "35f282624ed7a2a6908b4b847fba9119e7fb376cd00797606ee5ee97b6139f77",
+               {"AUTHORS.rst": "6e7b7bde9bf124e306122b8aabe46eb81e12a37ea74777d708b79c958aab051c",
+                "LICENSE": "ee03a051e103766e566b0a3ac0532daa665bb063cf8f30de46fd7c7ac9d00ec6",
+                "METADATA": "2396fc7f7d0ef66a10131945db5bac5e42243df2aa2efad87f6d26770b400521"}),
+    "tdxpy": ("0.2.7", "5514d35608fac2c7b2acf693de6f41ba7ccda58207b65a3f374c89887560737c",
+              {"LICENSE": "fd2d2d610584198f900995e2d3ce121a2fd50c61416a74bb3de40cc88dffa2dd",
+               "METADATA": "e2763ae0262af4f042ea0e817f9c4252cd291caa589d0586b818e002f0ca8100"})}
+
+BDB_CODE_PATH = re.compile(r"(?:^|/)(?:_?bsddb3?|berkeleydb|libdb(?:[-_.][0-9]+)?)(?:[./]|$)|(?:^|/)(?:libdb|db[0-9]*)[^/]*\.(?:dll|so(?:\.[0-9]+)*|dylib|a|lib)$", re.I)
+TIX_COMPONENT_NAME = re.compile(r"(?:lib)?tix(?:[0-9][0-9._-]*)?", re.I)
+TIX_NATIVE_OR_SCRIPT = re.compile(r"(?:lib)?tix(?:[0-9][0-9._-]*)?\.(?:dll|so(?:\.[0-9]+)*|dylib|a|lib|tcl|py)$", re.I)
+
+
+def tix_component_path(path):
+    parts = path.split("/")
+    return any(TIX_COMPONENT_NAME.fullmatch(part) for part in parts[:-1]) or bool(TIX_NATIVE_OR_SCRIPT.fullmatch(parts[-1]))
+
+
+def bdb_build_reference(metadata):
+    """Only linked core/extensions, not historical license or stdlib-test names."""
+    build = metadata.get("build_info")
+    core = build.get("core") if isinstance(build, dict) else None
+    extensions = build.get("extensions") if isinstance(build, dict) else None
+    loading = metadata.get("python_extension_module_loading")
+    if (not isinstance(core, dict) or not {"links", "objs", "shared_lib"} <= core.keys()
+            or not isinstance(core["links"], list) or not isinstance(core["objs"], list)
+            or not isinstance(extensions, dict) or not isinstance(loading, (dict, list))):
+        return None  # Incomplete build facts cannot prove target absence.
+    linked = {"core": core, "extensions": extensions, "extensionLoading": loading}
+    raw = json.dumps(linked, sort_keys=True)
+    return bool(re.search(r"(?i)(?:^|[^a-z0-9])(?:_?bsddb3?|berkeley[._-]?db|libdb(?:[._-]?[0-9]+)?|db(?:[._-]?[0-9]+)?)(?=$|[^a-z0-9])", raw))
+
+
+def reviewed_license_supplements(policy):
+    value = policy.get("licenseSupplements")
+    if value != REVIEWED_LICENSE_SUPPLEMENTS:
+        raise Invalid("Exact reviewed Tix/libzmq/NOTICE supplement pins are required")
+    for name in ("tix", "libzmq"):
+        official(value[name]["asset"], policy)
     return value
 
 
@@ -171,6 +269,13 @@ def load_policy(path):
         if key in seen_provenance:
             raise Invalid("Duplicate exact metadata provenance record")
         seen_provenance.add(key)
+    reviewed_license_supplements(policy)
+    if policy.get("distributionUseScope") != REVIEWED_DISTRIBUTION_SCOPE:
+        raise Invalid("Exact limited-purpose distribution scope is required")
+    if policy.get("lxmlWindowsSourceMaterials") != REVIEWED_LXML_WINDOWS_SOURCES:
+        raise Invalid("Exact reviewed Windows lxml source archive pins are required")
+    for item in REVIEWED_LXML_WINDOWS_SOURCES:
+        official({key: value for key, value in item.items() if key != "id"}, policy)
     recipes = policy.get("recipePins", [])
     if len({item.get("path") for item in recipes}) != len(recipes):
         raise Invalid("Duplicate recipe pin")
@@ -195,6 +300,8 @@ def load_policy(path):
                 or pin["asset"].get("sha256") != MAC_DEBUGPY_COMPAT_SHA):
             raise Invalid("Mac debugpy original wheel compatibility evidence differs")
         official(pin["asset"], policy)
+    for target in policy.get("targets", {}):
+        derived_wheels(policy, target)
     return policy, digest(raw)
 
 
@@ -217,7 +324,243 @@ def wheel_contract(wheel, policy):
             or derived["patchSha256"] != recipe["sha256"]):
         raise Invalid("Derived source/recipe pins disagree")
     relative(recipe["path"])
+    native_build_assets(wheel)
+    if (wheel.get("nativeBuildInputs") or {}).get("kind") == "rt-lxml-redistribution-inputs-v1":
+        source_recipe = wheel["nativeBuildInputs"]["sourceRecipe"]
+        if source_recipe not in policy.get("recipePins", []) or source_recipe["path"] != "scripts/build-lxml-matched-public-source.py":
+            raise Invalid("Public source recipe is not independently pinned")
     return wheel
+
+
+def native_build_assets(wheel, target=None):
+    """Retained, policy-pinned inputs; this is not a license/build approval."""
+    inputs = wheel.get("nativeBuildInputs")
+    if inputs is None:
+        return []
+    if not isinstance(inputs, dict):
+        raise Invalid("Native input provenance must be an object")
+    if inputs.get("kind") == "rt-lxml-redistribution-inputs-v1":
+        if (inputs.get("target") not in TARGETS or (target is not None and inputs["target"] != target)
+                or inputs.get("selectedAssetSha256") != wheel["asset"]["sha256"]
+                or inputs.get("nativeRecompiled") is not False
+                or inputs.get("originalSdistRedistributed") is not False
+                or inputs.get("excludedNamespace") != "lxml/isoschematron/**"
+                or wheel["derived"]["recipe"]["path"] != "scripts/build-lxml-redistribution-wheel.py"
+                or not isinstance(inputs.get("sourceRecipe"), dict)
+                or not isinstance(inputs.get("nativeMemberPins"), list) or not inputs["nativeMemberPins"]
+                or not isinstance(inputs.get("noticePins"), list) or not inputs["noticePins"]):
+            raise Invalid("Incomplete matched redistribution input provenance")
+        values = [inputs["publicSourceAsset"], inputs["originalWheelAsset"], inputs["originalSourceAsset"]]
+        names = set()
+        for value in values:
+            asset(value)
+            if value["filename"] in names:
+                raise Invalid("Conflicting redistribution input names")
+            names.add(value["filename"])
+        if (inputs["publicSourceAsset"]["kind"] != "derived"
+                or not inputs["publicSourceAsset"]["filename"].endswith(".zip")
+                or inputs["originalWheelAsset"]["kind"] != "derived"
+                or not inputs["originalWheelAsset"]["filename"].endswith(".whl.proof")):
+            raise Invalid("Public source or private original-wheel proof is invalid")
+        for key in ("nativeMemberPins", "noticePins"):
+            seen = set()
+            for pin in inputs[key]:
+                if (relative(pin["path"]) != pin["path"] or pin["path"] in seen
+                        or not SHA.fullmatch(str(pin.get("sha256")))
+                        or type(pin.get("size")) is not int or pin["size"] < 0):
+                    raise Invalid("Invalid redistribution member pin")
+                seen.add(pin["path"])
+                if key == "noticePins" and wheel["notices"].get(pin["path"]) != pin["sha256"]:
+                    raise Invalid("Redistribution notice pin mismatch")
+        return values
+    if (not isinstance(inputs, dict)
+            or inputs.get("kind") != "rt-lxml-retained-native-build-inputs-v1"
+            or inputs.get("target") not in TARGETS
+            or (target is not None and inputs["target"] != target)
+            or inputs.get("mode") != "retained-native-build-not-byte-identical-reproduction"
+            or inputs.get("defaultProductAssetSha256") != wheel["asset"]["sha256"]
+            or inputs.get("currentRecipeSha256") != wheel["derived"]["recipe"]["sha256"]
+            or inputs.get("relinkDefaultProductInput") is not False
+            or not all(text(inputs.get(key)) for key in
+                       ("selectedVariant", "targetLabel", "currentRecipeRole",
+                        "originalWheelReproduction", "policyDecision", "sourceMaterialsRetention"))
+            or not all(SHA.fullmatch(str(inputs.get(key))) for key in
+                       ("selectionSha256", "manifestSha256", "binaryProducerWrapperSha256"))):
+        raise Invalid("Incomplete or conflicting retained native provenance")
+    values = inputs.get("assets")
+    if not isinstance(values, list) or not values:
+        raise Invalid("Retained native materials are required")
+    names = set()
+    for value in values:
+        asset(value)
+        if value["kind"] != "derived" or value["filename"] in names or value["filename"].endswith(".whl"):
+            raise Invalid("Native ancillary input must be unique and not pip-discoverable")
+        names.add(value["filename"])
+    for key in ("sourceMaterialsAsset", "relinkProofAsset"):
+        if inputs.get(key) not in values:
+            raise Invalid("Complete source materials and proof must be retained inputs")
+    if (not inputs["sourceMaterialsAsset"]["filename"].endswith(".zip")
+            or not inputs["relinkProofAsset"]["filename"].endswith(".whl.proof")
+            or not isinstance(inputs.get("relinkOriginalWheelFilename"), str)
+            or inputs["relinkOriginalWheelFilename"] + ".proof" != inputs["relinkProofAsset"]["filename"]
+            or not {"source-materials-summary.json", "REBUILD.md"} <= names):
+        raise Invalid("Full source archive, summary, rebuild instructions and proof are required")
+    for key in ("nativeMemberPins", "noticePins"):
+        pins = inputs.get(key)
+        if not isinstance(pins, list) or not pins:
+            raise Invalid("Retained native members and notices require exact pins")
+        seen = set()
+        for pin in pins:
+            if (not isinstance(pin, dict) or not isinstance(pin.get("path"), str)
+                    or relative(pin["path"]) != pin["path"] or pin["path"] in seen
+                    or not SHA.fullmatch(str(pin.get("sha256")))
+                    or type(pin.get("size")) is not int or pin["size"] < 0):
+                raise Invalid("Invalid retained native member pin")
+            seen.add(pin["path"])
+            if key == "noticePins" and wheel.get("notices", {}).get(pin["path"]) != pin["sha256"]:
+                raise Invalid("Retained notice pin differs from selected wheel")
+    return values
+
+
+def derived_wheels(policy, target):
+    """Global source recipes plus this target's independently pinned native inputs."""
+    if target not in TARGETS or target not in policy.get("targets", {}):
+        raise Invalid("Unsupported native target")
+    scoped = policy["targets"][target].get("derivedWheels", [])
+    global_wheels = policy.get("derivedWheels", [])
+    if not isinstance(scoped, list) or not isinstance(global_wheels, list):
+        raise Invalid("Derived wheel selections must be lists")
+    result, names, filenames = [], set(), set()
+    for wheel in global_wheels + scoped:
+        wheel_contract(wheel, policy)
+        if wheel["asset"]["kind"] != "derived":
+            raise Invalid("Derived selection cannot contain a download wheel")
+        name = re.sub(r"[-_.]+", "-", wheel["distribution"]).lower()
+        if name in names or wheel["asset"]["filename"] in filenames:
+            raise Invalid("Duplicate target derived distribution or asset")
+        if wheel in scoped:
+            if not native_build_assets(wheel, target):
+                raise Invalid("Target derived wheel requires native input provenance")
+        elif wheel.get("nativeBuildInputs") is not None:
+            raise Invalid("Native derived selection must be target-scoped")
+        names.add(name)
+        filenames.add(wheel["asset"]["filename"])
+        result.append(wheel)
+    return result
+
+
+def redistribution_receipt(wheel, assets, work, policy, execute=False):
+    """Offline repack only; historical C/native build inputs are never executed."""
+    inputs = wheel["nativeBuildInputs"]
+    values = native_build_assets(wheel, inputs["target"])
+    approved = next((item for item in derived_wheels(policy, inputs["target"])
+                     if item["asset"] == wheel["asset"]), None)
+    if approved != wheel:
+        raise Invalid("Redistribution wheel differs from this target's policy")
+    for value in values:
+        verified_asset(assets, value)
+    original = verified_asset(assets, inputs["originalWheelAsset"])
+    source = verified_asset(assets, inputs["publicSourceAsset"])
+    with zipfile.ZipFile(source) as archive:
+        manifest = json.loads(archive.read("RT_PUBLIC_SOURCE_MANIFEST.json"))
+        if (manifest.get("kind") != "rt-lxml-matched-public-source-v1"
+                or manifest.get("target") != inputs["target"]
+                or manifest.get("matchedDistributionVersion") != wheel["version"]
+                or manifest.get("originalWheelSha256") != inputs["originalWheelAsset"]["sha256"]
+                or manifest.get("originalArchive", {}).get("sha256") != inputs["originalSourceAsset"]["sha256"]
+                or manifest.get("originalLxmlSdistSha256") != wheel["derived"]["upstreamSha256"]
+                or manifest.get("originalLxmlSdistRedistributed") is not False
+                or manifest.get("isoSchematronProvided") is not False
+                or manifest.get("nativeRecompiled") is not False):
+            raise Invalid("Public source does not match the selected target/input")
+    snapshot = recipe_snapshot(assets, wheel["derived"]["recipe"], policy)
+    recipe_snapshot(assets, inputs["sourceRecipe"], policy)
+    if execute:
+        name = "rt_reviewed_repack_" + wheel["derived"]["recipe"]["sha256"]
+        spec = importlib.util.spec_from_file_location(name, snapshot)
+        module = importlib.util.module_from_spec(spec)
+        previous = sys.dont_write_bytecode
+        try:
+            sys.dont_write_bytecode = True
+            spec.loader.exec_module(module)
+            if module.PINS[inputs["target"]][:2] != (inputs["originalWheelFilename"], inputs["originalWheelAsset"]["sha256"]):
+                raise Invalid("Repack recipe does not bind the selected original artifact")
+            source_pin = {"filename": source.name, "sha256": inputs["publicSourceAsset"]["sha256"],
+                          "size": inputs["publicSourceAsset"]["size"], "target": inputs["target"],
+                          "originalWheelSha256": inputs["originalWheelAsset"]["sha256"]}
+            data, _ = module.repack_bytes(original.read_bytes(), inputs["target"], source_pin)
+        finally:
+            sys.dont_write_bytecode = previous
+        if digest(data) != wheel["asset"]["sha256"] or len(data) != wheel["asset"]["size"]:
+            raise Invalid("Actual deterministic repack differs from the selected wheel")
+        exclusive_bytes(Path(assets) / wheel["asset"]["filename"], data)
+    path = verified_asset(assets, wheel["asset"])
+    actual = read_wheel(path)
+    if any(wheel.get(key) != fact for key, fact in actual.items()):
+        raise Invalid("Redistribution wheel metadata/notices differ")
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+        if any("isoschematron" in name.lower().split("/") for name in names):
+            raise Invalid("Excluded optional namespace is present")
+        native = {name for name in names if name.endswith((".pyd", ".dll", ".so", ".dylib"))}
+        if native != {pin["path"] for pin in inputs["nativeMemberPins"]}:
+            raise Invalid("Redistribution native member set differs")
+        for pin in inputs["nativeMemberPins"] + inputs["noticePins"]:
+            data = archive.read(pin["path"])
+            if len(data) != pin["size"] or digest(data) != pin["sha256"]:
+                raise Invalid("Redistribution member bytes differ")
+        proof = json.loads(archive.read("lxml-" + wheel["version"] + ".dist-info/RT_REDISTRIBUTION.json"))
+        if (proof.get("target") != inputs["target"] or proof.get("nativeRecompiled") is not False
+                or proof.get("originalWheelSha256") != inputs["originalWheelAsset"]["sha256"]
+                or proof.get("publicSource", {}).get("sha256") != inputs["publicSourceAsset"]["sha256"]):
+            raise Invalid("Wheel public-source provenance differs")
+    return {"kind": "rt-private-wheel-reproduction", "wheelSha256": wheel["asset"]["sha256"],
+            "wheelSize": wheel["asset"]["size"], "upstreamSha256": wheel["derived"]["upstreamSha256"],
+            "recipeSha256": wheel["derived"]["recipe"]["sha256"], "executed": execute,
+            "executedThisOperation": False, "repackExecutedThisOperation": execute,
+            "nativeBuildExecutedThisOperation": False, "nativeBuildInputs": inputs,
+            "extraUpstreamInputs": values, "releaseApproval": False}
+
+
+def retained_native_receipt(wheel, assets, policy):
+    """Verify retained native bytes without importing a recipe or claiming a build."""
+    if wheel["nativeBuildInputs"]["kind"] == "rt-lxml-redistribution-inputs-v1":
+        return redistribution_receipt(wheel, assets, None, policy)
+    values = native_build_assets(wheel)
+    if not values:
+        raise Invalid("Retained native input provenance missing")
+    approved = next((item for item in derived_wheels(policy, wheel["nativeBuildInputs"]["target"])
+                     if item["asset"] == wheel["asset"]), None)
+    if approved != wheel:
+        raise Invalid("Retained native wheel differs from target policy")
+    path = verified_asset(assets, wheel["asset"])
+    actual = read_wheel(path)
+    if any(wheel.get(key) != fact for key, fact in actual.items()):
+        raise Invalid("Retained wheel metadata/notices differ from policy")
+    for value in values:
+        verified_asset(assets, value)
+    inputs = wheel["nativeBuildInputs"]
+    with zipfile.ZipFile(path) as archive:
+        native_names = {name for name in archive.namelist()
+                        if name.lower().endswith((".pyd", ".dll", ".so", ".dylib"))}
+        if native_names != {pin["path"] for pin in inputs["nativeMemberPins"]}:
+            raise Invalid("Retained native member set differs from policy")
+        for pin in inputs["nativeMemberPins"] + inputs["noticePins"]:
+            data = archive.read(pin["path"])
+            if len(data) != pin["size"] or digest(data) != pin["sha256"]:
+                raise Invalid("Retained native member/notice bytes differ")
+    # The proof is evidence only, never a second installable wheel in --find-links.
+    read_wheel(verified_asset(assets, inputs["relinkProofAsset"]))
+    return {"kind": "rt-private-wheel-reproduction",
+            "upstreamSha256": wheel["derived"]["upstreamSha256"],
+            "recipeSha256": wheel["derived"]["recipe"]["sha256"],
+            "wheelSha256": wheel["asset"]["sha256"], "wheelSize": wheel["asset"]["size"],
+            "executed": False, "executedThisOperation": False,
+            "mode": inputs["mode"], "nativeBuildInputs": inputs,
+            "inputOrigin": {"selectionSha256": inputs["selectionSha256"],
+                            "binaryProducerWrapperSha256": inputs["binaryProducerWrapperSha256"],
+                            "currentRecipeRole": inputs["currentRecipeRole"]},
+            "extraUpstreamInputs": values, "releaseApproval": False}
 
 
 def verified_asset(root, value):
@@ -455,7 +798,7 @@ def fetch(value, destination, policy):
     request = urllib.request.Request(value["url"], headers={"User-Agent": "RT-ResearchFlow-private-runtime-preparation/1"})
     with urllib.request.urlopen(request, timeout=60) as response:
         final = urllib.parse.urlsplit(response.geturl())
-        if final.scheme != "https" or final.hostname not in {"github.com", "release-assets.githubusercontent.com", "nodejs.org", "files.pythonhosted.org"}:
+        if final.scheme != "https" or final.hostname not in {"github.com", "codeload.github.com", "release-assets.githubusercontent.com", "nodejs.org", "files.pythonhosted.org"}:
             raise Invalid("Unapproved download redirect")
         data = response.read(value["size"] + 1)
     if len(data) != value["size"] or digest(data) != value["sha256"]:
@@ -485,6 +828,10 @@ def reproduce(wheel, assets, work, policy):
     provenance = wheel["derived"]
     source = verified_asset(assets, provenance["upstreamAsset"])
     snapshot = recipe_snapshot(assets, provenance["recipe"], policy)
+    if (wheel.get("nativeBuildInputs") or {}).get("kind") == "rt-lxml-redistribution-inputs-v1":
+        return redistribution_receipt(wheel, assets, work, policy, execute=True)
+    if wheel.get("nativeBuildInputs") is not None:
+        return retained_native_receipt(wheel, assets, policy)
     name = "rt_reviewed_recipe_" + provenance["recipe"]["sha256"]
     spec = importlib.util.spec_from_file_location(name, snapshot)
     module = importlib.util.module_from_spec(spec)
@@ -559,7 +906,9 @@ def read_wheel(path):
     metadata = BytesParser().parsebytes(files[metadata_names[0]])
     wheel_metadata = BytesParser().parsebytes(files[info + "/WHEEL"])
     notices = {name: digest(data) for name, data in files.items()
-               if name.startswith(info + "/licenses/") or re.search(r"(?:^|/)(?:LICENSE|LICENCE|COPYING|NOTICE|AUTHORS)(?:[./_-]|$)", name, re.I)}
+               if name.startswith(info + "/licenses/")
+               or re.search(r"(?:^|/)(?:LICENSE|LICENCE|COPYING|NOTICE|AUTHORS)(?:[./_-]|$)", name, re.I)
+               or name.rsplit("/", 1)[-1].casefold() == "thirdpartynotices.txt"}
     # AUTHORS is attribution evidence, not a license grant. Approval still
     # requires the exact component/version/artifact/member digest review key.
     # Preserve the entire original description too (including noncommercial notices).
@@ -737,8 +1086,7 @@ def pending_inputs(policy, target):
     config = policy["targets"][target]
     for component in ("python", "node"):
         official(config[component]["asset"], policy)
-    for wheel in policy.get("derivedWheels", []):
-        wheel_contract(wheel, policy)
+    derived_wheels(policy, target)
     identities = {(wheel.get("distribution"), wheel.get("version")) for wheel in policy.get("derivedWheels", [])}
     if identities != {("jsonpath", "0.82.2"), ("PyExecJS", "1.5.1"), ("mootdx", "0.11.7+rt.1")}:
         pending.append("Exactly three reviewed derived wheels and their complete upstream pins are required")
@@ -917,11 +1265,21 @@ def resolve(policy, policy_sha, target, work_root, operation_input=None):
         acquire(config[component]["asset"], assets, policy, operations)
         for value in config[component].get("licenseSources", []):
             acquire(value, assets, policy, operations)
-    for wheel in policy["derivedWheels"]:
+    supplements = reviewed_license_supplements(policy)
+    for name in ("tix", "libzmq"):
+        acquire(supplements[name]["asset"], assets, policy, operations)
+    if target == "win32-x64":
+        for item in policy["lxmlWindowsSourceMaterials"]:
+            acquire({key: value for key, value in item.items() if key != "id"}, assets, policy, operations)
+    selected = derived_wheels(policy, target)
+    for wheel in selected:
         acquire(wheel["derived"]["upstreamAsset"], assets, policy, operations)
+        if wheel.get("nativeBuildInputs") is not None:
+            for value in [wheel["asset"]] + native_build_assets(wheel, target):
+                acquire(value, assets, policy, operations)
     acquire(policy["toolchain"][target]["licenseDecoder"]["asset"], assets, policy, operations)
     tools, tool_receipt = native_tools(config, policy, target, assets, work)
-    receipts = [reproduce(wheel, assets, work, policy) for wheel in policy["derivedWheels"]]
+    receipts = [reproduce(wheel, assets, work, policy) for wheel in selected]
     providers, resolver_evidence = {}, {}
     sites = work / "resolver-sites"
     sites.mkdir()
@@ -945,7 +1303,7 @@ def resolve(policy, policy_sha, target, work_root, operation_input=None):
             if pip_report.get("environment", {}).get("python_full_version") != "3.13.16":
                 raise Invalid("Resolver report did not come from native PBS 3.13.16")
             stage = "freeze-resolved-wheels"
-            wheels = [freeze_report_item(item, assets, policy, operations) for item in pip_report["install"]]
+            wheels = [freeze_report_item(item, assets, policy, operations, target) for item in pip_report["install"]]
             validate_resolver_pins(policy, target, provider, wheels)
             stage = "validate-closure"
             closure = validate_closure(tools, wheels, [provider + "==" + policy["providerVersions"][provider]], work)
@@ -968,7 +1326,10 @@ def resolve(policy, policy_sha, target, work_root, operation_input=None):
                   operationInputSha256=operations["inputSha256"],
                   operationReceipts=operation_receipts,
                   sourceSnapshot=snapshot, sourceSha256=digest(encoded(snapshot)), python=config["python"], node=config["node"],
-                  providers=providers, assetsRoot=str(assets), toolchain=tool_receipt, reproductions=receipts,
+                   providers=providers, licenseSupplements=supplements,
+                   lxmlWindowsSourceMaterials=policy["lxmlWindowsSourceMaterials"] if target == "win32-x64" else [],
+                   assetsRoot=str(assets),
+                   toolchain=tool_receipt, reproductions=receipts,
                   resolverEvidence=resolver_evidence, pending=candidate_pending(policy, source_evidence))
     return result
 
@@ -992,6 +1353,10 @@ def verify_candidate(candidate, policy, policy_sha, assets, operations=None):
         raise Invalid("Source commit lacks external checkout evidence")
     if set(candidate.get("providers", {})) != set(PROVIDERS):
         raise Invalid("Candidate must contain three independent provider closures")
+    if candidate.get("licenseSupplements") != policy.get("licenseSupplements"):
+        raise Invalid("Candidate license supplements differ from reviewed policy")
+    if candidate.get("lxmlWindowsSourceMaterials") != (policy["lxmlWindowsSourceMaterials"] if target == "win32-x64" else []):
+        raise Invalid("Candidate Windows lxml source materials differ from reviewed policy")
     values = []
     for component in ("python", "node"):
         value = candidate[component]["asset"]
@@ -1001,6 +1366,14 @@ def verify_candidate(candidate, policy, policy_sha, assets, operations=None):
         values += [value] + candidate[component].get("licenseSources", [])
         for source in candidate[component].get("licenseSources", []):
             official(source, policy)
+    for name in ("tix", "libzmq"):
+        value = candidate["licenseSupplements"][name]["asset"]
+        official(value, policy)
+        values.append(value)
+    for item in candidate["lxmlWindowsSourceMaterials"]:
+        value = {key: content for key, content in item.items() if key != "id"}
+        official(value, policy)
+        values.append(value)
     for name, provider in candidate["providers"].items():
         if (provider["site"] != "providers/" + name + "/site" or not provider.get("wheels")
                 or provider.get("version") != policy["providerVersions"][name]):
@@ -1021,11 +1394,15 @@ def verify_candidate(candidate, policy, policy_sha, assets, operations=None):
                 raise Invalid("Duplicate provider distribution")
             seen.add(normalized)
             if wheel["asset"]["kind"] == "derived":
-                approved = next((item for item in policy.get("derivedWheels", []) if item["asset"] == wheel["asset"]), None)
-                if approved is None or any(wheel.get(key) != approved.get(key) for key in ("distribution", "version", "asset", "derived", "dependencies")):
+                approved = next((item for item in derived_wheels(policy, target) if item["asset"] == wheel["asset"]), None)
+                if approved is None or any(wheel.get(key) != approved.get(key) for key in ("distribution", "version", "asset", "derived", "dependencies", "nativeBuildInputs")):
                     raise Invalid("Derived wheel differs from approved policy entry")
                 values.append(wheel["derived"]["upstreamAsset"])
+                values += native_build_assets(wheel, target)
+                if wheel.get("nativeBuildInputs") is not None:
+                    retained_native_receipt(wheel, assets, policy)
             values.append(wheel["asset"])
+        validate_resolver_pins(policy, target, name, provider["wheels"])
         if not root_found:
             raise Invalid("Provider root wheel is absent")
     names = {}
@@ -1064,12 +1441,17 @@ def materialize(policy, policy_sha, candidate_path, assets, work_root, operation
     inputs = [candidate[component]["asset"] for component in ("python", "node")]
     for component in ("python", "node"):
         inputs += candidate[component].get("licenseSources", [])
+    for name in ("tix", "libzmq"):
+        inputs.append(candidate["licenseSupplements"][name]["asset"])
+    for item in candidate["lxmlWindowsSourceMaterials"]:
+        inputs.append({key: content for key, content in item.items() if key != "id"})
     inputs.append(policy["toolchain"][candidate["target"]]["licenseDecoder"]["asset"])
     for provider in candidate["providers"].values():
         for wheel in provider["wheels"]:
             inputs.append(wheel["asset"])
             if "derived" in wheel:
                 inputs.append(wheel["derived"]["upstreamAsset"])
+                inputs += native_build_assets(wheel, candidate["target"])
     for value in inputs:
         source = verified_asset(assets, value)
         copy_asset(source, local_assets / value["filename"], value)
@@ -1135,6 +1517,10 @@ def materialize(policy, policy_sha, candidate_path, assets, work_root, operation
         print("installed " + provider + ": " + str(len(provider_lock["wheels"])) + " verified distributions", flush=True)
     bound_source_copy(candidate, "resources/python-runtime/pywencai_adapter.py", tree / "providers/pywencai/pywencai_adapter.py")
     licenses += retain_native_licenses(tree, work, policy, candidate, local_assets, tools)
+    supplement_licenses, supplement_evidence = retain_license_supplements(tree, work, policy, candidate, local_assets)
+    licenses += supplement_licenses
+    limited_purpose = retain_limited_purpose_sources(tree, policy, candidate, local_assets)
+    lxml_sources = retain_lxml_windows_sources(tree, candidate, local_assets)
     for source_name, name in (("resources/python-runtime/bootstrap.py", "bootstrap.py"),
                               ("resources/python-runtime/miniracer_unicode_adapter.py", "miniracer_unicode_adapter.py"),
                               ("electron/shared/privatePythonRuntimeManifest.cjs", "private_runtime_manifest.cjs")):
@@ -1143,7 +1529,13 @@ def materialize(policy, policy_sha, candidate_path, assets, work_root, operation
     native = basic_native_evidence(tree, tools, work, candidate["target"])
     sbom = candidate_sbom(candidate, licenses)
     exclusive_bytes(tree / "sbom.spdx.json", encoded(sbom))
+    applicability = target_license_applicability(tree, policy, candidate, supplement_evidence, limited_purpose, lxml_sources)
     ledger = inventory(tree)
+    for row in licenses:
+        disposition = license_applicability_disposition(row, policy, candidate["target"],
+                                                         candidate["python"]["asset"]["sha256"], applicability, ledger)
+        if not row["approvalId"] and disposition:
+            row["review"] = disposition
     exclusive_bytes(work / "inventory.json", encoded(ledger))
     exclusive_bytes(work / "native-evidence.json", encoded({"imports": native, "providers": evidence, "macho": macho}))
     operation_receipts = finish_operation(operations, work, tool_receipt, candidate["sourceEvidence"], {})
@@ -1155,8 +1547,11 @@ def materialize(policy, policy_sha, candidate_path, assets, work_root, operation
                   toolchain=tool_receipt, inventory=ledger, inventorySha256=digest(encoded(ledger)),
                   providers={name: {"version": lock["version"], "site": lock["site"], "dependencyAudit": evidence[name]["dependencyAudit"],
                                     "installedClosure": evidence[name]["installedClosureEvidence"]} for name, lock in candidate["providers"].items()},
-                  sbom={"path": "sbom.spdx.json", "sha256": file_digest(tree / "sbom.spdx.json"), "format": "SPDX-2.3"},
-                   licenseRequirements=licenses, metadataProvenance=metadata_provenance,
+                   sbom={"path": "sbom.spdx.json", "sha256": file_digest(tree / "sbom.spdx.json"), "format": "SPDX-2.3"},
+                    licenseSupplementEvidence=supplement_evidence,
+                    licenseApplicabilityEvidence=applicability,
+                    lxmlWindowsSourceEvidence=lxml_sources,
+                    licenseRequirements=licenses, metadataProvenance=metadata_provenance,
                    nativeEvidence={"target": candidate["target"], "sha256": file_digest(work / "native-evidence.json"),
                                                                "path": str(work / "native-evidence.json"), "scope": "native imports/private Node; not full production bootstrap"})
     result["pending"] = candidate_pending(policy, candidate["sourceEvidence"]) + ["Full manifest production bootstrap/Unicode adapter acceptance remains a separate gate"]
@@ -1176,7 +1571,8 @@ def candidate_pending(policy, source=None):
 def source_snapshot(policy_sha):
     paths = ["scripts/prepare-private-python-runtime.py", "scripts/build-provider-source-wheels.py", "scripts/build-mootdx-compat-wheel.py",
              "resources/python-runtime/bootstrap.py", "resources/python-runtime/miniracer_unicode_adapter.py", "electron/shared/privatePythonRuntimeManifest.cjs",
-             "resources/python-runtime/pywencai_adapter.py"]
+             "resources/python-runtime/pywencai_adapter.py", "scripts/rebuild-lxml-native.py",
+             "scripts/build-lxml-redistribution-wheel.py", "scripts/build-lxml-matched-public-source.py"]
     for path in paths:
         source = ROOT / relative(path)
         if source.is_symlink() or not source.resolve().is_relative_to(ROOT.resolve()):
@@ -1194,7 +1590,9 @@ def copy_asset(source, destination, value):
 
 
 def acquire(value, assets, policy, operations=None):
-    official(value, policy)
+    asset(value)
+    if value["kind"] == "download":
+        official(value, policy)
     destination = assets / value["filename"]
     if destination.exists():
         return verified_asset(assets, value)
@@ -1203,6 +1601,8 @@ def acquire(value, assets, policy, operations=None):
         if (root / value["filename"]).exists():
             source = verified_asset(root, value)
             return copy_asset(source, destination, value)
+    if value["kind"] == "derived":
+        raise Pending("Pinned retained native input is absent from the supplied cache")
     return fetch(value, destination, policy)
 
 
@@ -1537,7 +1937,7 @@ def resolution_constraints(policy, provider, assets, work, target="win32-x64", o
     for name, pin in policy["resolverCompatibilityPins"].get(target, {}).get(provider, {}).items():
         versions[name] = pin["version"]
     lines = []
-    for wheel in policy["derivedWheels"]:
+    for wheel in derived_wheels(policy, target):
         key = re.sub(r"[-_.]+", "-", wheel["distribution"]).lower()
         versions.pop(key, None)
         lines.append(wheel["distribution"] + " @ " + verified_asset(assets, wheel["asset"]).as_uri())
@@ -1548,6 +1948,12 @@ def resolution_constraints(policy, provider, assets, work, target="win32-x64", o
 
 
 def validate_resolver_pins(policy, target, provider, wheels):
+    for selected in derived_wheels(policy, target):
+        matches = [wheel for wheel in wheels if re.sub(r"[-_.]+", "-", wheel["distribution"]).lower()
+                   == re.sub(r"[-_.]+", "-", selected["distribution"]).lower()]
+        if matches and (len(matches) != 1 or any(matches[0].get(key) != selected.get(key)
+                                               for key in ("asset", "derived", "version", "nativeBuildInputs"))):
+            raise Invalid("Resolver bypassed exact target derived wheel inputs")
     for name, pin in policy["resolverCompatibilityPins"].get(target, {}).get(provider, {}).items():
         found = [wheel for wheel in wheels if re.sub(r"[-_.]+", "-", wheel["distribution"]).lower() == name]
         if (len(found) != 1 or found[0]["version"] != pin["version"]
@@ -1556,20 +1962,24 @@ def validate_resolver_pins(policy, target, provider, wheels):
             raise Invalid("Normal resolver did not select the exact reviewed Mac compatibility wheel")
 
 
-def freeze_report_item(item, assets, policy, operations=None):
+def freeze_report_item(item, assets, policy, operations=None, target="win32-x64"):
     url = item["download_info"]["url"]
     sha = item["download_info"]["archive_info"]["hashes"]["sha256"]
     parsed = urllib.parse.urlsplit(url)
     filename = urllib.parse.unquote(parsed.path.rsplit("/", 1)[-1])
     if not filename.endswith(".whl"):
         raise Invalid("Implicit sdist builds are forbidden")
-    approved = next((wheel for wheel in policy["derivedWheels"] if wheel["asset"]["filename"] == filename), None)
+    approved = next((wheel for wheel in derived_wheels(policy, target) if wheel["asset"]["filename"] == filename), None)
     if parsed.scheme == "file":
         if not approved or sha != approved["asset"]["sha256"] or Path(urllib.request.url2pathname(parsed.path)).resolve() != (assets / filename).resolve():
             raise Invalid("Resolver selected an unreviewed local wheel")
         value = dict(approved["asset"])
         wheel = json.loads(json.dumps(approved))
     else:
+        selected_names = {re.sub(r"[-_.]+", "-", wheel["distribution"]).lower()
+                          for wheel in derived_wheels(policy, target)}
+        if re.sub(r"[-_.]+", "-", item["metadata"]["name"]).lower() in selected_names:
+            raise Invalid("Resolver bypassed the selected derived wheel with a download")
         # Candidate discovery can determine size; validate official origin and the
         # resolver's source digest BEFORE recording this newly frozen download pin.
         preliminary = {"kind": "download", "filename": filename, "url": url, "sha256": sha, "size": 1}
@@ -1591,6 +2001,8 @@ def freeze_report_item(item, assets, policy, operations=None):
     metadata = item["metadata"]
     if actual["distribution"].lower() != metadata["name"].lower() or actual["version"] != metadata["version"] or actual["dependencies"] != metadata.get("requires_dist", []):
         raise Invalid("Actual METADATA differs from this normal resolver report")
+    if approved is not None and any(approved.get(key) != fact for key, fact in actual.items()):
+        raise Invalid("Target derived wheel actual metadata/notices differ from policy")
     wheel.update(actual)
     wheel_contract(wheel, policy)
     return wheel
@@ -1687,6 +2099,300 @@ def retain_native_licenses(tree, work, policy, candidate, assets, tools=None):
     return result + retain_full_licenses(tree, work, policy, candidate, assets, tools)
 
 
+def retain_license_supplements(tree, work, policy, candidate, assets):
+    """Retain reviewed original source bytes; an index never grants distribution rights."""
+    supplements = candidate["licenseSupplements"]
+    tix = supplements["tix"]
+    archive = verified_asset(assets, tix["asset"])
+    prefix = tix["archivePrefix"] + "/"
+    selected = set()
+    for pin in tix["members"]:
+        if not pin["sourceMember"].startswith(prefix):
+            raise Invalid("Tix source member escapes reviewed archive prefix")
+        selected.add(relative(pin["sourceMember"][len(prefix):]))
+    extracted = work / "tix-originals"
+    safe_extract(archive, extracted, tix["archivePrefix"], selected, allow_links=True)
+    tix_rows = []
+    for pin in tix["members"]:
+        source = extracted / relative(pin["sourceMember"][len(prefix):])
+        if source.is_symlink() or not source.is_file() or file_digest(source) != pin["sha256"]:
+            raise Invalid("Tix original member differs from reviewed SHA-256")
+        raw = source.read_bytes()
+        target = relative(pin["target"])
+        exclusive_bytes(tree / target, raw)
+        tix_rows.append({"sourceMember": pin["sourceMember"], "path": target,
+                         "sha256": pin["sha256"], "size": len(raw)})
+    libzmq = supplements["libzmq"]
+    source = verified_asset(assets, libzmq["asset"])
+    libzmq_path = relative(libzmq["target"])
+    (tree / libzmq_path).parent.mkdir(parents=True, exist_ok=True)
+    copy_asset(source, tree / libzmq_path, libzmq["asset"])
+    debugpy = [wheel for wheel in candidate["providers"]["pywencai"]["wheels"]
+               if re.sub(r"[-_.]+", "-", wheel["distribution"]).lower() == "debugpy"]
+    if len(debugpy) != 1:
+        raise Invalid("Readable source notice requires exactly one installed debugpy wheel")
+    wheel = debugpy[0]
+    debugpy_member = "debugpy/ThirdPartyNotices.txt"
+    debugpy_sha = wheel["notices"].get(debugpy_member)
+    debugpy_path = "providers/pywencai/site/" + debugpy_member
+    if (not isinstance(debugpy_sha, str) or not SHA.fullmatch(debugpy_sha)
+            or not (tree / debugpy_path).is_file() or file_digest(tree / debugpy_path) != debugpy_sha):
+        raise Invalid("Installed debugpy third-party notice is not original wheel evidence")
+    notice_path = relative(supplements["notice"]["target"])
+    lines = [
+        "RT-ResearchFlow private runtime third-party source and notice index",
+        "Candidate evidence only; this index is not a license grant or release approval.",
+        "",
+        "Tix original notices (not replacements for upstream terms):",
+        *[row["path"] + "  SHA-256 " + row["sha256"] for row in tix_rows],
+        "",
+        "I.2 libzmq reviewed upstream source archive:",
+        libzmq_path + "  SHA-256 " + libzmq["asset"]["sha256"],
+        "Upstream: " + libzmq["asset"]["url"],
+        "Correspondence to bundled binaries and LGPL source/relink conditions remain separate seal gates.",
+        "",
+        "I.3 xlrd attribution:",
+        "This product includes software developed by",
+        "David Giffin <david@giffin.org>.",
+        "The original xlrd license remains in the installed provider site.",
+        "",
+        "N.3 debugpy " + wheel["version"] + " third-party notice:",
+        debugpy_path + "  SHA-256 " + debugpy_sha,
+        "The original includes PyDev.Debugger and other vendor terms; this index does not replace it.",
+        "PyDev.Debugger source/build-material availability and distributor obligations remain pending.",
+        "No Microsoft postal source offer is made by this application.",
+        "",
+        "R.4 CPython preparation change summary:",
+        "The original PBS interpreter bytes are copied without patching the interpreter binary.",
+        "Preparation excludes pip/setuptools/wheel/pkg_resources/ensurepip build tools from the product tree,",
+        "and adds separate bootstrap/adapters and independently installed provider sites.",
+        "Original PBS license materials remain under licenses/python-full and licenses/python-install-only.",
+        "This summary does not close CRT, vendor, source, or redistribution-rights review."]
+    notice_bytes = ("\n".join(lines) + "\n").encode("utf-8")
+    exclusive_bytes(tree / notice_path, notice_bytes)
+    provenance = {"kind": "rt-private-runtime-license-supplement-evidence-v1",
+                  "tix": {"sourceAsset": tix["asset"], "members": tix_rows},
+                  "libzmq": {"sourceAsset": libzmq["asset"], "path": libzmq_path,
+                             "sha256": libzmq["asset"]["sha256"]},
+                  "notice": {"path": notice_path, "sha256": digest(notice_bytes),
+                             "scope": "readable-index-not-independent-license-grant"},
+                  "debugpy": {"version": wheel["version"], "artifactSha256": wheel["asset"]["sha256"],
+                              "path": debugpy_path, "sha256": debugpy_sha, "approval": "pending-additional-obligations"}}
+    evidence_path = "licenses/supplement-provenance.json"
+    exclusive_bytes(tree / evidence_path, encoded(provenance))
+    return [], {"path": evidence_path, "sha256": file_digest(tree / evidence_path),
+                           "tixOriginalCount": len(tix_rows), "libzmqSourceSha256": libzmq["asset"]["sha256"],
+                           "readableNoticeSha256": digest(notice_bytes)}
+
+
+def retain_limited_purpose_sources(tree, policy, candidate, assets):
+    """Keep source/recipe and upstream expressions; scope is not a new license grant."""
+    if policy["distributionUseScope"] != REVIEWED_DISTRIBUTION_SCOPE:
+        raise Invalid("Distribution use scope changed during materialization")
+    wheels = {wheel["distribution"]: wheel for wheel in candidate["providers"]["mootdx"]["wheels"]
+              if wheel["distribution"] in LIMITED_PURPOSE_WHEELS}
+    if set(wheels) != set(LIMITED_PURPOSE_WHEELS):
+        raise Invalid("Reviewed mootdx/tdxpy distribution pair is incomplete")
+    originals = {}
+    for component, (version, artifact_sha, members) in LIMITED_PURPOSE_WHEELS.items():
+        wheel = wheels[component]
+        if wheel["version"] != version or wheel["asset"]["sha256"] != artifact_sha:
+            raise Invalid("Limited-purpose wheel differs from reviewed artifact")
+        verified = {}
+        for member, sha in members.items():
+            path = "providers/mootdx/site/" + component + "-" + version + ".dist-info/" + member
+            if wheel["notices"].get(component + "-" + version + ".dist-info/" + member) != sha or file_digest(tree / path) != sha:
+                raise Invalid("Original limited-purpose author/license/description differs")
+            verified[member] = {"path": path, "sha256": sha}
+        description = (tree / verified["METADATA"]["path"]).read_text(encoding="utf-8")
+        if "MIT license" not in description or "本项目只作学习交流, 不得用于任何商业目的" not in description:
+            raise Invalid("Original limited-purpose description is missing")
+        originals[component] = {"version": version, "artifactSha256": artifact_sha, "originals": verified,
+                                "scope": "limited-purpose-review-not-commercial-authorization"}
+    mootdx = wheels["mootdx"]
+    derived = mootdx.get("derived")
+    if not isinstance(derived, dict) or derived["upstreamAsset"]["sha256"] != "eab475f1d08b1c71ea51212c8b1b1038c4739798f7d95ad1a6fb7bb26e348ef2":
+        raise Invalid("Derived mootdx upstream source identity differs")
+    upstream = derived["upstreamAsset"]
+    upstream_path = "licenses/sources/mootdx-0.11.7-py3-none-any.whl"
+    copy_asset(verified_asset(assets, upstream), tree / upstream_path, upstream)
+    recipe_path = "licenses/sources/build-mootdx-compat-wheel.py"
+    bound_source_copy(candidate, derived["recipe"]["path"], tree / recipe_path)
+    if file_digest(tree / recipe_path) != derived["recipe"]["sha256"]:
+        raise Invalid("Derived mootdx source recipe differs from reviewed recipe")
+    originals["mootdx"]["derivedSource"] = {"upstreamPath": upstream_path, "upstreamSha256": upstream["sha256"],
+                                              "recipePath": recipe_path, "recipeSha256": derived["recipe"]["sha256"],
+                                              "installedChangeRecord": "providers/mootdx/site/mootdx-0.11.7+rt.1.dist-info/RT-COMPATIBILITY.json"}
+    change = tree / originals["mootdx"]["derivedSource"]["installedChangeRecord"]
+    if not change.is_file():
+        raise Invalid("Derived mootdx modification record is missing")
+    originals["mootdx"]["derivedSource"]["changeRecordSha256"] = file_digest(change)
+    return originals
+
+
+def retain_lxml_redistribution_sources(tree, candidate, assets):
+    selected, materials = {}, []
+    for provider in candidate.get("providers", {}).values():
+        for wheel in provider["wheels"]:
+            inputs = wheel.get("nativeBuildInputs") or {}
+            if inputs.get("kind") == "rt-lxml-redistribution-inputs-v1":
+                native_build_assets(wheel, candidate["target"])
+                selected[wheel["asset"]["sha256"]] = inputs
+    for sha, inputs in sorted(selected.items()):
+        value = inputs["publicSourceAsset"]
+        target = "licenses/sources/lxml-redistribution/" + value["filename"]
+        destination = tree / target
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        copy_asset(verified_asset(assets, value), destination, value)
+        materials.append({"path": target, "asset": value, "selectedWheelSha256": sha})
+    # No original tar, original wheel/proof, or unsanitized full materials enters tree.
+    evidence = {"kind": "rt-lxml-matched-public-source-retention-v1", "target": candidate["target"],
+                "selectedArtifactSha256": sorted(selected), "retainedMaterials": materials,
+                "nativeBuildInputs": selected, "executedThisOperation": False,
+                "originalSdistRedistributed": False, "releaseApproval": False,
+                "status": "matched-sanitized-sources-retained-license-review-pending"}
+    path = "licenses/sources/lxml-redistribution/provenance.json"
+    exclusive_bytes(tree / path, encoded(evidence))
+    return {**evidence, "path": path, "sha256": file_digest(tree / path), "sourceCount": len(materials)}
+
+
+def retain_lxml_windows_sources(tree, candidate, assets):
+    if any((wheel.get("nativeBuildInputs") or {}).get("kind") == "rt-lxml-redistribution-inputs-v1"
+           for provider in candidate.get("providers", {}).values() for wheel in provider["wheels"]):
+        return retain_lxml_redistribution_sources(tree, candidate, assets)
+    if candidate["target"] != "win32-x64":
+        if candidate["lxmlWindowsSourceMaterials"]:
+            raise Invalid("Windows-only lxml sources cannot be applied to Mac")
+        return {"status": "not-applicable-to-mac"}
+    if candidate["lxmlWindowsSourceMaterials"] != REVIEWED_LXML_WINDOWS_SOURCES:
+        raise Invalid("Windows lxml source pins changed during materialization")
+    members = []
+    for item in candidate["lxmlWindowsSourceMaterials"]:
+        if item["id"] == "lxml":
+            continue  # Original unlicensed sdist is a private build input, never public.
+        value = {key: content for key, content in item.items() if key != "id"}
+        target = "licenses/sources/lxml-windows/" + item["filename"]
+        destination = tree / target
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        copy_asset(verified_asset(assets, value), destination, value)
+        members.append({"id": item["id"], "path": target, "sha256": item["sha256"], "size": item["size"],
+                        "url": item["url"]})
+    native_inputs = {}
+    retained = []
+    for provider in candidate.get("providers", {}).values():
+        for wheel in provider["wheels"]:
+            if wheel.get("nativeBuildInputs") is not None:
+                native_build_assets(wheel, candidate["target"])
+                native_inputs[wheel["asset"]["sha256"]] = wheel["nativeBuildInputs"]
+    for selected_sha, inputs in sorted(native_inputs.items()):
+        for value in inputs["assets"]:
+            target = "licenses/sources/lxml-windows/" + selected_sha + "/" + value["filename"]
+            destination = tree / target
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            copy_asset(verified_asset(assets, value), destination, value)
+            retained.append({"path": target, "asset": value, "selectedWheelSha256": selected_sha})
+    evidence = {"kind": "rt-lxml-windows-corresponding-source-inputs-v1", "members": members,
+                "reviewReference": "resources/python-runtime/license-review.md#astra-lxml-relink-u-20261009",
+                "status": "source-archives-retained-rebuild-relink-not-executed", "releaseApproval": False,
+                "retainedNativeInputs": native_inputs, "retainedMaterials": retained,
+                "executedThisOperation": False}
+    path = "licenses/sources/lxml-windows/provenance.json"
+    exclusive_bytes(tree / path, encoded(evidence))
+    return {"path": path, "sha256": file_digest(tree / path), "sourceCount": len(members), "status": evidence["status"],
+            "selectedArtifactSha256": sorted(native_inputs), "retainedMaterials": retained,
+            "executedThisOperation": False, "releaseApproval": False}
+
+
+def target_license_applicability(tree, policy, candidate, supplement_evidence, limited_purpose, lxml_sources=None):
+    """Bind review applicability to actual product files, not historical notice names."""
+    baseline = inventory(tree)
+    paths = {item["path"]: item for item in baseline if item["kind"] == "file"}
+    metadata_path = "licenses/python-full/python/PYTHON.json"
+    metadata = json.loads((tree / metadata_path).read_bytes())
+    pinned = next(item for item in policy["nativeLicenseInputs"][candidate["target"]]["pythonFull"]["members"]
+                  if item["path"] == "python/PYTHON.json")
+    if paths[metadata_path]["sha256"] != pinned["sha256"]:
+        raise Invalid("Final PYTHON.json differs from reviewed full archive")
+    product_paths = [path for path in paths if path.startswith(("python/", "providers/"))]
+    bdb_files = [path for path in product_paths if BDB_CODE_PATH.search(path)]
+    bdb_build = bdb_build_reference(metadata)
+    bdb_absent = not bdb_files and bdb_build is False
+    tix_files = [path for path in product_paths if tix_component_path(path)]
+    tix_originals = policy["licenseSupplements"]["tix"]["members"]
+    if supplement_evidence["tixOriginalCount"] != 3 or any(paths[pin["target"]]["sha256"] != pin["sha256"] for pin in tix_originals):
+        raise Invalid("Final Tix original notice set differs from reviewed source")
+    if candidate["target"] == "win32-x64" and "python/tcl/tix8.4.3/tix84.dll" not in tix_files:
+        raise Invalid("Windows Tix applicability differs from reviewed shipped DLL")
+    lxml = [wheel for provider in candidate["providers"].values() for wheel in provider["wheels"]
+            if wheel["distribution"] == "lxml"]
+    lxml_shas = sorted({wheel["asset"]["sha256"] for wheel in lxml})
+    if candidate["target"] == "win32-x64":
+        reviewed = sorted({wheel["asset"]["sha256"] for wheel in derived_wheels(policy, candidate["target"])
+                           if wheel.get("nativeBuildInputs") is not None and wheel["distribution"] == "lxml"})
+        if (reviewed and lxml_shas == reviewed
+                and (lxml_sources or {}).get("selectedArtifactSha256") == reviewed
+                and (lxml_sources or {}).get("originalSdistRedistributed") is False
+                and (lxml_sources or {}).get("retainedMaterials")):
+            lxml_status = "windows-selected-native-materials-retained-license-review-pending"
+        elif (not reviewed and lxml_shas == ["e477aca0bc0d19f3b4ae9e4f2a1cfd687c31bf772d78734910658186b40b2477"]
+              and (lxml_sources or {}).get("sourceCount") == 6):
+            lxml_status = "windows-corresponding-sources-retained-relink-pending"
+        else:
+            lxml_status = "unreviewed-windows-artifact-or-source-set"
+    else:
+        lxml_status = "independent-mac-review-not-inferred-from-windows"
+    report = {"kind": "rt-private-runtime-license-applicability-v1", "target": candidate["target"],
+              "reviewReference": REVIEWED_DISTRIBUTION_SCOPE["reviewReference"],
+              "preReportInventorySha256": digest(encoded(baseline)),
+              "bdb": {"status": "archived-notice-only-not-applicable-to-target-code" if bdb_absent else "target-code-or-build-reference-present-review-pending",
+                      "pythonMetadataPath": metadata_path, "pythonMetadataSha256": pinned["sha256"],
+                      "implementationPaths": bdb_files, "buildReferencePresent": bdb_build,
+                      "debuggerBdbPyIsNotBerkeleyDb": True},
+              "tix": {"status": "present-original-terms-retained" if tix_files else "target-code-absent-original-terms-retained",
+                      "implementationPaths": tix_files, "originals": [{"path": pin["target"], "sha256": pin["sha256"]} for pin in tix_originals]},
+              "lxml": {"status": lxml_status, "artifactSha256": lxml_shas,
+                       "windowsReviewNotTransferredToMac": True, "sourceEvidence": lxml_sources,
+                       "rebuildRelinkExecuted": False, "executedThisOperation": False},
+              "limitedPurpose": {"scope": REVIEWED_DISTRIBUTION_SCOPE, "components": limited_purpose,
+                                 "commercialUseAuthorized": False, "wholeProductNoncommercial": False},
+              "releaseEligible": False}
+    path = "licenses/applicability.json"
+    exclusive_bytes(tree / path, encoded(report))
+    return {"path": path, "sha256": file_digest(tree / path), "bdbStatus": report["bdb"]["status"],
+            "bdbBuildReferencePresent": bdb_build,
+            "tixStatus": report["tix"]["status"], "lxmlStatus": lxml_status,
+            "scope": REVIEWED_DISTRIBUTION_SCOPE["purpose"]}
+
+
+def license_applicability_disposition(row, policy, target, python_asset_sha, evidence, ledger):
+    """Close only exact retained-notice/applicability rows; never manufacture an approval ID."""
+    paths = {item["path"]: item for item in ledger if item["kind"] == "file"}
+    marker = paths.get(evidence.get("path"))
+    if not marker or marker["sha256"] != evidence.get("sha256"):
+        return None
+    if row["approvalId"] is not None or paths.get(row["path"], {}).get("sha256") != row["licenseSha256"]:
+        return None
+    if row["component"] == "python-build-standalone" and row["artifactSha256"] == python_asset_sha:
+        if row["path"].endswith("/LICENSE.bdb.txt") and evidence.get("bdbStatus") == "archived-notice-only-not-applicable-to-target-code":
+            product = (path for path in paths if path.startswith(("python/", "providers/")))
+            if evidence.get("bdbBuildReferencePresent") is False and not any(BDB_CODE_PATH.search(path) for path in product):
+                return "not-applicable-to-target-code"
+        if row["path"].endswith("/LICENSE.tix.txt") and evidence.get("tixStatus") in {"present-original-terms-retained", "target-code-absent-original-terms-retained"}:
+            pins = policy["licenseSupplements"]["tix"]["members"]
+            if all(paths.get(pin["target"], {}).get("sha256") == pin["sha256"] for pin in pins):
+                product_tix = any(tix_component_path(path) for path in paths if path.startswith(("python/", "providers/")))
+                if product_tix == (evidence["tixStatus"] == "present-original-terms-retained") and (target != "win32-x64" or "python/tcl/tix8.4.3/tix84.dll" in paths):
+                    return "original-terms-retained" if evidence["tixStatus"] == "present-original-terms-retained" else "not-applicable-to-target-code"
+    if row["component"] in LIMITED_PURPOSE_WHEELS and evidence.get("scope") == REVIEWED_DISTRIBUTION_SCOPE["purpose"]:
+        version, artifact, members = LIMITED_PURPOSE_WHEELS[row["component"]]
+        prefix = "providers/mootdx/site/" + row["component"] + "-" + version + ".dist-info/"
+        if row["version"] == version and row["artifactSha256"] == artifact and all(
+                paths.get(prefix + name, {}).get("sha256") == sha for name, sha in members.items()):
+            if any(row["path"] == prefix + name and row["licenseSha256"] == sha for name, sha in members.items()):
+                return "limited-purpose-originals-retained-not-commercial-approval"
+    return None
+
+
 SMOKE_NETWORK_GUARD = r'''
 import socket,sys
 def denied(*args,**kwargs):raise RuntimeError('Python socket API disabled during candidate smoke')
@@ -1757,6 +2463,34 @@ def candidate_sbom(candidate, licenses):
                          "downloadLocation": value["asset"]["url"], "filesAnalyzed": False,
                          "checksums": [{"algorithm": "SHA256", "checksumValue": value["asset"]["sha256"]}],
                          "licenseConcluded": "NOASSERTION", "licenseDeclared": "NOASSERTION", "copyrightText": "NOASSERTION"})
+    for name, version in (("tix", "8.4.3.6"), ("libzmq", "4.3.5")):
+        supplement = candidate.get("licenseSupplements", {}).get(name)
+        if supplement:
+            value = supplement["asset"]
+            packages.append({"SPDXID": "SPDXRef-source-" + name, "name": name + " reviewed source archive",
+                             "versionInfo": version, "downloadLocation": value["url"], "filesAnalyzed": False,
+                             "checksums": [{"algorithm": "SHA256", "checksumValue": value["sha256"]}],
+                              "licenseConcluded": "NOASSERTION", "licenseDeclared": "NOASSERTION", "copyrightText": "NOASSERTION"})
+    for item in candidate.get("lxmlWindowsSourceMaterials", []):
+        if item["id"] == "lxml":
+            continue
+        packages.append({"SPDXID": "SPDXRef-source-lxml-" + item["id"], "name": "lxml Windows source input " + item["id"],
+                         "versionInfo": "NOASSERTION", "downloadLocation": item["url"], "filesAnalyzed": False,
+                         "checksums": [{"algorithm": "SHA256", "checksumValue": item["sha256"]}],
+                         "licenseConcluded": "NOASSERTION", "licenseDeclared": "NOASSERTION", "copyrightText": "NOASSERTION"})
+    native_inputs = {}
+    for provider in candidate["providers"].values():
+        for wheel in provider["wheels"]:
+            values = native_build_assets(wheel, candidate["target"])
+            if (wheel.get("nativeBuildInputs") or {}).get("kind") == "rt-lxml-redistribution-inputs-v1":
+                values = [wheel["nativeBuildInputs"]["publicSourceAsset"]]
+            for value in values:
+                native_inputs[value["sha256"]] = value
+    for sha, value in sorted(native_inputs.items()):
+        packages.append({"SPDXID": "SPDXRef-native-input-" + sha, "name": value["filename"],
+                         "versionInfo": "NOASSERTION", "downloadLocation": "NOASSERTION", "filesAnalyzed": False,
+                         "checksums": [{"algorithm": "SHA256", "checksumValue": sha}],
+                         "licenseConcluded": "NOASSERTION", "licenseDeclared": "NOASSERTION", "copyrightText": "NOASSERTION"})
     return {"spdxVersion": "SPDX-2.3", "dataLicense": "CC0-1.0", "SPDXID": "SPDXRef-DOCUMENT",
             "name": "RT private Python candidate (not release eligible)",
             "documentNamespace": "https://spdx.org/spdxdocs/rt-candidate-" + candidate["sourceSha256"],
@@ -1788,7 +2522,11 @@ def seal(policy, policy_sha, fragment_paths):
             result["pending"].append("Applicable license/notice inventory is missing")
         for item in requirements or []:
             approval = license_decision(policy, item["component"], item["version"], item["artifactSha256"], item["licenseSha256"], item["spdx"])
-            if not approval or approval != item.get("approvalId"):
+            applicability = fragment.get("licenseApplicabilityEvidence") or {}
+            disposition = license_applicability_disposition(item, policy, fragment.get("target"),
+                (fragment.get("toolchain") or {}).get("pythonAssetSha256"), applicability, fragment.get("inventory") or [])
+            if not ((approval and approval == item.get("approvalId")) or
+                    (not approval and item.get("approvalId") is None and disposition and item.get("review") == disposition)):
                 result["pending"].append("License approval is pending or rejected: " + item["component"])
     result["pending"].append("Formal schema/assembler and full manifest bootstrap integration must be handed over before seal")
     result["pending"] = sorted(set(result["pending"]))
@@ -1829,20 +2567,153 @@ def prepare(policy, policy_sha, target, work_root, operation_input=None):
     fragment_path = work / "candidate-fragment.json"
     exclusive_bytes(fragment_path, encoded(fragment))
     licenses = fragment["licenseRequirements"]
+    def pending_license(row):
+        return row.get("review", "approved" if row.get("approvalId") else "pending") == "pending"
     unique_pending = {(row["component"], row["version"], row["artifactSha256"], row["licenseSha256"])
-                      for row in licenses if not row.get("approvalId")}
+                      for row in licenses if pending_license(row)}
     result.update(status="candidate", resolutionComplete=True, treeComplete=True,
                   fragment={"path": str(fragment_path), "sha256": file_digest(fragment_path)},
                   treeRoot=fragment["treeRoot"], sourceSha256=fragment["sourceSha256"],
                   sourceEvidence=fragment["sourceEvidence"],
                   sourceCommit=fragment.get("sourceCommit"), providers=fragment["providers"],
-                   licenseSummary={"usageCount": len(licenses), "pendingUsageCount": sum(not row.get("approvalId") for row in licenses),
+                    licenseSummary={"usageCount": len(licenses), "pendingUsageCount": sum(pending_license(row) for row in licenses),
                                    "pendingUniqueDigestCount": len(unique_pending),
                                    "metadataProvenanceUsageCount": len(fragment.get("metadataProvenance", [])),
                                    "matchedApprovalIds": sorted({row["approvalId"] for row in licenses if row.get("approvalId")})},
                   nativeEvidence=fragment["nativeEvidence"], pending=fragment["pending"],
                   scope="actual native resolve/offline materialize; not formal bootstrap, license approval or release seal")
     return result
+
+
+def matching_native_build_history(policy, target, original_sha):
+    """Do not transfer local/native build provenance to a different cloud artifact."""
+    for item in policy["targets"][target].get("derivedWheels", []):
+        if item["distribution"] != "lxml":
+            continue
+        history = item.get("nativeBuildInputs") or {}
+        if history.get("defaultProductAssetSha256") == original_sha:
+            return history
+        if (history.get("kind") == "rt-lxml-redistribution-inputs-v1"
+                and history.get("originalWheelAsset", {}).get("sha256") == original_sha):
+            return history.get("historicalNativeBuildInputs")
+    return None
+
+def map_lxml_redistribution_policy(policy, handoff, asset_root, original_cache):
+    """Map independently supplied exact Hubble pins; never invent license approvals."""
+    if (handoff.get("kind") != "rt-lxml-redistribution-handoff-v1"
+            or handoff.get("ISO_SchematronProvided") is not False
+            or handoff.get("noOriginalWheelReproductionClaim") is not True
+            or set(handoff.get("outputs", {})) != set(TARGETS)):
+        raise Invalid("Incomplete exact redistribution handoff")
+    result = json.loads(json.dumps(policy))
+    pins = {}
+    for record in handoff["sourceFilePins"]:
+        if record["path"] in RECIPES:
+            pin = {"path": record["path"], "sha256": record["sha256"]}
+            if file_digest(ROOT / relative(record["path"])) != pin["sha256"]:
+                raise Invalid("Handoff recipe source bytes changed")
+            pins[pin["path"]] = pin
+    for path in ("scripts/build-lxml-redistribution-wheel.py", "scripts/build-lxml-matched-public-source.py"):
+        if path not in pins:
+            raise Invalid("Both exact redistribution recipes are required")
+    result["recipePins"] = [pin for pin in result["recipePins"] if pin["path"] not in pins] + list(pins.values())
+    upstream = next({key: value for key, value in item.items() if key != "id"}
+                    for item in policy["lxmlWindowsSourceMaterials"] if item["id"] == "lxml")
+    for target in TARGETS:
+        output = handoff["outputs"][target]
+        wheel_path = verified_asset(Path(asset_root) / target / "wheel", output["wheel"])
+        source_path = verified_asset(Path(asset_root) / target / "source", output["source"])
+        actual = read_wheel(wheel_path)
+        if actual["distribution"].lower() != "lxml" or actual["version"] != handoff["distributionVersion"]:
+            raise Invalid("Handoff selected distribution differs from actual wheel")
+        with zipfile.ZipFile(source_path) as archive:
+            source_manifest = json.loads(archive.read("RT_PUBLIC_SOURCE_MANIFEST.json"))
+        original_record = handoff["inputs"][target]
+        original_path = (Path(original_cache) if target == "win32-x64" else Path(asset_root) / "inputs") / original_record["filename"]
+        if (original_path.is_symlink() or file_digest(original_path) != original_record["sha256"]
+                or source_manifest.get("originalWheelSha256") != original_record["sha256"]
+                or source_manifest.get("target") != target
+                or source_manifest.get("originalLxmlSdistRedistributed") is not False):
+            raise Invalid("Original/matched public source identity differs")
+        original = {"kind": "derived", "filename": original_record["filename"] + ".proof",
+                    "size": original_path.stat().st_size, "sha256": original_record["sha256"]}
+        original_source = source_manifest["originalArchive"]
+        if target == "win32-x64":
+            original_source = {"kind": "derived", **original_source}
+            verified_asset(Path(original_cache), original_source)
+        else:
+            if original_source["sha256"] != upstream["sha256"] or original_source["size"] != upstream["size"]:
+                raise Invalid("Mac original source identity differs")
+            original_source = upstream
+        previous = matching_native_build_history(policy, target, original_record["sha256"])
+        with zipfile.ZipFile(wheel_path) as archive:
+            notices = [{"path": name, "sha256": sha, "size": len(archive.read(name))}
+                       for name, sha in actual["notices"].items()]
+        wheel = {**actual, "licenses": [], "asset": output["wheel"],
+                 "derived": {"id": "rt-lxml-redistribution-v1-" + target,
+                             "upstreamVersion": handoff["nativeRuntimeVersion"],
+                             "upstreamSha256": upstream["sha256"], "upstreamAsset": upstream,
+                             "patchSha256": pins["scripts/build-lxml-redistribution-wheel.py"]["sha256"],
+                             "recipe": pins["scripts/build-lxml-redistribution-wheel.py"]},
+                 "nativeBuildInputs": {"kind": "rt-lxml-redistribution-inputs-v1", "target": target,
+                    "selectedAssetSha256": output["wheel"]["sha256"], "publicSourceAsset": output["source"],
+                    "originalWheelAsset": original, "originalWheelFilename": original_record["filename"],
+                    "originalWheelOrigin": original_record["origin"], "originalSourceAsset": original_source,
+                    "sourceRecipe": pins["scripts/build-lxml-matched-public-source.py"],
+                    "nativeMemberPins": output["nativeMemberPins"], "noticePins": notices,
+                    "nativeRuntimeVersion": handoff["nativeRuntimeVersion"], "nativeRecompiled": False,
+                    "originalSdistRedistributed": False, "excludedNamespace": handoff["excludedNamespace"],
+                    "historicalNativeBuildInputs": previous,
+                    "historicalRecipesExecutableThisOperation": False}}
+        wheel_contract(wheel, result)
+        result["targets"][target]["derivedWheels"] = [
+            item for item in result["targets"][target].get("derivedWheels", []) if item["distribution"] != "lxml"] + [wheel]
+        for index, notice in enumerate(notices):
+            if notice["path"].endswith(".dist-info/METADATA"):
+                for provider in PROVIDERS:
+                    record = {"component": "lxml", "version": actual["version"],
+                              "artifactSha256": wheel["asset"]["sha256"], "metadataSha256": notice["sha256"],
+                              "path": "providers/" + provider + "/site/" + notice["path"],
+                              "role": "provenance-and-license-reference", "decision": "not-an-independent-license-grant"}
+                    if record not in result["metadataProvenance"]:
+                        result["metadataProvenance"].append(record)
+            else:
+                key = ("lxml", actual["version"], wheel["asset"]["sha256"], notice["sha256"])
+                if not any((row["component"], row["version"], row["artifactSha256"], row["licenseSha256"]) == key
+                           for row in result["licenseApprovals"]):
+                    result["licenseApprovals"].append({"id": "lxml-redistribution-" + target + "-" + str(index),
+                        "component": key[0], "version": key[1], "artifactSha256": key[2], "licenseSha256": key[3],
+                        "spdx": "NOASSERTION", "decision": "pending"})
+    return result
+
+
+def cache_lxml_redistribution_inputs(policy, asset_root, original_cache, output):
+    """Fresh caller-owned private cache; original unlicensed bytes never enter product."""
+    output = owned_path(output)
+    if output.exists() or output.is_symlink():
+        raise Invalid("Redistribution input cache must be fresh")
+    inputs = {}
+    for target in TARGETS:
+        wheel = next(item for item in derived_wheels(policy, target) if item["distribution"] == "lxml")
+        native = wheel["nativeBuildInputs"]
+        entries = [(wheel["asset"], Path(asset_root) / target / "wheel" / wheel["asset"]["filename"]),
+                   (native["publicSourceAsset"], Path(asset_root) / target / "source" / native["publicSourceAsset"]["filename"]),
+                   (native["originalWheelAsset"], (Path(original_cache) if target == "win32-x64" else Path(asset_root) / "inputs") / native["originalWheelFilename"]),
+                   (native["originalSourceAsset"], Path(original_cache) / native["originalSourceAsset"]["filename"]),
+                   (wheel["derived"]["upstreamAsset"], Path(original_cache) / wheel["derived"]["upstreamAsset"]["filename"])]
+        for value, source in entries:
+            asset(value)
+            if (source.is_symlink() or not source.is_file()
+                    or source.stat().st_size != value["size"] or file_digest(source) != value["sha256"]):
+                raise Invalid("Actual redistribution input bytes differ")
+            if value["filename"] in inputs and inputs[value["filename"]][0] != value:
+                raise Invalid("Redistribution input filenames conflict")
+            inputs[value["filename"]] = (value, source)
+    output.mkdir(parents=True)
+    for value, source in inputs.values():
+        copy_asset(source, output / value["filename"], value)
+    return {"schemaVersion": 1, "kind": "rt-private-runtime-operation-input-v1",
+            "cacheRoots": [str(output)], "seedReports": {}, "sourceReceipt": None}
 
 
 def main(argv=None):
@@ -1869,6 +2740,15 @@ def main(argv=None):
             command.add_argument("--assets", type=Path, required=True)
         else:
             command.add_argument("--fragments", type=Path, nargs="+", required=True)
+    mapping = commands.add_parser("map-lxml-redistribution")
+    mapping.add_argument("--policy", type=Path, required=True)
+    mapping.add_argument("--handoff", type=Path, required=True)
+    mapping.add_argument("--handoff-sha256", required=True)
+    mapping.add_argument("--asset-root", type=Path, required=True)
+    mapping.add_argument("--original-cache", type=Path, required=True)
+    mapping.add_argument("--out", type=Path, required=True)
+    mapping.add_argument("--input-cache", type=Path)
+    mapping.add_argument("--operation-out", type=Path)
     args = parser.parse_args(argv)
     args.operation_input = operation_args.operation_input
     try:
@@ -1878,7 +2758,21 @@ def main(argv=None):
         out = owned_path(args.out)
         if out.exists() or out.is_symlink() or not out.parent.is_dir():
             raise Invalid("Report output must be fresh, with an existing owned parent")
-        if args.command == "resolve":
+        if args.command == "map-lxml-redistribution":
+            raw_handoff = args.handoff.read_bytes()
+            if not SHA.fullmatch(args.handoff_sha256) or digest(raw_handoff) != args.handoff_sha256:
+                raise Invalid("Independent redistribution handoff digest mismatch")
+            report = map_lxml_redistribution_policy(policy, json.loads(raw_handoff),
+                                                     args.asset_root, args.original_cache)
+            if bool(args.input_cache) != bool(args.operation_out):
+                raise Invalid("Input cache and operation output must be provided together")
+            if args.input_cache:
+                operation_out = owned_path(args.operation_out)
+                if operation_out.exists() or operation_out.is_symlink() or not operation_out.parent.is_dir():
+                    raise Invalid("Operation output must be fresh")
+                operations = cache_lxml_redistribution_inputs(report, args.asset_root, args.original_cache, args.input_cache)
+                exclusive_bytes(operation_out, encoded(operations))
+        elif args.command == "resolve":
             report = resolve(policy, policy_sha, args.target, args.work_root, args.operation_input)
         elif args.command == "materialize":
             report = materialize(policy, policy_sha, args.candidate_lock, args.assets, args.work_root, args.operation_input)
@@ -1890,6 +2784,9 @@ def main(argv=None):
             report = seal(policy, policy_sha, args.fragments)
         with out.open("xb") as handle:
             handle.write(encoded(report))
+        if args.command == "map-lxml-redistribution":
+            print("PRIVATE_RUNTIME_POLICY_MAPPED_LICENSE_APPROVAL_UNCHANGED")
+            return 0
         print("PRIVATE_RUNTIME_PENDING" if report["status"] == "pending" else "PRIVATE_RUNTIME_CANDIDATE")
         return 2 if report["status"] == "pending" else 0
     except Pending:

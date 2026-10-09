@@ -74,8 +74,11 @@ worker=subprocess.Popen([sys.executable,'-X','utf8','-I','-S','-B',cfg['workerPa
 check(os.getpgid(worker.pid)==root and os.getsid(worker.pid)==root)
 if cfg['scenario']=='root-first':
     wait_ack('node'); node=read_json(base/'node.json')
+    ready=read_json(base/'node-js-ready.json')
+    check(ready['nonce']==cfg['nonce'] and ready['pid']==node['pid'])
     os.kill(node['pid'],0); os.kill(worker.pid,0)
     atomic(base/'root-exit-intent.json',{'rootPid':root,'workerPid':worker.pid,'nodePid':node['pid'],
+                                      'nodeRuntimeReadyObservedAt':ready['observedAt'],
                                       'nodeAliveObservedAt':stamp(),'nonce':cfg['nonce']})
     os._exit(0)
 raise SystemExit(worker.wait(timeout=25))
@@ -195,7 +198,20 @@ try:
                 group_live=group_members(root)
                 check(group_live['pids']==sorted(registered.values()))
                 atomic(base/'group-live.json',group_live)
-            (base/(role+'.ack')).write_text(cfg['nonce'],encoding='ascii')
+            if role!='node': (base/(role+'.ack')).write_text(cfg['nonce'],encoding='ascii')
+        # Register the real process early, but do not release Node/root-first
+        # until that SAME Node has actually executed its fixture JS snapshot.
+        if 'node' in registered and not (base/'node.ack').exists() and (base/'node-runtime.json').exists():
+            runtime=read_json(base/'node-runtime.json'); node=read_json(base/'node.json')
+            check(runtime['pid']==registered['node'] and runtime['pid']==node['pid'])
+            check(runtime['nonce']==cfg['nonce'] and runtime['binarySha256']==cfg['runnerNodeSha256'])
+            check(runtime['version']==read_json(base/'manifest.json')['node']['version'])
+            check(runtime['executable']==node['executable'])
+            os.kill(runtime['pid'],0)
+            check(os.getpgid(runtime['pid'])==root and os.getsid(runtime['pid'])==root)
+            atomic(base/'node-js-ready.json',{'pid':runtime['pid'],'observedAt':stamp(),
+                   'runtime':runtime,'nonce':cfg['nonce']})
+            (base/'node.ack').write_text(cfg['nonce'],encoding='ascii')
         if cfg['scenario']=='outer-timeout':
             launch=read_json(base/'outer-start.json'); timing=cfg['fixtureTiming']; now=time.time()*1000
             check(launch['deadlineMs']==timing['outerDeadlineMs'])
@@ -323,7 +339,8 @@ function captureWatcher(python, filename, config, cwd, env) {
 function nodeFixture(root, scenario) {
   return `const fs=require('node:fs'),crypto=require('node:crypto');
 const root=${JSON.stringify(root)},nonce=JSON.parse(fs.readFileSync(root+'/contract.json')).nonce;
-fs.writeFileSync(root+'/node-runtime.json',JSON.stringify({pid:process.pid,version:process.versions.node,executable:process.execPath,binarySha256:crypto.createHash('sha256').update(fs.readFileSync(process.execPath)).digest('hex')}));
+fs.writeFileSync(root+'/node-runtime.json.writing',JSON.stringify({pid:process.pid,nonce,version:process.versions.node,executable:process.execPath,binarySha256:crypto.createHash('sha256').update(fs.readFileSync(process.execPath)).digest('hex')}));
+fs.renameSync(root+'/node-runtime.json.writing',root+'/node-runtime.json');
 const end=Date.now()+8000;while(!fs.existsSync(root+'/node.ack')){if(Date.now()>end)throw Error('FIXTURE_ACK_TIMEOUT');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10)};
 if(fs.readFileSync(root+'/node.ack','ascii')!==nonce)throw Error('FIXTURE_ACK_INVALID');
 ${scenario === 'positive' ? '' : 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,60000);'}
@@ -423,6 +440,11 @@ function validateKernelEvidence(evidence, fixture, runtime) {
   assert.equal(records[2].binarySha256, fixture.config.runnerNodeSha256)
   assert.equal(runtime.pid, records[2].pid); assert.equal(runtime.binarySha256, fixture.config.runnerNodeSha256)
   assert.equal(runtime.version, process.versions.node)
+  assert.equal(runtime.nonce, fixture.config.nonce)
+  const ready = JSON.parse(fs.readFileSync(path.join(fixture.root, 'node-js-ready.json')))
+  assert.equal(ready.pid, runtime.pid); assert.equal(ready.nonce, fixture.config.nonce)
+  assert.deepEqual(ready.runtime, runtime)
+  assert.ok(Date.parse(ready.observedAt) >= Date.parse(records[2].startedAt))
   const liveGroup = evidence.groupLiveObservation
   assert.equal(liveGroup.method, 'darwin-libproc-PROC_PGRP_ONLY')
   assert.equal(liveGroup.errno, 0); assert.equal(liveGroup.pgid, evidence.rootPid)
@@ -535,6 +557,11 @@ async function runCase(base, python, node, pins, api, scenario) {
       if (scenario === 'root-first') {
         const intent = JSON.parse(fs.readFileSync(path.join(fixture.root, 'root-exit-intent.json')))
         assert.equal(intent.nodePid, runtime.pid); assert.equal(intent.rootPid, evidence.rootPid)
+        const ready = JSON.parse(fs.readFileSync(path.join(fixture.root, 'node-js-ready.json')))
+        assert.equal(intent.nodeRuntimeReadyObservedAt, ready.observedAt)
+        assert.ok(Date.parse(intent.nodeAliveObservedAt) >= Date.parse(ready.observedAt))
+        const rootExit = evidence.processes.find(row => row.role === 'root')
+        assert.ok(Date.parse(rootExit.exitObservedAt) >= Date.parse(intent.nodeAliveObservedAt))
       }
     }
     return { api, scenario, ...SCOPE, fixtureRoot: fixture.root, rootPid: evidence.rootPid,
@@ -548,6 +575,9 @@ async function runCase(base, python, node, pins, api, scenario) {
       apiReleaseObservation: scenario === 'outer-timeout'
         ? JSON.parse(fs.readFileSync(path.join(fixture.root, 'api-release.json'))) : null,
       apiStartObservation: JSON.parse(fs.readFileSync(path.join(fixture.root, 'api-start.json'))),
+      nodeRuntimeReadyObservation: JSON.parse(fs.readFileSync(path.join(fixture.root, 'node-js-ready.json'))),
+      rootExitIntentObservation: scenario === 'root-first'
+        ? JSON.parse(fs.readFileSync(path.join(fixture.root, 'root-exit-intent.json'))) : null,
       node: { ...records[2], actualRuntime: runtime }, processes: records,
       kernelEvidence: evidence, fixtureTokenJsPinOverride: api === 'adapter.run_token',
       auditExecutableBinding: api === 'bootstrap.check_dependency_audits' ? 'owned-byte-identical-runner-copy-required-by-contained-root-API' : null }

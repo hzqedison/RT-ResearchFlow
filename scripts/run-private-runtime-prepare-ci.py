@@ -194,11 +194,39 @@ def retain_native_candidate(lab, proof):
             "members": list(required)}
 
 
+def validated_cache_roots(values, temporary):
+    """Use only explicit, real input directories on this disposable runner."""
+    temporary = pathlib.Path(temporary).resolve(strict=True)
+    roots = []
+    for value in values:
+        candidate = pathlib.Path(value)
+        if not candidate.is_absolute():
+            raise ValueError("Cache input must be an absolute runner directory")
+        resolved = candidate.resolve(strict=True)
+        if (resolved == temporary or not resolved.is_relative_to(temporary) or
+                not resolved.is_dir()):
+            raise ValueError("Cache input escaped the disposable runner")
+        current = candidate
+        while current != temporary:
+            if current.is_symlink() or current.is_junction():
+                raise ValueError("Cache input must not traverse links")
+            parent = current.parent
+            if parent == current:
+                raise ValueError("Cache input escaped the disposable runner")
+            current = parent
+        if str(resolved) in roots:
+            raise ValueError("Duplicate cache input")
+        roots.append(str(resolved))
+    return roots
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True,
                         choices=("win32-x64", "darwin-arm64", "darwin-x64"))
     parser.add_argument("--proof-dir", required=True)
+    parser.add_argument("--cache-root", action="append", default=[],
+                        help="Exact derived-input cache below this runner temporary directory")
     parser.add_argument("--retain-payload", action="store_true",
                         help="Preserve unapproved native build inputs in the CI artifact")
     args = parser.parse_args()
@@ -213,6 +241,7 @@ def main():
     if (not proof.is_absolute() or proof.exists() or proof.is_symlink() or
             not proof.resolve().is_relative_to(temporary)):
         raise SystemExit("Proof output must be a fresh directory under RUNNER_TEMP")
+    cache_roots = validated_cache_roots(args.cache_root, temporary)
     proof.mkdir()
     policy_path = repo / "resources/python-runtime/preparation.policy.json"
     policy = json.loads(policy_path.read_text(encoding="utf-8"))
@@ -246,7 +275,7 @@ def main():
         raise ValueError("Actual private interpreter did not match the reviewed runtime")
     ops = lab / "operations.json"
     ops.write_text(json.dumps({"schemaVersion": 1,
-        "kind": "rt-private-runtime-operation-input-v1", "cacheRoots": [],
+        "kind": "rt-private-runtime-operation-input-v1", "cacheRoots": cache_roots,
         "seedReports": {}, "sourceReceipt": str(receipt)}), encoding="utf-8")
     work = lab / "prepare"
     handoff = lab / "handoff.json"

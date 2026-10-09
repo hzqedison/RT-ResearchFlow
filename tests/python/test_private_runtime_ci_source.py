@@ -172,7 +172,7 @@ def _assert_invalid(module, fixture, context=None):
     raise AssertionError("Invalid checkout evidence was accepted")
 
 
-def test_genuine_fixture_collects_seven_sorted_sources_and_clean_proof(tmp_path):
+def test_genuine_fixture_collects_ten_sorted_sources_and_clean_proof(tmp_path):
     module = _load_collector()
     fixture = _fixture(tmp_path / "tree-case", module)
 
@@ -193,7 +193,7 @@ def test_genuine_fixture_collects_seven_sorted_sources_and_clean_proof(tmp_path)
     records = _source_records(receipt, proof)
     expected_paths = sorted(module.ROOT_SOURCES)
     assert [record["path"] for record in records] == expected_paths
-    assert len(records) == 7
+    assert len(records) == 10
     for record in records:
         content = fixture.files[record["path"]]
         assert record["sha256"] == hashlib.sha256(content).hexdigest()
@@ -348,7 +348,7 @@ def test_git_metadata_directory_is_controlled_and_its_contents_are_not_read(tmp_
 
     assert receipt["checkoutClean"] is True
     assert proof["gitMetadataContentsRead"] is False
-    assert len(_source_records(receipt, proof)) == 7
+    assert len(_source_records(receipt, proof)) == 10
 
 
 def test_synthetic_contract_proof_is_not_native_or_producer_approval(tmp_path):
@@ -391,6 +391,26 @@ def test_scan_errors_cannot_silently_hide_untracked_files(tmp_path):
     with patch.object(module.os, "walk", side_effect=incomplete_walk):
         _assert_invalid(module, fixture)
 
+
+
+def test_exact_consumed_source_set_includes_native_and_redistribution_recipes(tmp_path):
+    module = _load_collector()
+    assert set(module.ROOT_SOURCES) == {
+        "electron/shared/privatePythonRuntimeManifest.cjs",
+        "resources/python-runtime/bootstrap.py",
+        "resources/python-runtime/miniracer_unicode_adapter.py",
+        "resources/python-runtime/pywencai_adapter.py",
+        "scripts/build-mootdx-compat-wheel.py",
+        "scripts/build-provider-source-wheels.py",
+        "scripts/prepare-private-python-runtime.py",
+        "scripts/rebuild-lxml-native.py",
+        "scripts/build-lxml-redistribution-wheel.py",
+        "scripts/build-lxml-matched-public-source.py",
+    }
+    fixture = _fixture(tmp_path, module)
+    receipt, proof = module.collect(fixture.context, fixture.fetcher())
+    assert {record["path"] for record in _source_records(receipt, proof)} == set(module.ROOT_SOURCES)
+    assert proof["sourceVerified"] is False
 
 class SourceCollectorContracts(unittest.TestCase):
     pass

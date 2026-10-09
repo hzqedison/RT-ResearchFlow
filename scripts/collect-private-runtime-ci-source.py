@@ -19,6 +19,9 @@ ROOT_SOURCES = (
     "scripts/build-mootdx-compat-wheel.py",
     "scripts/build-provider-source-wheels.py",
     "scripts/prepare-private-python-runtime.py",
+    "scripts/rebuild-lxml-native.py",
+    "scripts/build-lxml-redistribution-wheel.py",
+    "scripts/build-lxml-matched-public-source.py",
 )
 POLICY_PATH = "resources/python-runtime/preparation.policy.json"
 PRODUCER_SOURCES = ("scripts/collect-private-runtime-ci-source.py",

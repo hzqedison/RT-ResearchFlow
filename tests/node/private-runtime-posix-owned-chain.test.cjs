@@ -61,6 +61,10 @@ test('fixture scope is never product approval and watcher uses kernel observatio
   assert.match(harness.WATCHER_PROBE, /libproc\.proc_listpids\(2,pgid,values,capacity\)/)
   assert.match(harness.WATCHER_PROBE, /if error: raise OSError/)
   assert.match(harness.WATCHER_PROBE, /groupAbsentObservations/)
+  assert.match(harness.WATCHER_PROBE, /if role!='node':/)
+  assert.match(harness.WATCHER_PROBE, /runtime\['pid'\]==registered\['node'\]/)
+  assert.match(harness.WATCHER_PROBE, /runtime\['executable'\]==node\['executable'\]/)
+  assert.match(harness.WATCHER_PROBE, /node-js-ready\.json/)
   assert.match(harness.WATCHER_PROBE, /FIXTURE_STARTUP_DEADLINE/)
   assert.match(harness.WORKER_PROBE, /wait_ack\('api',seconds=20\)/)
   assert.match(harness.WORKER_PROBE, /worker-python-failure\.json/)
@@ -116,6 +120,15 @@ test('native Mac separately tests fixed reporter rejection and real API chains w
     assert.equal(root.pid, root.pgid); assert.equal(root.pid, root.sid)
     assert.deepEqual(root.argv.slice(-2), ['--pre-seal-owned-posix-root', String(root.pid)])
     assert.equal(node.rootPid, root.pid)
+    assert.equal(row.nodeRuntimeReadyObservation.pid, node.pid)
+    assert.deepEqual(row.nodeRuntimeReadyObservation.runtime, row.node.actualRuntime)
+    if (row.scenario === 'root-first') {
+      const intent = row.rootExitIntentObservation
+      assert.equal(intent.nodeRuntimeReadyObservedAt, row.nodeRuntimeReadyObservation.observedAt)
+      assert.ok(Date.parse(intent.nodeAliveObservedAt) >= Date.parse(row.nodeRuntimeReadyObservation.observedAt))
+      const rootExit = row.kernelEvidence.processes.find(process => process.role === 'root')
+      assert.ok(Date.parse(rootExit.exitObservedAt) >= Date.parse(intent.nodeAliveObservedAt))
+    }
     assert.equal(row.nodeWarmup.exitCode, 0); assert.equal(row.nodeWarmup.signal, null)
     assert.equal(row.nodeWarmup.binarySha256, node.binarySha256)
     assert.equal(row.nodeWarmup.executable, node.executable)

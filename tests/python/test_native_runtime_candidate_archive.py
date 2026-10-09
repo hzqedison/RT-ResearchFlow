@@ -62,5 +62,31 @@ class CandidateArchiveTests(unittest.TestCase):
             self.assertEqual(archive.read_bytes(), b"foreign-existing")
 
 
+class CandidateCacheRootTests(unittest.TestCase):
+    def test_exact_runner_input_directory_is_accepted(self):
+        with tempfile.TemporaryDirectory() as root:
+            temporary = pathlib.Path(root).resolve()
+            cache = temporary / "verified-native-inputs"
+            cache.mkdir()
+            self.assertEqual(MODULE.validated_cache_roots([str(cache)], temporary), [str(cache)])
+
+    def test_relative_outside_and_runner_root_are_rejected(self):
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as outside:
+            temporary = pathlib.Path(root).resolve()
+            for candidate in ("relative-inputs", str(temporary), str(pathlib.Path(outside).resolve())):
+                with self.subTest(candidate=candidate), self.assertRaises(ValueError):
+                    MODULE.validated_cache_roots([candidate], temporary)
+
+    def test_missing_and_duplicate_inputs_are_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            temporary = pathlib.Path(root).resolve()
+            cache = temporary / "verified-native-inputs"
+            cache.mkdir()
+            with self.assertRaises(FileNotFoundError):
+                MODULE.validated_cache_roots([str(temporary / "missing")], temporary)
+            with self.assertRaises(ValueError):
+                MODULE.validated_cache_roots([str(cache), str(cache)], temporary)
+
+
 if __name__ == "__main__":
     unittest.main()
