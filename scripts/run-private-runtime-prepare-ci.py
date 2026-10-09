@@ -156,6 +156,22 @@ def resolver_metadata(work, proof):
     return copied
 
 
+def verify_checkout(repo, receipt, proof_path, check=False):
+    command = [sys.executable, "-X", "utf8", "-B", "-I",
+               str(repo / "scripts/collect-private-runtime-ci-source.py"),
+               "--receipt", str(receipt), "--proof", str(proof_path)]
+    if check:
+        command.append("--check-receipt")
+    try:
+        code = subprocess.run(command, cwd=repo, timeout=120).returncode
+    except subprocess.TimeoutExpired:
+        code = 124
+    if code and not proof_path.exists():
+        proof_path.write_text(json.dumps({"kind": "rt-private-runtime-source-check-failed-v1",
+            "exit": code, "independentApproval": False}) + "\n", encoding="utf-8")
+    return code
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True,
@@ -181,6 +197,14 @@ def main():
     home = lab / "home"
     home.mkdir()
     env = child_environment(home)
+    receipt = lab / "source-receipt.json"
+    source_exit = verify_checkout(repo, receipt, proof / "source-before.json")
+    if source_exit:
+        raise SystemExit(source_exit)
+    # Public producer context only; API credentials remain outside the child.
+    for key in ("GITHUB_ACTIONS", "GITHUB_REPOSITORY", "GITHUB_SHA", "GITHUB_WORKFLOW_REF",
+                "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_JOB", "RUNNER_TEMP"):
+        env[key] = os.environ[key]
     archive = lab / "python.tar.gz"
     print("stage=verified-pbs-download target=" + args.target, flush=True)
     download_python(asset, archive)
@@ -199,7 +223,7 @@ def main():
     ops = lab / "operations.json"
     ops.write_text(json.dumps({"schemaVersion": 1,
         "kind": "rt-private-runtime-operation-input-v1", "cacheRoots": [],
-        "seedReports": {}, "sourceReceipt": None}), encoding="utf-8")
+        "seedReports": {}, "sourceReceipt": str(receipt)}), encoding="utf-8")
     work = lab / "prepare"
     handoff = lab / "handoff.json"
     log = proof / "prepare.log"
@@ -219,12 +243,15 @@ def main():
     with log.open("rb") as stream:
         stream.seek(max(0, log.stat().st_size - 32768))
         print(stream.read().decode("utf-8", errors="replace"), flush=True)
+    source_exit = verify_checkout(repo, receipt, proof / "source-after.json", check=True)
     if result.returncode == 0 and not handoff.is_file():
         raise ValueError("Successful preparation did not produce a handoff")
     if result.returncode == 0:
         shutil.copyfile(handoff, proof / "handoff.json")
     # Only metadata is exported. No unapproved runtime, wheel, or vendor payload.
     copied = resolver_metadata(work, proof)
+    shutil.copyfile(receipt, proof / "source-receipt.json")
+    copied.extend(("source-before.json", "source-after.json", "source-receipt.json"))
     for directory in (work, work / "resolve", work / "materialize"):
         for name in ("candidate-lock.json", "candidate-fragment.json", "native-evidence.json"):
             path = directory / name
@@ -237,13 +264,15 @@ def main():
         "electron/shared/privatePythonRuntimeManifest.cjs", "resources/python-runtime/bootstrap.py",
         "resources/python-runtime/miniracer_unicode_adapter.py",
         "resources/python-runtime/pywencai_adapter.py", "scripts/build-mootdx-compat-wheel.py",
-        "scripts/build-provider-source-wheels.py", "scripts/run-private-runtime-prepare-ci.py")
+        "scripts/build-provider-source-wheels.py", "scripts/run-private-runtime-prepare-ci.py",
+        "scripts/collect-private-runtime-ci-source.py", ".github/workflows/private-runtime-prepare-native.yml")
     summary = {"kind": "rt-private-runtime-native-preparation-candidate-v1",
         "target": args.target, "sourceCommit": os.environ.get("GITHUB_SHA"),
         "runId": os.environ.get("GITHUB_RUN_ID"), "attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
         "actualInterpreter": version, "pythonAsset": asset,
         "sourceHashes": {p: digest(repo / p) for p in source_paths},
         "prepareExit": result.returncode, "metadataFiles": copied,
+        "sourceAfterExit": source_exit, "sourceBytesComparedToOfficialTree": source_exit == 0,
         "releaseEligible": False, "formalBundle": False, "installedApplication": False,
         "formalBootstrapTested": False,
         "minimumMacOSLiveVerified": False, "operatingSystemNetworkSandboxVerified": False,
@@ -252,8 +281,8 @@ def main():
     sums = [digest(path) + "  " + path.name for path in sorted(proof.iterdir()) if path.is_file()]
     (proof / "SHA256SUMS.txt").write_text("\n".join(sums) + "\n", encoding="utf-8")
     print("stage=candidate-evidence-complete releaseEligible=false", flush=True)
-    if result.returncode != 0:
-        raise SystemExit(result.returncode)
+    if result.returncode != 0 or source_exit != 0:
+        raise SystemExit(result.returncode or source_exit)
 
 
 if __name__ == "__main__":
