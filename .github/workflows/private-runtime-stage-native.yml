@@ -79,11 +79,11 @@ jobs:
                   ![binding.artifactId,binding.jobId].every(v => Number.isSafeInteger(v) && v > 0)) throw new Error('Invalid prepare binding');
             }
             const pinned = {
-              'win32-x64': {artifactId:11629798590,jobId:113920563896},
-              'darwin-arm64': {artifactId:11629768435,jobId:113920564049},
-              'darwin-x64': {artifactId:11630298599,jobId:113920564164},
+              'win32-x64': {artifactId:11633792453,jobId:113942680677},
+              'darwin-arm64': {artifactId:11634431229,jobId:113942680375},
+              'darwin-x64': {artifactId:11633807716,jobId:113942680942},
             };
-            if (Number(e.PREPARE_RUN_ID) !== 37960129695 ||
+            if (Number(e.PREPARE_RUN_ID) !== 37966682707 ||
                 targets.some(t => bindings[t].artifactId !== pinned[t].artifactId || bindings[t].jobId !== pinned[t].jobId)) throw new Error('Final prepare pins mismatch');
             if (new Set(targets.map(t => bindings[t].artifactId)).size !== 3 ||
                 new Set(targets.map(t => bindings[t].jobId)).size !== 3) throw new Error('Duplicate prepare identities');
