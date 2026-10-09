@@ -1,0 +1,53 @@
+name: Native private runtime preparation candidates
+
+on:
+  push:
+    branches: [codex/verify-1.7]
+    paths:
+      - .github/workflows/private-runtime-prepare-native.yml
+      - scripts/run-private-runtime-prepare-ci.py
+      - scripts/prepare-private-python-runtime.py
+      - scripts/build-provider-source-wheels.py
+      - scripts/build-mootdx-compat-wheel.py
+      - resources/python-runtime/**
+      - electron/shared/privatePythonRuntimeManifest.cjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-prepare:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: win32-x64
+            os: windows-latest
+          - target: darwin-arm64
+            os: macos-15
+          - target: darwin-x64
+            os: macos-15-intel
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - name: Use private PBS for actual native resolve and materialize
+        shell: bash
+        env:
+          RT_TARGET: ${{ matrix.target }}
+        run: >-
+          python scripts/run-private-runtime-prepare-ci.py
+          --target "$RT_TARGET"
+          --proof-dir "$RUNNER_TEMP/private-runtime-prepare-proof"
+      - name: Export candidate evidence only, never runtime payloads
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: private-runtime-prepare-${{ matrix.target }}
+          path: ${{ runner.temp }}/private-runtime-prepare-proof
+          if-no-files-found: error
+          retention-days: 7

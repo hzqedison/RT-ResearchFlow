@@ -1623,7 +1623,7 @@ sys.addaudithook(socket_audit)
 def basic_native_evidence(tree, tools, work, target="win32-x64"):
     code = SMOKE_NETWORK_GUARD + r'''
 import importlib,json,pathlib,socket,subprocess,sys
- tree=pathlib.Path(sys.argv[1])
+tree=pathlib.Path(sys.argv[1])
 provider=sys.argv[2];site=tree/'providers'/provider/'site'
 sys.path[:]=[str(site)]+[p for p in sys.path if 'site-packages' not in p.lower()]
 module=importlib.import_module(provider)
