@@ -181,7 +181,7 @@ def main():
     provider = download(PROVIDER, assets)
     site = lab / "provider-site"
     report = evidence / "pip-resolution.json"
-    run([python, "-B", "-I", "-m", "pip", "--isolated", "install", "--disable-pip-version-check",
+    run([python, "-B", "-I", "-X", "utf8", "-m", "pip", "--isolated", "install", "--disable-pip-version-check",
          "--no-input", "--no-cache-dir", "--only-binary=:all:", "--index-url", "https://pypi.org/simple/",
          "--target", site, "--report", report, provider, execjs, jsonpath, "numpy==2.5.3", "requests==2.34.2", "urllib3==2.7.0"],
         root, env, evidence, "full-provider-install", timeout=480)
