@@ -119,7 +119,11 @@ if (require.main === module) run(options(process.argv.slice(2))).then(result => 
   if (result.status !== 'structurally-merged') process.exitCode = 2
 }).catch(error => {
   const code = /^[A-Z][A-Z0-9_]+$/.test(error.code || '') ? error.code : 'MERGE_HOST_FAILED'
-  process.stderr.write(JSON.stringify({ status: 'rejected', releaseEligible: false, code }) + '\n')
+  const message = typeof error.message === 'string' ? error.message : ''
+  const diagnostic = /^PRIVATE_RUNTIME_INVALID: [A-Za-z0-9 _./+-]{1,160}$/.test(message)
+    ? message : undefined
+  process.stderr.write(JSON.stringify({ status: 'rejected', releaseEligible: false, code,
+    ...(diagnostic ? { diagnostic } : {}) }) + '\n')
   process.exitCode = 1
 })
 module.exports = { options, run, PINS }
