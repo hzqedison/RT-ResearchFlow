@@ -1,0 +1,88 @@
+name: Native dependency reuse assembly
+
+on:
+  push:
+    branches: [codex/verify-mac-1.7]
+    paths:
+      - .github/workflows/lxml-redistribution-native.yml
+      - scripts/run-lxml-native-consumer-ci.py
+      - scripts/consume-hosted-lxml.py
+      - scripts/build-lxml-redistribution-wheel.py
+      - scripts/build-lxml-matched-public-source.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: lxml-reuse-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-assembly:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: win32-x64
+            os: windows-latest
+          - target: darwin-arm64
+            os: macos-15
+          - target: darwin-x64
+            os: macos-15-intel
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+        env:
+          GIT_CONFIG_COUNT: '1'
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - name: Verify exact checkout sources before recipe execution
+        shell: bash
+        env:
+          SOURCE_VERIFICATION_TOKEN: ${{ github.token }}
+        run: >-
+          python -X utf8 -B -I scripts/collect-private-runtime-ci-source.py
+          --receipt "$RUNNER_TEMP/lxml-source-receipt.json"
+          --proof "$RUNNER_TEMP/lxml-source-proof.json"
+      - name: Reuse existing Windows native compilation
+        if: matrix.target == 'win32-x64'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: hzqedison/RT-ResearchFlow
+          run-id: 37896686196
+          name: lxml-native-relink-37896686196-1
+          path: ${{ runner.temp }}/lxml-hosted-inputs
+      - name: Assemble pinned dependencies with exact private interpreter
+        shell: bash
+        env:
+          RT_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$RT_TARGET" = "win32-x64" ]; then
+            args=(--artifact-dir "$RUNNER_TEMP/lxml-hosted-inputs")
+          fi
+          python -X utf8 -B -I scripts/run-lxml-native-consumer-ci.py \
+            --target "$RT_TARGET" \
+            --proof-dir "$RUNNER_TEMP/lxml-native-consumer-proof" "${args[@]}"
+      - name: Preserve only derived assets and source evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: lxml-redistribution-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/lxml-native-consumer-proof/derived
+            ${{ runner.temp }}/lxml-source-receipt.json
+            ${{ runner.temp }}/lxml-source-proof.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
