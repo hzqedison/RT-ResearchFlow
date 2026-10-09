@@ -247,6 +247,32 @@ jobs:
         if: matrix.platform == 'macos'
         run: node --test macos/sync-upstream.test.mjs
 
+      - name: Materialize the accepted formal private runtime before packaging 1.7
+        if: needs.prepare.outputs.version == '1.7.0'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RT_RUNTIME_RELEASE_AUTHORIZATION_REPOSITORY_ID: ${{ vars.RT_RUNTIME_RELEASE_AUTHORIZATION_REPOSITORY_ID }}
+          RT_RUNTIME_RELEASE_AUTHORIZATION_COMMIT: ${{ vars.RT_RUNTIME_RELEASE_AUTHORIZATION_COMMIT }}
+          RT_RUNTIME_RELEASE_AUTHORIZATION_PATH: ${{ vars.RT_RUNTIME_RELEASE_AUTHORIZATION_PATH }}
+          RT_RUNTIME_RELEASE_AUTHORIZATION_SHA256: ${{ vars.RT_RUNTIME_RELEASE_AUTHORIZATION_SHA256 }}
+          RT_SEALED_RUN_ID: ${{ vars.RT_PRIVATE_RUNTIME_SEALED_RUN_ID }}
+          RT_SEALED_ARTIFACT_IDS: ${{ vars.RT_PRIVATE_RUNTIME_SEALED_ARTIFACT_IDS }}
+          RUNTIME_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          set -euo pipefail
+          case "$RELEASE_PLATFORM:$RELEASE_ARCH" in
+            windows:x64) target=win32-x64 ;;
+            macos:arm64) target=darwin-arm64 ;;
+            macos:x64) target=darwin-x64 ;;
+            *) exit 1 ;;
+          esac
+          artifact_id=$(node -e 'const m=require("./scripts/materialize-sealed-private-runtime-ci.cjs"); console.log(m.artifactIdForTarget(process.env.RT_SEALED_ARTIFACT_IDS, process.argv[1]))' "$target")
+          node scripts/materialize-sealed-private-runtime-ci.cjs \
+            --target "$target" --run-id "$RT_SEALED_RUN_ID" --artifact-id "$artifact_id" --python "$RUNTIME_PYTHON"
+          node scripts/validate-private-python-runtime.cjs \
+            "resources/python-runtime/bundles/$target" "$target"
+
       # Each installer is produced once. There is no build in the assemble job.
       - name: Build Windows EXE without launching the installer output
         if: matrix.platform == 'windows'
@@ -695,4 +721,3 @@ jobs:
               .addRaw('All five release attachments passed downloaded-byte SHA-256 verification.\n\n')
               .addRaw('No source rebuild, real-account operation or production-device installation was performed by the publishing job.')
               .write();
-
