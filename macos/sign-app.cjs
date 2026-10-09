@@ -34,7 +34,8 @@ async function signAppPreservingRuntime(appPath, signAsync) {
     identityValidation: false,
     preAutoEntitlements: false,
     preEmbedProvisioningProfile: false,
-    strictVerify: true,
+    // osx-sign 1.0.5 defaults to --strict. Passing true emits the invalid
+    // --strict=true spelling; omission preserves strict verification.
     ignore,
     optionsForFile: () => ({ hardenedRuntime: false, timestamp: 'none' }),
   })

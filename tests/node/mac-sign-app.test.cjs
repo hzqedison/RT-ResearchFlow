@@ -36,7 +36,7 @@ test('ad-hoc signing retains strict verification and never enables notarization'
   assert.equal(options.app, app)
   assert.equal(options.identity, '-')
   assert.equal(options.platform, 'darwin')
-  assert.equal(options.strictVerify, true)
+  assert.equal(Object.hasOwn(options, 'strictVerify'), false)
   assert.equal(options.preAutoEntitlements, false)
   assert.equal(options.preEmbedProvisioningProfile, false)
   assert.equal(options.ignore(path.join(runtime, 'node', 'bin', 'node')), true)
