@@ -126,13 +126,16 @@ class Fixture:
         return fetch_json
 
 
-def _fixture(tmp_path, module):
+def _fixture(tmp_path, module, workflow_path=WORKFLOW_PATH, job="native-prepare"):
     fixture = Fixture(tmp_path)
+    fixture.context["GITHUB_WORKFLOW_REF"] = REPOSITORY + "/" + workflow_path + "@refs/heads/codex/verify-1.7"
+    fixture.context["GITHUB_JOB"] = job
+    fixture.run["path"] = workflow_path
     (fixture.root / ".git").mkdir()
     for path in module.ROOT_SOURCES:
         fixture.add_file(path, ("fixture source: " + path + "\n").encode("utf-8"))
     fixture.add_file(module.POLICY_PATH, b'{"policy":"fixture"}\n')
-    for path in module.PRODUCER_SOURCES:
+    for path in module.PRODUCER_CONTEXTS.get((workflow_path, job), module.PRODUCER_SOURCES):
         fixture.add_file(path, ("# fixture producer: " + path + "\n").encode("utf-8"))
     fixture.make_tree()
     return fixture
@@ -411,6 +414,66 @@ def test_exact_consumed_source_set_includes_native_and_redistribution_recipes(tm
     receipt, proof = module.collect(fixture.context, fixture.fetcher())
     assert {record["path"] for record in _source_records(receipt, proof)} == set(module.ROOT_SOURCES)
     assert proof["sourceVerified"] is False
+
+
+ASSEMBLY_WORKFLOW_PATH = ".github/workflows/lxml-redistribution-native.yml"
+
+
+@parametrize("target", ["win32-x64", "darwin-arm64", "darwin-x64"])
+def test_fixed_native_assembly_context_collects_without_source_approval(tmp_path, target):
+    module = _load_collector()
+    fixture = _fixture(tmp_path, module, ASSEMBLY_WORKFLOW_PATH, "native-assembly")
+    fixture.context["RT_TARGET"] = target
+    receipt, proof = module.collect(fixture.context, fixture.fetcher())
+    assert receipt["producer"]["job"] == "native-assembly"
+    assert receipt["producer"]["workflowRef"] == fixture.context["GITHUB_WORKFLOW_REF"]
+    assert proof["target"] == target
+    assert proof["sourceVerified"] is False
+    assert proof["independentApproval"] is False
+    assert len(_source_records(receipt, proof)) == 10
+    assert set(proof["producerSourceHashes"]) == {
+        "scripts/collect-private-runtime-ci-source.py",
+        "scripts/run-lxml-native-consumer-ci.py", ASSEMBLY_WORKFLOW_PATH}
+    for path, digest in proof["producerSourceHashes"].items():
+        assert digest == hashlib.sha256(fixture.files[path]).hexdigest()
+
+
+@parametrize("workflow_path,job", [
+    (WORKFLOW_PATH, "native-assembly"),
+    (ASSEMBLY_WORKFLOW_PATH, "native-prepare"),
+    (ASSEMBLY_WORKFLOW_PATH, "other-job"),
+    (".github/workflows/other-native.yml", "native-assembly"),
+])
+def test_rejects_crossed_or_unlisted_workflow_job_pair_before_api(tmp_path, workflow_path, job):
+    module = _load_collector()
+    fixture = _fixture(tmp_path, module, workflow_path, job)
+    _assert_invalid(module, fixture)
+    assert fixture.requests == []
+
+
+def test_native_assembly_rejects_api_run_for_other_approved_workflow(tmp_path):
+    module = _load_collector()
+    fixture = _fixture(tmp_path, module, ASSEMBLY_WORKFLOW_PATH, "native-assembly")
+    fixture.run["path"] = WORKFLOW_PATH
+    _assert_invalid(module, fixture)
+
+
+@parametrize("missing", ["scripts/run-lxml-native-consumer-ci.py", ASSEMBLY_WORKFLOW_PATH])
+def test_native_assembly_requires_its_own_bound_producer_files(tmp_path, missing):
+    module = _load_collector()
+    fixture = _fixture(tmp_path, module, ASSEMBLY_WORKFLOW_PATH, "native-assembly")
+    fixture.root.joinpath(*missing.split("/")).unlink()
+    del fixture.files[missing]
+    fixture.make_tree()
+    _assert_invalid(module, fixture)
+
+
+def test_compiled_producer_allowlist_contains_only_two_exact_pairs(tmp_path):
+    module = _load_collector()
+    assert set(module.PRODUCER_CONTEXTS) == {
+        (WORKFLOW_PATH, "native-prepare"),
+        (ASSEMBLY_WORKFLOW_PATH, "native-assembly")}
+    assert module.PRODUCER_CONTEXTS[(WORKFLOW_PATH, "native-prepare")] == module.PRODUCER_SOURCES
 
 class SourceCollectorContracts(unittest.TestCase):
     pass

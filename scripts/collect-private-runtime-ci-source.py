@@ -26,6 +26,13 @@ ROOT_SOURCES = (
 POLICY_PATH = "resources/python-runtime/preparation.policy.json"
 PRODUCER_SOURCES = ("scripts/collect-private-runtime-ci-source.py",
                     "scripts/run-private-runtime-prepare-ci.py", WORKFLOW_PATH)
+ASSEMBLY_WORKFLOW_PATH = ".github/workflows/lxml-redistribution-native.yml"
+PRODUCER_CONTEXTS = {
+    (WORKFLOW_PATH, "native-prepare"): PRODUCER_SOURCES,
+    (ASSEMBLY_WORKFLOW_PATH, "native-assembly"): (
+        "scripts/collect-private-runtime-ci-source.py",
+        "scripts/run-lxml-native-consumer-ci.py", ASSEMBLY_WORKFLOW_PATH),
+}
 CONTEXT_KEYS = ("GITHUB_ACTIONS", "RUNNER_ENVIRONMENT", "GITHUB_WORKSPACE",
                 "GITHUB_REPOSITORY", "GITHUB_SHA", "GITHUB_RUN_ID",
                 "GITHUB_RUN_ATTEMPT", "GITHUB_JOB", "GITHUB_WORKFLOW_REF",
@@ -59,11 +66,13 @@ def collect(context, fetch_json):
     sha = context.get("GITHUB_SHA", "")
     run_id, attempt = context.get("GITHUB_RUN_ID", ""), context.get("GITHUB_RUN_ATTEMPT", "")
     workflow_ref = context.get("GITHUB_WORKFLOW_REF", "")
+    prefix, separator, branch_ref = workflow_ref.partition("@refs/heads/")
+    workflow_path = prefix.removeprefix(REPOSITORY + "/") if prefix.startswith(REPOSITORY + "/") else ""
+    producer_sources = PRODUCER_CONTEXTS.get((workflow_path, context.get("GITHUB_JOB")))
     if (not re.fullmatch(r"[a-f0-9]{40}", sha) or
             not re.fullmatch(r"[1-9][0-9]{0,19}", run_id) or
             not re.fullmatch(r"[1-9][0-9]{0,9}", attempt) or
-            not workflow_ref.startswith(REPOSITORY + "/" + WORKFLOW_PATH + "@refs/heads/") or
-            context.get("GITHUB_JOB") != "native-prepare" or
+            separator != "@refs/heads/" or not branch_ref or producer_sources is None or
             context.get("GITHUB_EVENT_NAME") not in ("push", "workflow_dispatch") or
             context.get("RT_TARGET") not in ("win32-x64", "darwin-arm64", "darwin-x64")):
         raise Invalid("Invalid immutable producer identifiers")
@@ -78,12 +87,12 @@ def collect(context, fetch_json):
     run = fetch_json(run_url)
     branch = run.get("head_branch")
     if (run.get("id") != int(run_id) or run.get("run_attempt") != int(attempt) or
-            run.get("head_sha") != sha or run.get("path") != WORKFLOW_PATH or
+            run.get("head_sha") != sha or run.get("path") != workflow_path or
             run.get("repository", {}).get("full_name") != REPOSITORY or
             run.get("head_repository", {}).get("full_name") != REPOSITORY or
             run.get("event") != context["GITHUB_EVENT_NAME"] or
             not isinstance(branch, str) or not branch or
-            workflow_ref != REPOSITORY + "/" + WORKFLOW_PATH + "@refs/heads/" + branch):
+            workflow_ref != REPOSITORY + "/" + workflow_path + "@refs/heads/" + branch):
         raise Invalid("Actual producer run differs from supplied context")
     commit_url = base + "/git/commits/" + sha
     commit = fetch_json(commit_url)
@@ -146,7 +155,7 @@ def collect(context, fetch_json):
             actual.add(path.relative_to(root).as_posix())
     if actual != set(tracked):
         raise Invalid("Untracked or missing checkout source")
-    required = set(ROOT_SOURCES) | {POLICY_PATH} | set(PRODUCER_SOURCES)
+    required = set(ROOT_SOURCES) | {POLICY_PATH} | set(producer_sources)
     if not required <= hashes.keys():
         raise Invalid("Required consumed and producer source is absent")
     receipt = {"schemaVersion": 1, "kind": "rt-private-runtime-source-receipt-v1",
@@ -160,7 +169,7 @@ def collect(context, fetch_json):
         "receiptSha256": hashlib.sha256(encoded(receipt)).hexdigest(), "trackedFileCount": len(tracked),
         "trackedBytes": bytes_checked, "wholeCheckoutBytesCompared": True, "untrackedFiles": 0,
         "gitMetadataContentsRead": False, "independentApproval": False, "sourceVerified": False,
-        "producerSourceHashes": {p: hashes[p] for p in PRODUCER_SOURCES},
+        "producerSourceHashes": {p: hashes[p] for p in producer_sources},
         "apiEvidence": {url: hashlib.sha256(encoded(value)).hexdigest()
                         for url, value in ((run_url, run), (commit_url, commit), (tree_url, tree))}}
     return receipt, proof

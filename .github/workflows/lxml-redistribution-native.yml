@@ -6,6 +6,8 @@ on:
     paths:
       - .github/workflows/lxml-redistribution-native.yml
       - scripts/run-lxml-native-consumer-ci.py
+      - scripts/collect-private-runtime-ci-source.py
+      - scripts/run-private-runtime-prepare-ci.py
       - scripts/consume-hosted-lxml.py
       - scripts/build-lxml-redistribution-wheel.py
       - scripts/build-lxml-matched-public-source.py
@@ -48,6 +50,7 @@ jobs:
         shell: bash
         env:
           SOURCE_VERIFICATION_TOKEN: ${{ github.token }}
+          RT_TARGET: ${{ matrix.target }}
         run: >-
           python -X utf8 -B -I scripts/collect-private-runtime-ci-source.py
           --receipt "$RUNNER_TEMP/lxml-source-receipt.json"
