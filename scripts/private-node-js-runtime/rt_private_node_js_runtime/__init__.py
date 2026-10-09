@@ -272,7 +272,7 @@ class MiniRacer:
     def close(self):
         with self._lock:
             if self._closed: return
-            self._closed = True; errors = []
+            self._closed = True; errors = []; posix_signal_error = None
             with _registry_lock: _registry.discard(self)
             try:
                 if self._closer:
@@ -282,6 +282,10 @@ class MiniRacer:
                     for sig in (signal.SIGTERM, signal.SIGKILL):
                         try: os.killpg(self._process.pid, sig)
                         except ProcessLookupError: pass
+                        except PermissionError as error:
+                            # Darwin may report EPERM for an unreaped, exited root.
+                            # Defer only this signal result, never the empty-group proof.
+                            posix_signal_error = error
                         if sig == signal.SIGTERM: time.sleep(.05)
                 elif self._process.poll() is None:
                     self._process.kill()  # suspended/unassigned or inherited direct child only
@@ -297,12 +301,19 @@ class MiniRacer:
                 if thread.is_alive(): errors.append(JSOwnershipError("owned pipe thread not reaped"))
             if os.name == "posix" and self._config[5] is None:
                 end = time.monotonic() + 1
+                group_absent = False
                 while True:
                     try: os.killpg(self._process.pid, 0)
-                    except ProcessLookupError: break
+                    except ProcessLookupError:
+                        group_absent = True; break
+                    except PermissionError as error:
+                        errors.append(JSOwnershipError("owned group identity cannot be verified"))
+                        errors.append(error); break
                     if time.monotonic() >= end:
                         errors.append(JSOwnershipError("owned group still exists")); break
                     time.sleep(.02)
+                if posix_signal_error is not None and not group_absent:
+                    errors.append(posix_signal_error)
             if errors: raise JSOwnershipError("owned JS cleanup incomplete") from errors[0]
 
     def __enter__(self):
