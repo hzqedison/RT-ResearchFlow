@@ -2191,92 +2191,92 @@
       "version": "1.8.8"
     },
     {
-      "artifactSha256": "445653b6f07f2cab913065e5ebc946e69f485839e038d4056b27c403fc1da1c7",
+      "artifactSha256": "6d7435ecd2edf1f184dd661b57153412e51b1af8a0ef657cf5f01e60d853b221",
       "component": "lxml",
       "decision": "approved",
       "id": "lxml-redistribution-win32-x64-0",
       "licenseSha256": "8fc2b568133516e46845d2147917adeee1648e70ae9ab5ed6c5417afef4ce855",
-      "spdx": "BSD-3-Clause",
-      "version": "6.1.3+rt.redistribution.1",
+      "reviewReference": "D:/RT-ResearchFlow-BuildCache/astra-lxml-complete-review-20261009-01/review.md#astra-lxml-complete-materials-20261009",
       "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
-      "reviewReference": "resources/python-runtime/license-review.md#astra-lxml-final-eight-20261009"
+      "spdx": "BSD-3-Clause",
+      "version": "6.1.3+rt.redistribution.1"
     },
     {
-      "artifactSha256": "445653b6f07f2cab913065e5ebc946e69f485839e038d4056b27c403fc1da1c7",
+      "artifactSha256": "6d7435ecd2edf1f184dd661b57153412e51b1af8a0ef657cf5f01e60d853b221",
       "component": "lxml",
       "decision": "approved",
       "id": "lxml-redistribution-win32-x64-1",
       "licenseSha256": "388fa99f3bde4447cd5a4cbb114037be026854db6cfe89e112691c1d8abdcf3c",
-      "spdx": "LicenseRef-lxml-6.1.3-Composite-Notices",
-      "version": "6.1.3+rt.redistribution.1",
+      "reviewReference": "D:/RT-ResearchFlow-BuildCache/astra-lxml-complete-review-20261009-01/review.md#astra-lxml-complete-materials-20261009",
       "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
-      "reviewReference": "resources/python-runtime/license-review.md#astra-lxml-final-eight-20261009"
+      "spdx": "LicenseRef-lxml-6.1.3-Composite-Notices",
+      "version": "6.1.3+rt.redistribution.1"
     },
     {
-      "artifactSha256": "445653b6f07f2cab913065e5ebc946e69f485839e038d4056b27c403fc1da1c7",
+      "artifactSha256": "6d7435ecd2edf1f184dd661b57153412e51b1af8a0ef657cf5f01e60d853b221",
       "component": "lxml",
       "decision": "approved",
       "id": "lxml-redistribution-win32-x64-2",
       "licenseSha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
-      "spdx": "LGPL-2.1-only",
-      "version": "6.1.3+rt.redistribution.1",
+      "reviewReference": "D:/RT-ResearchFlow-BuildCache/astra-lxml-complete-review-20261009-01/review.md#astra-lxml-complete-materials-20261009",
       "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
-      "reviewReference": "resources/python-runtime/license-review.md#astra-lxml-final-eight-20261009"
+      "spdx": "LGPL-2.1-only",
+      "version": "6.1.3+rt.redistribution.1"
     },
     {
-      "artifactSha256": "445653b6f07f2cab913065e5ebc946e69f485839e038d4056b27c403fc1da1c7",
+      "artifactSha256": "6d7435ecd2edf1f184dd661b57153412e51b1af8a0ef657cf5f01e60d853b221",
       "component": "lxml",
       "decision": "approved",
       "id": "lxml-redistribution-win32-x64-3",
       "licenseSha256": "488386eca8e74f8c83d09837394f1970f8cbb31d3d3b629dad91f8de5696ae19",
-      "spdx": "LicenseRef-RT-lxml-Source-Notice",
-      "version": "6.1.3+rt.redistribution.1",
+      "reviewReference": "D:/RT-ResearchFlow-BuildCache/astra-lxml-complete-review-20261009-01/review.md#astra-lxml-complete-materials-20261009",
       "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
-      "reviewReference": "resources/python-runtime/license-review.md#astra-lxml-final-eight-20261009"
+      "spdx": "LicenseRef-RT-lxml-Source-Notice",
+      "version": "6.1.3+rt.redistribution.1"
     },
     {
-      "artifactSha256": "15c6b6ae73b7a1624293c8498bc3e6df813e21301eba649a97f10e7072e6aa15",
+      "artifactSha256": "3be8dfec49d3f81162ba3b63ead0638e2cebe65921de28ea0b58ba587aa19f6d",
       "component": "lxml",
       "decision": "approved",
       "id": "lxml-redistribution-darwin-arm64-0",
       "licenseSha256": "8fc2b568133516e46845d2147917adeee1648e70ae9ab5ed6c5417afef4ce855",
-      "spdx": "BSD-3-Clause",
-      "version": "6.1.3+rt.redistribution.1",
+      "reviewReference": "D:/RT-ResearchFlow-BuildCache/astra-lxml-complete-review-20261009-01/review.md#astra-lxml-complete-materials-20261009",
       "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
-      "reviewReference": "resources/python-runtime/license-review.md#astra-lxml-final-eight-20261009"
+      "spdx": "BSD-3-Clause",
+      "version": "6.1.3+rt.redistribution.1"
     },
     {
-      "artifactSha256": "15c6b6ae73b7a1624293c8498bc3e6df813e21301eba649a97f10e7072e6aa15",
+      "artifactSha256": "3be8dfec49d3f81162ba3b63ead0638e2cebe65921de28ea0b58ba587aa19f6d",
       "component": "lxml",
-      "decision": "pending",
+      "decision": "approved",
       "id": "lxml-redistribution-darwin-arm64-1",
       "licenseSha256": "388fa99f3bde4447cd5a4cbb114037be026854db6cfe89e112691c1d8abdcf3c",
-      "spdx": "LicenseRef-lxml-6.1.3-Composite-Notices",
-      "version": "6.1.3+rt.redistribution.1",
+      "reviewReference": "D:/RT-ResearchFlow-BuildCache/astra-lxml-complete-review-20261009-01/review.md#astra-lxml-complete-materials-20261009",
       "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
-      "reviewReference": "resources/python-runtime/license-review.md#astra-lxml-final-eight-20261009"
+      "spdx": "LicenseRef-lxml-6.1.3-Composite-Notices",
+      "version": "6.1.3+rt.redistribution.1"
     },
     {
-      "artifactSha256": "0dab34eae6ec3423c326f1fe5c90f01c9ddc172f1380f03ba963e150ace73278",
+      "artifactSha256": "11a9a6fcc74a18e120ef36fcd4d1652c0e7684bb46025616d5af99de8f98cdf8",
       "component": "lxml",
       "decision": "approved",
       "id": "lxml-redistribution-darwin-x64-0",
       "licenseSha256": "8fc2b568133516e46845d2147917adeee1648e70ae9ab5ed6c5417afef4ce855",
-      "spdx": "BSD-3-Clause",
-      "version": "6.1.3+rt.redistribution.1",
+      "reviewReference": "D:/RT-ResearchFlow-BuildCache/astra-lxml-complete-review-20261009-01/review.md#astra-lxml-complete-materials-20261009",
       "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
-      "reviewReference": "resources/python-runtime/license-review.md#astra-lxml-final-eight-20261009"
+      "spdx": "BSD-3-Clause",
+      "version": "6.1.3+rt.redistribution.1"
     },
     {
-      "artifactSha256": "0dab34eae6ec3423c326f1fe5c90f01c9ddc172f1380f03ba963e150ace73278",
+      "artifactSha256": "11a9a6fcc74a18e120ef36fcd4d1652c0e7684bb46025616d5af99de8f98cdf8",
       "component": "lxml",
-      "decision": "pending",
+      "decision": "approved",
       "id": "lxml-redistribution-darwin-x64-1",
       "licenseSha256": "388fa99f3bde4447cd5a4cbb114037be026854db6cfe89e112691c1d8abdcf3c",
-      "spdx": "LicenseRef-lxml-6.1.3-Composite-Notices",
-      "version": "6.1.3+rt.redistribution.1",
+      "reviewReference": "D:/RT-ResearchFlow-BuildCache/astra-lxml-complete-review-20261009-01/review.md#astra-lxml-complete-materials-20261009",
       "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
-      "reviewReference": "resources/python-runtime/license-review.md#astra-lxml-final-eight-20261009"
+      "spdx": "LicenseRef-lxml-6.1.3-Composite-Notices",
+      "version": "6.1.3+rt.redistribution.1"
     }
   ],
   "licenseRequirements": [
@@ -2894,6 +2894,87 @@
     },
     {
       "artifactSha256": "0dab34eae6ec3423c326f1fe5c90f01c9ddc172f1380f03ba963e150ace73278",
+      "component": "lxml",
+      "decision": "not-an-independent-license-grant",
+      "metadataSha256": "3261c3b1d6ebb5a687b99b3c5a0924612598239cbbee6a1c9bd9fb44aafe972e",
+      "path": "providers/pywencai/site/lxml-6.1.3+rt.redistribution.1.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "version": "6.1.3+rt.redistribution.1"
+    },
+    {
+      "artifactSha256": "6d7435ecd2edf1f184dd661b57153412e51b1af8a0ef657cf5f01e60d853b221",
+      "component": "lxml",
+      "decision": "not-an-independent-license-grant",
+      "metadataSha256": "3261c3b1d6ebb5a687b99b3c5a0924612598239cbbee6a1c9bd9fb44aafe972e",
+      "path": "providers/akshare/site/lxml-6.1.3+rt.redistribution.1.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "version": "6.1.3+rt.redistribution.1"
+    },
+    {
+      "artifactSha256": "6d7435ecd2edf1f184dd661b57153412e51b1af8a0ef657cf5f01e60d853b221",
+      "component": "lxml",
+      "decision": "not-an-independent-license-grant",
+      "metadataSha256": "3261c3b1d6ebb5a687b99b3c5a0924612598239cbbee6a1c9bd9fb44aafe972e",
+      "path": "providers/mootdx/site/lxml-6.1.3+rt.redistribution.1.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "version": "6.1.3+rt.redistribution.1"
+    },
+    {
+      "artifactSha256": "6d7435ecd2edf1f184dd661b57153412e51b1af8a0ef657cf5f01e60d853b221",
+      "component": "lxml",
+      "decision": "not-an-independent-license-grant",
+      "metadataSha256": "3261c3b1d6ebb5a687b99b3c5a0924612598239cbbee6a1c9bd9fb44aafe972e",
+      "path": "providers/pywencai/site/lxml-6.1.3+rt.redistribution.1.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "version": "6.1.3+rt.redistribution.1"
+    },
+    {
+      "artifactSha256": "3be8dfec49d3f81162ba3b63ead0638e2cebe65921de28ea0b58ba587aa19f6d",
+      "component": "lxml",
+      "decision": "not-an-independent-license-grant",
+      "metadataSha256": "3261c3b1d6ebb5a687b99b3c5a0924612598239cbbee6a1c9bd9fb44aafe972e",
+      "path": "providers/akshare/site/lxml-6.1.3+rt.redistribution.1.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "version": "6.1.3+rt.redistribution.1"
+    },
+    {
+      "artifactSha256": "3be8dfec49d3f81162ba3b63ead0638e2cebe65921de28ea0b58ba587aa19f6d",
+      "component": "lxml",
+      "decision": "not-an-independent-license-grant",
+      "metadataSha256": "3261c3b1d6ebb5a687b99b3c5a0924612598239cbbee6a1c9bd9fb44aafe972e",
+      "path": "providers/mootdx/site/lxml-6.1.3+rt.redistribution.1.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "version": "6.1.3+rt.redistribution.1"
+    },
+    {
+      "artifactSha256": "3be8dfec49d3f81162ba3b63ead0638e2cebe65921de28ea0b58ba587aa19f6d",
+      "component": "lxml",
+      "decision": "not-an-independent-license-grant",
+      "metadataSha256": "3261c3b1d6ebb5a687b99b3c5a0924612598239cbbee6a1c9bd9fb44aafe972e",
+      "path": "providers/pywencai/site/lxml-6.1.3+rt.redistribution.1.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "version": "6.1.3+rt.redistribution.1"
+    },
+    {
+      "artifactSha256": "11a9a6fcc74a18e120ef36fcd4d1652c0e7684bb46025616d5af99de8f98cdf8",
+      "component": "lxml",
+      "decision": "not-an-independent-license-grant",
+      "metadataSha256": "3261c3b1d6ebb5a687b99b3c5a0924612598239cbbee6a1c9bd9fb44aafe972e",
+      "path": "providers/akshare/site/lxml-6.1.3+rt.redistribution.1.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "version": "6.1.3+rt.redistribution.1"
+    },
+    {
+      "artifactSha256": "11a9a6fcc74a18e120ef36fcd4d1652c0e7684bb46025616d5af99de8f98cdf8",
+      "component": "lxml",
+      "decision": "not-an-independent-license-grant",
+      "metadataSha256": "3261c3b1d6ebb5a687b99b3c5a0924612598239cbbee6a1c9bd9fb44aafe972e",
+      "path": "providers/mootdx/site/lxml-6.1.3+rt.redistribution.1.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "version": "6.1.3+rt.redistribution.1"
+    },
+    {
+      "artifactSha256": "11a9a6fcc74a18e120ef36fcd4d1652c0e7684bb46025616d5af99de8f98cdf8",
       "component": "lxml",
       "decision": "not-an-independent-license-grant",
       "metadataSha256": "3261c3b1d6ebb5a687b99b3c5a0924612598239cbbee6a1c9bd9fb44aafe972e",
@@ -3938,7 +4019,7 @@
     },
     {
       "path": "scripts/build-lxml-matched-public-source.py",
-      "sha256": "b0baf7b569e211366211cb1921bc5311ace969f2697b8256feb5f29a1177e4e0"
+      "sha256": "d7b94a7b696d85c02a2e0ed5a3c158075fe2e147774f257f4cbe92beb8ab2d2c"
     }
   ],
   "resolverCompatibilityPins": {
@@ -3983,8 +4064,8 @@
           "asset": {
             "filename": "lxml-6.1.3+rt.redistribution.1-1rtredistribution-cp313-cp313-macosx_10_13_universal2.whl",
             "kind": "derived",
-            "sha256": "15c6b6ae73b7a1624293c8498bc3e6df813e21301eba649a97f10e7072e6aa15",
-            "size": 8532649
+            "sha256": "3be8dfec49d3f81162ba3b63ead0638e2cebe65921de28ea0b58ba587aa19f6d",
+            "size": 8532646
           },
           "dependencies": [
             "cssselect>=0.7; extra == \"cssselect\"",
@@ -4102,13 +4183,13 @@
             "publicSourceAsset": {
               "filename": "lxml-6.1.3+rt.redistribution.1-darwin-arm64-public-sources.zip",
               "kind": "derived",
-              "sha256": "2901bf8751ae2a25ac483f6233040e931cd8d7f7fda8321a1fd7ee1faf3eef98",
-              "size": 4158902
+              "sha256": "05151c1e93f922b8d30dc5d7007ee906437c2b66560f39fdbb6e708b46361b84",
+              "size": 14656536
             },
-            "selectedAssetSha256": "15c6b6ae73b7a1624293c8498bc3e6df813e21301eba649a97f10e7072e6aa15",
+            "selectedAssetSha256": "3be8dfec49d3f81162ba3b63ead0638e2cebe65921de28ea0b58ba587aa19f6d",
             "sourceRecipe": {
               "path": "scripts/build-lxml-matched-public-source.py",
-              "sha256": "b0baf7b569e211366211cb1921bc5311ace969f2697b8256feb5f29a1177e4e0"
+              "sha256": "d7b94a7b696d85c02a2e0ed5a3c158075fe2e147774f257f4cbe92beb8ab2d2c"
             },
             "target": "darwin-arm64",
             "windowsInputProfile": "local-lx3"
@@ -4161,7 +4242,7 @@
           "asset": {
             "filename": "lxml-6.1.3+rt.redistribution.1-1rtredistribution-cp313-cp313-macosx_10_13_x86_64.whl",
             "kind": "derived",
-            "sha256": "0dab34eae6ec3423c326f1fe5c90f01c9ddc172f1380f03ba963e150ace73278",
+            "sha256": "11a9a6fcc74a18e120ef36fcd4d1652c0e7684bb46025616d5af99de8f98cdf8",
             "size": 4580111
           },
           "dependencies": [
@@ -4280,13 +4361,13 @@
             "publicSourceAsset": {
               "filename": "lxml-6.1.3+rt.redistribution.1-darwin-x64-public-sources.zip",
               "kind": "derived",
-              "sha256": "3b590453ff2b63388e2ced2f20d7affc79626b13d3d19a7281f0cedc4155ac58",
-              "size": 4158897
+              "sha256": "7defad97b795547e04b436553cbfe903cde96c40242523bc5c9f9e3064ea1e25",
+              "size": 14656532
             },
-            "selectedAssetSha256": "0dab34eae6ec3423c326f1fe5c90f01c9ddc172f1380f03ba963e150ace73278",
+            "selectedAssetSha256": "11a9a6fcc74a18e120ef36fcd4d1652c0e7684bb46025616d5af99de8f98cdf8",
             "sourceRecipe": {
               "path": "scripts/build-lxml-matched-public-source.py",
-              "sha256": "b0baf7b569e211366211cb1921bc5311ace969f2697b8256feb5f29a1177e4e0"
+              "sha256": "d7b94a7b696d85c02a2e0ed5a3c158075fe2e147774f257f4cbe92beb8ab2d2c"
             },
             "target": "darwin-x64",
             "windowsInputProfile": "local-lx3"
@@ -4339,7 +4420,7 @@
           "asset": {
             "filename": "lxml-6.1.3+rt.redistribution.1-1rtredistribution-cp313-cp313-win_amd64.whl",
             "kind": "derived",
-            "sha256": "445653b6f07f2cab913065e5ebc946e69f485839e038d4056b27c403fc1da1c7",
+            "sha256": "6d7435ecd2edf1f184dd661b57153412e51b1af8a0ef657cf5f01e60d853b221",
             "size": 4508157
           },
           "dependencies": [
@@ -4473,13 +4554,13 @@
             "publicSourceAsset": {
               "filename": "lxml-6.1.3+rt.redistribution.1-win32-x64-public-sources.zip",
               "kind": "derived",
-              "sha256": "bb11d4eac221254d7ab23d40775b58e5e5861f2c6bef951ef6db5a5691b045e0",
-              "size": 68643732
+              "sha256": "50569086381ddf5bb8ca35ed01bd6c480dad33b0bc18384182d59e51903db60d",
+              "size": 68648257
             },
-            "selectedAssetSha256": "445653b6f07f2cab913065e5ebc946e69f485839e038d4056b27c403fc1da1c7",
+            "selectedAssetSha256": "6d7435ecd2edf1f184dd661b57153412e51b1af8a0ef657cf5f01e60d853b221",
             "sourceRecipe": {
               "path": "scripts/build-lxml-matched-public-source.py",
-              "sha256": "b0baf7b569e211366211cb1921bc5311ace969f2697b8256feb5f29a1177e4e0"
+              "sha256": "d7b94a7b696d85c02a2e0ed5a3c158075fe2e147774f257f4cbe92beb8ab2d2c"
             },
             "target": "win32-x64",
             "windowsInputProfile": "hosted-run-37896686196"

@@ -381,7 +381,7 @@ class PreparationTests(unittest.TestCase):
             prep.wheel_contract(wheel, POLICY)
 
     def actual_freeze_asset(self, selected, native=False):
-        default = ("D:/RT-ResearchFlow-BuildCache/lxml-final-mapping-20261009-1791539986196/private-input-cache"
+        default = ("D:/RT-ResearchFlow-BuildCache/lxml-complete-native-mapping-20261009-1791547688541/private-input-cache"
                    if native else "D:/RT-ResearchFlow-BuildCache/股票日线 prep-release17-rootmeta-final/resolve/assets")
         root = Path(os.environ.get("RT_PREP_TEST_LXML_CACHE" if native else "RT_PREP_TEST_DERIVED_CACHE", default))
         path = root / selected["asset"]["filename"]
@@ -1820,7 +1820,7 @@ class TargetDerivedNativeTests(unittest.TestCase):
 
     def test_redistribution_actual_final_mapping_has_no_license_auto_approval(self):
         root = Path(os.environ.get("RT_PREP_TEST_LXML_REDISTRIBUTION",
-                    "D:/RT-ResearchFlow-BuildCache/sol-lxml-redistribution-20261009-03"))
+                    "D:/RT-ResearchFlow-BuildCache/lxml-complete-native-mapping-20261009-1791547688541"))
         cache = Path(os.environ.get("RT_PREP_TEST_LXML_ORIGINAL_CACHE",
                      "D:/RT-ResearchFlow-BuildCache/sol-lxml-redistribution-20261009-03/download-action-layout/b"))
         if not (root / "consumer-input-contract.json").is_file() or not cache.is_dir():
@@ -1845,7 +1845,7 @@ class TargetDerivedNativeTests(unittest.TestCase):
 
     def test_redistribution_actual_repack_three_target_sources_never_ship_originals(self):
         root = Path(os.environ.get("RT_PREP_TEST_LXML_REDISTRIBUTION",
-                    "D:/RT-ResearchFlow-BuildCache/sol-lxml-redistribution-20261009-03"))
+                    "D:/RT-ResearchFlow-BuildCache/lxml-complete-native-mapping-20261009-1791547688541"))
         cache = Path(os.environ.get("RT_PREP_TEST_LXML_ORIGINAL_CACHE",
                      "D:/RT-ResearchFlow-BuildCache/sol-lxml-redistribution-20261009-03/download-action-layout/b"))
         if not (root / "consumer-input-contract.json").is_file() or not cache.is_dir():
@@ -1883,10 +1883,52 @@ class TargetDerivedNativeTests(unittest.TestCase):
 
     def final_consumer_fixture(self):
         root = Path(os.environ.get("RT_PREP_TEST_LXML_REDISTRIBUTION",
-                    "D:/RT-ResearchFlow-BuildCache/sol-lxml-redistribution-20261009-03"))
+                    "D:/RT-ResearchFlow-BuildCache/lxml-complete-native-mapping-20261009-1791547688541"))
         if not (root / "consumer-input-contract.json").is_file():
             self.skipTest("Actual final Hubble consumer assets are not on this host")
         return root, root / "download-action-layout/b", json.loads((root / "consumer-input-contract.json").read_bytes())
+
+    def test_final_consumer_complete_mac_materials_and_reviewed_pins(self):
+        root, cache, contract = self.final_consumer_fixture()
+        review_pin = contract.get("reviewRecords")
+        if review_pin is None:
+            self.skipTest("Complete-source review fixture is not on this host")
+        review_bytes = Path(review_pin["path"]).read_bytes()
+        self.assertEqual(prep.digest(review_bytes), review_pin["sha256"])
+        reviews = json.loads(review_bytes)["licenseApprovals"]
+        self.assertEqual(len(reviews), 8)
+        selected_ids = {row["id"] for row in reviews}
+        self.assertEqual([row for row in POLICY["licenseApprovals"] if row["id"] in selected_ids], reviews)
+        self.assertTrue(all(row["decision"] == "approved" for row in reviews))
+        mapped = prep.map_lxml_redistribution_policy(POLICY, contract, root, cache)
+        self.assertEqual(mapped["licenseApprovals"], POLICY["licenseApprovals"])
+        self.assertEqual(len(prep.source_snapshot(POLICY_SHA)["files"]), 10)
+        for target in prep.TARGETS:
+            with self.subTest(target=target):
+                wheel = next(item for item in prep.derived_wheels(mapped, target)
+                             if item["distribution"] == "lxml")
+                native = wheel["nativeBuildInputs"]
+                self.assertEqual(native["nativeMemberPins"], contract["previousNativeMemberPins"][target])
+                if target == "win32-x64":
+                    continue
+                source = prep.verified_asset(root / "assets", native["publicSourceAsset"])
+                with zipfile.ZipFile(source) as archive:
+                    manifest = json.loads(archive.read("RT_PUBLIC_SOURCE_MANIFEST.json"))
+                    materials = manifest["macNativeSource"]
+                    self.assertFalse(materials["nativeCompileExecuted"])
+                    self.assertFalse(materials["originalWheelReproduced"])
+                    self.assertEqual(set(materials["sources"]), {"libiconv", "libxml2", "libxslt", "zlib"})
+                    self.assertEqual(set(materials["recipeFiles"]),
+                                     {"wheels.yml", "pyproject.toml", "buildlibxml.py", "libxslt-1.1.43-backport1.patch"})
+                    members = [("inputs/" + value["filename"], value) for value in materials["sources"].values()]
+                    members += [("official-recipe/" + name, value) for name, value in materials["recipeFiles"].items()]
+                    self.assertEqual(len(members), 8)
+                    self.assertEqual(len(materials["fullNoticeFiles"]), 12)
+                    members += list(materials["fullNoticeFiles"].items())
+                    for name, pin in members:
+                        data = archive.read(name)
+                        self.assertEqual(len(data), pin["size"], name)
+                        self.assertEqual(prep.digest(data), pin["sha256"], name)
 
     def test_final_consumer_duplicate_output_is_rejected(self):
         root, cache, contract = self.final_consumer_fixture()
