@@ -347,6 +347,8 @@ def download_reviewed_material_archive(pin, destination):
 
 def validated_material_archive(value, temporary):
     candidate = pathlib.Path(value)
+    if not candidate.is_absolute() or ".." in candidate.parts:
+        raise ValueError("Material archive path must not contain parent hops")
     resolved = candidate.resolve(strict=True)
     temporary = temporary.resolve(strict=True)
     if (not candidate.is_absolute() or not resolved.is_relative_to(temporary)
@@ -356,7 +358,10 @@ def validated_material_archive(value, temporary):
     while current != temporary:
         if current.is_symlink() or current.is_junction():
             raise ValueError("Material archive must not traverse links")
-        current = current.parent
+        parent = current.parent
+        if parent == current:
+            raise ValueError("Material archive escaped the runner temporary root")
+        current = parent
     return str(resolved)
 
 

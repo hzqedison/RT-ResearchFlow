@@ -221,7 +221,8 @@ async function run(args, env = process.env) {
   for (const wheel of plan.derived) {
     const cached = cachedDerived(derivedCache, wheel.asset)
     if (cached) fs.copyFileSync(cached, path.join(assetsRoot, wheel.asset.filename), fs.constants.COPYFILE_EXCL)
-    else if (wheel.nativeBuildInputs || !['scripts/build-provider-source-wheels.py', 'scripts/build-mootdx-compat-wheel.py'].includes(wheel.derived.recipe.path)) fail('FINAL_NATIVE_DERIVED_ASSET_MISSING')
+    else if (wheel.nativeBuildInputs || !['scripts/build-provider-source-wheels.py', 'scripts/build-mootdx-compat-wheel.py',
+      'scripts/build-akshare-node-wheel.py', 'scripts/build-private-node-js-runtime-wheel.py'].includes(wheel.derived.recipe.path)) fail('FINAL_NATIVE_DERIVED_ASSET_MISSING')
     else plan.reproduce.push(wheel)
   }
   for (const recipe of plan.recipes) {

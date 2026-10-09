@@ -11,15 +11,15 @@ const ROOT = path.resolve(__dirname, '..')
 const ENTRY = 'scripts/run-private-runtime-stage-ci.cjs'
 const WORKFLOW = '.github/workflows/private-runtime-stage-native.yml'
 const TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64']
-const PREPARE_RUN = 37930575544
-const PREPARE_SOURCE = '516f89d7eb23ce240dcf318bd09f5cf725932c2e'
+const PREPARE_RUN = 37955904239
+const PREPARE_SOURCE = '07f37ae0baea0c3753fca2bedc7b68f837ff8283'
 const PREPARE_PINS = {
-  'win32-x64': { artifactId: 11616690014, jobId: 113819981301, size: 348982745,
-    digest: '9db3c7ed494d5850c8068c3cfc516fec687bfd51536c347cba3c06856d6a7868' },
-  'darwin-arm64': { artifactId: 11616007217, jobId: 113819981587, size: 258898059,
-    digest: '4c93a36ab2ba6299c94d2fee887da1c7c96f1a54f6c8de6827cfa287ee38bb69' },
-  'darwin-x64': { artifactId: 11615829391, jobId: 113819981483, size: 279015748,
-    digest: 'f0307a9147c2676244c7d94e4553eccd9d477dff374a9c856bf42a2226451fb4' },
+  'win32-x64': { artifactId: 11628386460, jobId: 113906230089, size: 319282594,
+    digest: '66037f262cc3827211cd624de5a91dec07397d6fccc811ae9247779e0a8bd51e' },
+  'darwin-arm64': { artifactId: 11627483495, jobId: 113906230478, size: 308552769,
+    digest: 'a54994f667ce0123a4e0e1490b68bac777f4dc1429c0a58a892c7d06b25e08d5' },
+  'darwin-x64': { artifactId: 11628006788, jobId: 113906230364, size: 325917559,
+    digest: '9d6babb480fa8bf7d5fa99e6d00ceb1f0a24f04f933acfe668b9474841edfe3a' },
 }
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
 function fail(code) { const error = new Error(code); error.code = code; throw error }
@@ -267,7 +267,8 @@ async function run(args, env = process.env) {
   for (const wheel of plan.derived) {
     const cached = findDerived(derivedCache, wheel.asset)
     if (cached) fs.copyFileSync(cached, path.join(assetsRoot, wheel.asset.filename), fs.constants.COPYFILE_EXCL)
-    else if (wheel.nativeBuildInputs || !['scripts/build-provider-source-wheels.py', 'scripts/build-mootdx-compat-wheel.py'].includes(wheel.derived.recipe.path)) fail('STAGE_PINNED_NATIVE_DERIVED_ASSET_MISSING')
+    else if (wheel.nativeBuildInputs || !['scripts/build-provider-source-wheels.py', 'scripts/build-mootdx-compat-wheel.py',
+      'scripts/build-akshare-node-wheel.py', 'scripts/build-private-node-js-runtime-wheel.py'].includes(wheel.derived.recipe.path)) fail('STAGE_PINNED_NATIVE_DERIVED_ASSET_MISSING')
     else plan.reproduce.push(wheel)
   }
   for (const recipe of plan.recipes) {
