@@ -10,6 +10,8 @@ const { signAppPreservingRuntime } = require('../../macos/sign-app.cjs')
 
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
 const root = path.resolve(__dirname, '../..')
+let stage = 'host-context'
+let ownedLab = ''
 
 function plist(name, executable, id) {
   return '<?xml version="1.0" encoding="UTF-8"?>\n' +
@@ -58,6 +60,8 @@ async function main() {
   assert.ok(path.isAbsolute(process.env.RUNNER_TEMP || ''))
   const temporary = fs.realpathSync(process.env.RUNNER_TEMP)
   const lab = fs.mkdtempSync(path.join(temporary, 'RT signing \u4e2d\u6587 '))
+  ownedLab = lab
+  stage = 'construct-owned-fixture'
   const app = path.join(lab, 'RT-Signing-Fixture.app')
   const executable = makeApp(app, 'RT-Signing-Fixture', 'com.tradewatcher.signing-fixture')
   const helper = path.join(app, 'Contents', 'Frameworks', 'RT-Helper.app')
@@ -70,13 +74,19 @@ async function main() {
   fs.writeFileSync(path.join(runtime, 'locked-fixture.txt'), 'Isolated signing fixture, not a formal runtime.\n')
   fs.writeFileSync(path.join(runtime, '\u4e2d\u6587 fixture.txt'), 'Unicode file must remain unchanged.\n')
   const before = inventory(runtime)
+  stage = 'sign-owned-app'
   await signAppPreservingRuntime(app)
+  stage = 'compare-locked-runtime'
   assert.deepEqual(inventory(runtime), before)
+  stage = 'verify-app-signature'
   execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', app], { timeout: 60000 })
+  stage = 'verify-helper-signature'
   execFileSync('/usr/bin/codesign', ['--verify', '--strict', helper], { timeout: 60000 })
   const env = { HOME: lab, TMPDIR: lab, LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8' }
   const invoke = file => execFileSync(file, ['--version'], { env, timeout: 30000, encoding: 'utf8' }).trim()
+  stage = 'invoke-owned-main'
   assert.equal(invoke(executable), process.version)
+  stage = 'invoke-owned-private-node'
   assert.equal(invoke(privateNode), process.version)
   const sources = ['macos/sign-app.cjs', 'macos/electron-builder.cjs',
     'tests/node/mac-sign-app.test.cjs', 'tests/native/mac-signing-runtime.cjs',
@@ -92,6 +102,7 @@ async function main() {
     productRuntimeTested: false, productInstallerTested: false, minimumMacOSLiveVerified: false,
   }
   const proof = path.join(temporary, 'mac-signing-proof')
+  stage = 'export-proof'
   fs.mkdirSync(proof)
   const raw = Buffer.from(JSON.stringify(report, null, 2) + '\n')
   fs.writeFileSync(path.join(proof, 'result.json'), raw, { flag: 'wx' })
@@ -100,4 +111,16 @@ async function main() {
     lockedRuntimeBytesPreserved: true, productInstallerTested: false }))
 }
 
-main().catch(() => { console.error('MAC_SIGNING_REGRESSION_FAILED'); process.exitCode = 1 })
+main().catch(error => {
+  // All fixture inputs are generated here on a disposable hosted runner. The
+  // bounded diagnostic never includes environment variables or application data.
+  let message = String(error.message || 'Native regression rejected')
+  for (const [source, label] of [[ownedLab, 'OWNED_FIXTURE'], [root, 'SOURCE_CHECKOUT']]) {
+    if (source) message = message.split(source).join(label)
+  }
+  console.error(JSON.stringify({ kind: 'rt-native-mac-signing-failure-v1', stage,
+    errorType: /^[A-Za-z]{1,40}$/.test(error.name || '') ? error.name : 'Error',
+    message: message.slice(0, 1024), productInstallerTested: false }))
+  process.exitCode = 1
+})
+
