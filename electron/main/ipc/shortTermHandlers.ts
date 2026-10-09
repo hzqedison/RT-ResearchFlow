@@ -7,6 +7,7 @@ import {
   setConceptSource
 } from '../database/settingsRepository'
 import { getDataSourceConfig } from '../database/dataSourceRepository'
+import { factReceipt, safeFactError } from '../services/diagnosticFactSyncService'
 import { decryptApiKey } from '../utils/apiKeyEncryption'
 import {
   runAfterCloseDailySyncJob,
@@ -706,22 +707,23 @@ export function registerShortTermHandlers(): void {
     if (!payload || !['kpl', 'ths', 'dc'].includes(payload.source)) {
       return { ok: false as const, error: 'INVALID_PARAM' as const }
     }
-    const db2 = getDb()
-    const cfg = getDataSourceConfig(db2)
-    if (!cfg.tushareEnabled || !cfg.tushareTokenEncrypted) {
-      console.warn('[shortTerm:syncConceptMembers] Tushare 未配置，跳过同步')
-      return { ok: false as const, error: 'TUSHARE_DISABLED' as const }
-    }
-    console.log(`[shortTerm:syncConceptMembers] 触发 source=${payload.source} 的题材成分同步`)
-    void (async () => {
-      try {
-        await runConceptMembersSyncForSource(payload.source)
-        console.log(`[shortTerm:syncConceptMembers] source=${payload.source} 同步完成`)
-      } catch (err) {
-        console.warn('[shortTerm:syncConceptMembers] error:', err)
+    try {
+      const cfg = getDataSourceConfig(getDb())
+      // 保留真实配置依赖；共享服务现有 singleflight 防止并发重复采集。
+      const receipt = !cfg.tushareEnabled || !cfg.tushareTokenEncrypted
+        ? factReceipt(payload.source, null, 'TUSHARE_DISABLED')
+        : await runConceptMembersSyncForSource(payload.source)
+      if (receipt.outcome === 'success') {
+        console.log(`[shortTerm:syncConceptMembers] source=${payload.source} outcome=${receipt.outcome} reason=${receipt.reasonCode} rows=${receipt.insertedRows}`)
+        return { ok: true as const, ...receipt }
       }
-    })()
-    return { ok: true as const }
+      console.warn(`[shortTerm:syncConceptMembers] source=${payload.source} outcome=${receipt.outcome} reason=${receipt.reasonCode} rows=${receipt.insertedRows}`)
+      return { ok: false as const, error: receipt.reasonCode, ...receipt }
+    } catch (err) {
+      const code = safeFactError(err)
+      console.warn(`[shortTerm:syncConceptMembers] source=${payload.source} reason=${code}`)
+      return { ok: false as const, error: code, ...factReceipt(payload.source, null, code) }
+    }
   })
 
   // FR-153 临时诊断 IPC（排查 THS 数据写入问题，可在 DevTools console 调用）

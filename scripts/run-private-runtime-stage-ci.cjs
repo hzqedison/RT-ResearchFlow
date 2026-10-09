@@ -11,15 +11,15 @@ const ROOT = path.resolve(__dirname, '..')
 const ENTRY = 'scripts/run-private-runtime-stage-ci.cjs'
 const WORKFLOW = '.github/workflows/private-runtime-stage-native.yml'
 const TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64']
-const PREPARE_RUN = 37966682707
-const PREPARE_SOURCE = '8361d331ab631373fc34634df10f1f1e4c144e7b'
+const PREPARE_RUN = 37970374403
+const PREPARE_SOURCE = '95b41cf09e2218f93ab97aeffab5df5d168b1f5c'
 const PREPARE_PINS = {
-  'win32-x64': { artifactId: 11633792453, jobId: 113942680677, size: 319278985,
-    digest: '0c3cdb1b258f6547a1fc854076140d5d80742cf7e42aaa4f8327959dc5ffcb64' },
-  'darwin-arm64': { artifactId: 11634431229, jobId: 113942680375, size: 308559945,
-    digest: '4bf215473e1944e1def6cbc1af07720115d5003516c0c03383643be8f67a211a' },
-  'darwin-x64': { artifactId: 11633807716, jobId: 113942680942, size: 325923057,
-    digest: '4e70ab2887e19e4d970cd5d8c159858776eb2d4e0fbd12e29923e19a7aa91ffa' },
+  'win32-x64': { artifactId: 11634649241, jobId: 113955152298, size: 319283556,
+    digest: '2f67b5d4e972b96072c27e165b491ab0decb06927fd87b3f4522c54dad942320' },
+  'darwin-arm64': { artifactId: 11634918332, jobId: 113955152264, size: 308562066,
+    digest: '1b56d9c6c32b9cf7223f610f0f793d3c46bde99e54cfc4ea6f7a0f34dc72b651' },
+  'darwin-x64': { artifactId: 11635207574, jobId: 113955152171, size: 325920016,
+    digest: '6bc33af8d0a3a2e2a1e9f7e4600889b62b7f31335fe3552194d1a12cbcc047f6' },
 }
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
 function fail(code) { const error = new Error(code); error.code = code; throw error }
