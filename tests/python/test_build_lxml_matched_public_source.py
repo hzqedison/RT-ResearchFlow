@@ -1,8 +1,11 @@
 import importlib.util
 import io
+import json
 from pathlib import Path
 import tarfile
+import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("public_source", ROOT / "scripts/build-lxml-matched-public-source.py")
@@ -25,6 +28,71 @@ def tar_fixture(extra=None):
 
 
 class PublicSourceTests(unittest.TestCase):
+    def test_hosted_source_and_wrapper_are_independently_fixed(self):
+        source, wrapper = module.WINDOWS_SOURCE_PROFILES["hosted-run-37896686196"]
+        self.assertEqual(source, "30ec51604396b8dd20d0ef20d6a5f31b54089cd6969738fffc3efced83bcb02a")
+        self.assertEqual(wrapper, "d7c7ea6e371971a0505718bfd613455ac93878b7e4394fa31390e497ca49fa19")
+        self.assertNotEqual(source, module.NATIVE_SOURCE_SHA)
+        self.assertNotEqual(wrapper, module.WRAPPER_SHA)
+
+    def test_crossed_hosted_local_source_pins_rejected(self):
+        hosted = module.wheel.WINDOWS_PROFILES["hosted-run-37896686196"][1]
+        with self.assertRaises(ValueError): module.build("missing", module.NATIVE_SOURCE_SHA, "win32-x64", hosted, "unused", "hosted-run-37896686196")
+        with self.assertRaises(ValueError): module.build("missing", module.WINDOWS_SOURCE_PROFILES["hosted-run-37896686196"][0], "win32-x64", module.wheel.PINS["win32-x64"][1], "unused")
+
+    def adapter_fixture(self):
+        pins = {"lxml": ("lxml-6.1.3.tar.gz", module.SDIST_SHA, 12, "historical-url"),
+            "libxml2": ("libxml2.tar.gz", module.wheel.sha(b"dependency"), 10, "fixed-dependency-url")}
+        original = module.wheel.encoded({"sourceAssets": [{"id": name, "fileName": p[0], "sha256": p[1], "bytes": p[2], "url": p[3]} for name, p in pins.items()]})
+        wrapper = ("SOURCE_PINS = " + repr(pins) + "\nMANIFEST_SHA = " + repr(module.wheel.sha(original)) + "\ndef main(argv):\n    return argv\n").encode()
+        files = {"rebuild-lxml-native.py": wrapper, "history/ORIGINAL-SOURCE-RELINK-DELTA.json": original,
+            "inputs/lxml-6.1.3.tar.gz": b"sanitized", "inputs/libxml2.tar.gz": b"dependency"}
+        with mock.patch.multiple(module, WRAPPER_SHA=module.wheel.sha(wrapper), ORIGINAL_MANIFEST_SHA=module.wheel.sha(original),
+                                 PUBLIC_SDIST_SHA=module.wheel.sha(b"sanitized"), PUBLIC_SDIST_SIZE=9):
+            proof = module.public_adapter(files)
+        return files, pins, proof
+
+    def adapter_load(self, root, files):
+        for name, data in files.items():
+            path = Path(root) / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
+        adapter = {"__file__": str(Path(root) / "rebuild-lxml-native-public.py"), "__name__": "fixture_adapter"}
+        exec(files["rebuild-lxml-native-public.py"], adapter)
+        return adapter
+
+    def test_adapter_changes_only_exact_lxml_and_manifest_pins(self):
+        files, pins, proof = self.adapter_fixture()
+        with tempfile.TemporaryDirectory() as root:
+            adapter = self.adapter_load(root, files); native = adapter["load"]()
+            self.assertEqual(native.SOURCE_PINS["libxml2"], pins["libxml2"])
+            self.assertEqual(native.SOURCE_PINS["lxml"], (pins["lxml"][0], module.wheel.sha(b"sanitized"), 9, pins["lxml"][3]))
+            self.assertEqual(native.MANIFEST_SHA, proof["manifestSha256"])
+            argv = adapter["main"](["prepare", "--work", "owned"])
+            self.assertIn("--manifest", argv); self.assertIn("--materials-dir", argv)
+            mapped = json.loads(files["inputs/source-relink-delta-public.json"])
+            self.assertEqual(mapped["sourceAssets"][1]["sha256"], pins["libxml2"][1])
+
+    def test_adapter_rejects_tampered_tar_dependency_manifest_and_wrapper(self):
+        files, _, _ = self.adapter_fixture()
+        for name in ("inputs/lxml-6.1.3.tar.gz", "inputs/libxml2.tar.gz", "inputs/source-relink-delta-public.json", "rebuild-lxml-native.py"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as root:
+                adapter = self.adapter_load(root, files)
+                (Path(root) / name).write_bytes(files[name] + b"tamper")
+                with self.assertRaises(ValueError): adapter["load"]()
+
+    def test_adapter_forbids_fetch_and_overriding_bundled_inputs(self):
+        files, _, _ = self.adapter_fixture()
+        with tempfile.TemporaryDirectory() as root:
+            adapter = self.adapter_load(root, files)
+            for argv in (["fetch"], ["build", "--manifest=other"], ["prepare", "--materials-dir", "other"], ["build", "--tools-sha256", "0" * 64]):
+                with self.subTest(argv=argv), self.assertRaises(ValueError): adapter["main"](argv)
+
+    def test_adapter_generation_rejects_nonfixed_sanitized_tar(self):
+        files, _, _ = self.adapter_fixture()
+        files["inputs/lxml-6.1.3.tar.gz"] = b"not the fixed public tar"
+        with mock.patch.multiple(module, WRAPPER_SHA=module.wheel.sha(files["rebuild-lxml-native.py"]),
+                                 ORIGINAL_MANIFEST_SHA=module.wheel.sha(files["history/ORIGINAL-SOURCE-RELINK-DELTA.json"])):
+            with self.assertRaises(ValueError): module.public_adapter(files)
+
     def test_tar_excludes_entire_namespace_preserves_c_and_licenses(self):
         data, old = tar_fixture(); result, proof = module.sanitize_tar(data)
         with tarfile.open(fileobj=io.BytesIO(result), mode="r:gz") as archive:

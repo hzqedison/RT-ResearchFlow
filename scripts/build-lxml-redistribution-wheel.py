@@ -19,6 +19,20 @@ PINS = {
     "darwin-arm64": ("lxml-6.1.3-cp313-cp313-macosx_10_13_universal2.whl", "3a48093cdb058a93af842ede9703520e810b05dcd0fc6d7190a06376c3bfb6bd", "macosx_10_13_universal2"),
     "darwin-x64": ("lxml-6.1.3-cp313-cp313-macosx_10_13_x86_64.whl", "887c021d9a977cff89cb273047c1352997b772a8908a25c21836861f69b92be1", "macosx_10_13_x86_64"),
 }
+WINDOWS_PROFILES = {
+    "local-lx3": PINS["win32-x64"],
+    "hosted-run-37896686196": ("lxml-6.1.3-1rtbaseline-cp313-cp313-win_amd64.whl", "a27904ae1fd3684f8cc8ab4b3c5ab78b1ee3ad4ff8f7301ee24627bca099184c", "win_amd64"),
+}
+
+
+def input_pin(target, windows_profile="local-lx3"):
+    if target == "win32-x64":
+        if windows_profile not in WINDOWS_PROFILES:
+            raise ValueError("Unknown fixed Windows input profile")
+        return WINDOWS_PROFILES[windows_profile]
+    if windows_profile != "local-lx3":
+        raise ValueError("Windows profile cannot select a Mac input")
+    return PINS[target]
 
 
 def sha(data):
@@ -176,8 +190,8 @@ def fresh_output(path):
     return path
 
 
-def build(wheel, wheel_sha, target, public_source, source_sha, out):
-    name, pin, tag = PINS[target]
+def build(wheel, wheel_sha, target, public_source, source_sha, out, windows_profile="local-lx3"):
+    name, pin, tag = input_pin(target, windows_profile)
     if Path(wheel).name != name or wheel_sha != pin:
         raise ValueError("Only this target's exact pinned upstream wheel is accepted")
     data = checked(wheel, wheel_sha)
@@ -186,6 +200,8 @@ def build(wheel, wheel_sha, target, public_source, source_sha, out):
     manifest = json.loads(source_files["RT_PUBLIC_SOURCE_MANIFEST.json"])
     if manifest.get("kind") != "rt-lxml-matched-public-source-v1" or manifest.get("isoSchematronProvided") is not False:
         raise ValueError("Explicit matched public source required")
+    if target == "win32-x64" and manifest.get("windowsInputProfile", "local-lx3") != windows_profile:
+        raise ValueError("Public source belongs to another Windows input profile")
     source_pin = {"filename": Path(public_source).name, "sha256": source_sha, "size": len(source_data),
         "target": manifest["target"], "originalWheelSha256": manifest["originalWheelSha256"]}
     result, proof = repack_bytes(data, target, source_pin)
@@ -207,8 +223,9 @@ def main():
     parser.add_argument("--public-source", required=True)
     parser.add_argument("--public-source-sha256", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--windows-profile", choices=tuple(WINDOWS_PROFILES), default="local-lx3")
     args = parser.parse_args()
-    print(json.dumps(build(args.wheel, args.wheel_sha256, args.target, args.public_source, args.public_source_sha256, args.out)["asset"]))
+    print(json.dumps(build(args.wheel, args.wheel_sha256, args.target, args.public_source, args.public_source_sha256, args.out, args.windows_profile)["asset"]))
 
 
 if __name__ == "__main__":

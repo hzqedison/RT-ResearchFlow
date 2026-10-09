@@ -33,6 +33,20 @@ def source_pin(data, target="win32-x64"):
 
 
 class RedistributionTests(unittest.TestCase):
+    def test_hosted_profile_is_explicit_and_separate_from_local_and_mac(self):
+        self.assertEqual(module.input_pin("win32-x64"), module.PINS["win32-x64"])
+        hosted = module.input_pin("win32-x64", "hosted-run-37896686196")
+        self.assertEqual(hosted[1], "a27904ae1fd3684f8cc8ab4b3c5ab78b1ee3ad4ff8f7301ee24627bca099184c")
+        self.assertNotEqual(hosted[1], module.PINS["win32-x64"][1])
+        with self.assertRaises(ValueError): module.input_pin("darwin-arm64", "hosted-run-37896686196")
+        with self.assertRaises(ValueError): module.input_pin("win32-x64", "unknown")
+
+    def test_crossed_hosted_local_wheel_pins_rejected_before_reading(self):
+        name, local, _ = module.PINS["win32-x64"]
+        hosted = module.WINDOWS_PROFILES["hosted-run-37896686196"][1]
+        with self.assertRaises(ValueError): module.build(name, local, "win32-x64", "missing", "0" * 64, "unused", "hosted-run-37896686196")
+        with self.assertRaises(ValueError): module.build(name, hosted, "win32-x64", "missing", "0" * 64, "unused")
+
     def test_entire_namespace_and_initialiser_removed(self):
         data = fixture(); result, proof = module.repack_bytes(data, "win32-x64", source_pin(data))
         self.assertFalse(any(module.excluded(n) for n in module.zip_files(result)))

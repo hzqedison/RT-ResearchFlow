@@ -181,7 +181,7 @@ def retain_native_candidate(lab, proof):
     # Keep the original relative structure and link bytes. Extraction/rebinding
     # remains a separate checked stage; this archive grants no execution rights.
     with archive.open("xb") as output:
-        with tarfile.open(fileobj=output, mode="w:gz", dereference=False) as packed:
+        with tarfile.open(fileobj=output, mode="w:gz", compresslevel=1, dereference=False) as packed:
             for name in required:
                 packed.add(lab / name, arcname=name, recursive=True)
     if archive.stat().st_size > 2 * 1024**3:
