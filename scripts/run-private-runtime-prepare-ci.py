@@ -172,11 +172,35 @@ def verify_checkout(repo, receipt, proof_path, check=False):
     return code
 
 
+def retain_native_candidate(lab, proof):
+    """Preserve unapproved build inputs; never copy into product bundles."""
+    required = ("prepare", "handoff.json", "source-receipt.json", "python.tar.gz")
+    if any(not (lab / name).exists() for name in required):
+        raise ValueError("Complete native candidate inputs are required")
+    archive = proof / "native-preparation-candidate.tar.gz"
+    # Keep the original relative structure and link bytes. Extraction/rebinding
+    # remains a separate checked stage; this archive grants no execution rights.
+    with archive.open("xb") as output:
+        with tarfile.open(fileobj=output, mode="w:gz", dereference=False) as packed:
+            for name in required:
+                packed.add(lab / name, arcname=name, recursive=True)
+    if archive.stat().st_size > 2 * 1024**3:
+        raise ValueError("Native candidate archive budget exceeded")
+    return {"kind": "rt-unapproved-native-preparation-payload-v1",
+            "filename": archive.name, "size": archive.stat().st_size,
+            "sha256": digest(archive), "originalRoot": str(lab),
+            "releaseEligible": False, "formalBundle": False,
+            "relocalizationApproved": False,
+            "members": list(required)}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True,
                         choices=("win32-x64", "darwin-arm64", "darwin-x64"))
     parser.add_argument("--proof-dir", required=True)
+    parser.add_argument("--retain-payload", action="store_true",
+                        help="Preserve unapproved native build inputs in the CI artifact")
     args = parser.parse_args()
     if (os.environ.get("GITHUB_ACTIONS") != "true" or
             os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"):
@@ -248,7 +272,8 @@ def main():
         raise ValueError("Successful preparation did not produce a handoff")
     if result.returncode == 0:
         shutil.copyfile(handoff, proof / "handoff.json")
-    # Only metadata is exported. No unapproved runtime, wheel, or vendor payload.
+    # The default remains metadata-only. Explicit retained inputs are build-only,
+    # unapproved and excluded from release bundles.
     copied = resolver_metadata(work, proof)
     shutil.copyfile(receipt, proof / "source-receipt.json")
     copied.extend(("source-before.json", "source-after.json", "source-receipt.json"))
@@ -264,7 +289,9 @@ def main():
         "electron/shared/privatePythonRuntimeManifest.cjs", "resources/python-runtime/bootstrap.py",
         "resources/python-runtime/miniracer_unicode_adapter.py",
         "resources/python-runtime/pywencai_adapter.py", "scripts/build-mootdx-compat-wheel.py",
-        "scripts/build-provider-source-wheels.py", "scripts/run-private-runtime-prepare-ci.py",
+        "scripts/build-provider-source-wheels.py", "scripts/rebuild-lxml-native.py",
+        "scripts/build-lxml-redistribution-wheel.py", "scripts/build-lxml-matched-public-source.py",
+        "scripts/run-private-runtime-prepare-ci.py",
         "scripts/collect-private-runtime-ci-source.py", ".github/workflows/private-runtime-prepare-native.yml")
     summary = {"kind": "rt-private-runtime-native-preparation-candidate-v1",
         "target": args.target, "sourceCommit": os.environ.get("GITHUB_SHA"),
@@ -277,6 +304,8 @@ def main():
         "formalBootstrapTested": False,
         "minimumMacOSLiveVerified": False, "operatingSystemNetworkSandboxVerified": False,
         "sourceAttestation": False, "providerRequestAPIsInvoked": False}
+    if args.retain_payload and result.returncode == 0 and source_exit == 0:
+        summary["unapprovedNativePayload"] = retain_native_candidate(lab, proof)
     (proof / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     sums = [digest(path) + "  " + path.name for path in sorted(proof.iterdir()) if path.is_file()]
     (proof / "SHA256SUMS.txt").write_text("\n".join(sums) + "\n", encoding="utf-8")

@@ -6,7 +6,7 @@ const crypto = require('node:crypto')
 const PROVIDERS = ['akshare', 'mootdx', 'pywencai']
 const TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64']
 const MANIFEST = 'manifest.json'
-const RECIPES = ['scripts/build-mootdx-compat-wheel.py', 'scripts/build-provider-source-wheels.py']
+const RECIPES = ['scripts/build-mootdx-compat-wheel.py', 'scripts/build-provider-source-wheels.py', 'scripts/rebuild-lxml-native.py', 'scripts/build-lxml-redistribution-wheel.py', 'scripts/build-lxml-matched-public-source.py']
 
 function fail(reason) { throw new Error('PRIVATE_RUNTIME_INVALID: ' + reason) }
 function record(value) {
