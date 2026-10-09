@@ -380,6 +380,98 @@ class PreparationTests(unittest.TestCase):
         with self.assertRaises(prep.Invalid):
             prep.wheel_contract(wheel, POLICY)
 
+    def actual_freeze_asset(self, selected, native=False):
+        default = ("D:/RT-ResearchFlow-BuildCache/lxml-final-mapping-20261009-1791539986196/private-input-cache"
+                   if native else "D:/RT-ResearchFlow-BuildCache/股票日线 prep-release17-rootmeta-final/resolve/assets")
+        root = Path(os.environ.get("RT_PREP_TEST_LXML_CACHE" if native else "RT_PREP_TEST_DERIVED_CACHE", default))
+        path = root / selected["asset"]["filename"]
+        if not path.is_file():
+            self.skipTest("Actual pinned derived wheel cache is not on this host")
+        prep.verified_asset(root, selected["asset"])
+        return path
+
+    def freeze_item_for_actual(self, path, selected):
+        facts = prep.read_wheel(path)
+        return {"download_info": {"url": path.as_uri(),
+                                 "archive_info": {"hashes": {"sha256": selected["asset"]["sha256"]}}},
+                "metadata": {"name": facts["distribution"], "version": facts["version"],
+                             "requires_dist": facts["dependencies"]}}, facts
+
+    def test_actual_legacy_generic_freeze_fills_verified_missing_facts_three_targets(self):
+        before = copy.deepcopy(POLICY["licenseApprovals"])
+        for selected in POLICY["derivedWheels"]:
+            path = self.actual_freeze_asset(selected)
+            report, facts = self.freeze_item_for_actual(path, selected)
+            for target in prep.TARGETS:
+                with self.subTest(distribution=selected["distribution"], target=target):
+                    frozen = prep.freeze_report_item(report, path.parent, POLICY, target=target)
+                    for key, value in facts.items():
+                        self.assertEqual(frozen[key], value)
+                    for key in ("asset", "derived", "licenses"):
+                        self.assertEqual(frozen[key], selected[key])
+                    self.assertNotIn("approvalId", frozen)
+        self.assertEqual(POLICY["licenseApprovals"], before)
+
+    def test_actual_legacy_generic_rejects_present_or_core_fact_mismatch(self):
+        selected = POLICY["derivedWheels"][0]
+        path = self.actual_freeze_asset(selected)
+        report, facts = self.freeze_item_for_actual(path, selected)
+        for key, replacement in (("distribution", "other"), ("version", "0"),
+                                 ("dependencies", ["not-a-real-requirement"]),
+                                 ("tags", ["cp310-cp310-win_amd64"]),
+                                 ("metadataSha256", "0" * 64), ("notices", {})):
+            policy = copy.deepcopy(POLICY)
+            policy["derivedWheels"][0][key] = replacement
+            with self.subTest(field=key), self.assertRaises(prep.Invalid):
+                prep.freeze_report_item(report, path.parent, policy)
+        policy = copy.deepcopy(POLICY)
+        del policy["derivedWheels"][0]["dependencies"]
+        with self.assertRaises(prep.Invalid):
+            prep.freeze_report_item(report, path.parent, policy)
+
+    def test_actual_legacy_generic_rejects_report_sha_and_record_tampering(self):
+        selected = POLICY["derivedWheels"][0]
+        path = self.actual_freeze_asset(selected)
+        report, facts = self.freeze_item_for_actual(path, selected)
+        wrong = copy.deepcopy(report)
+        wrong["download_info"]["archive_info"]["hashes"]["sha256"] = "0" * 64
+        with self.assertRaises(prep.Invalid):
+            prep.freeze_report_item(wrong, path.parent, POLICY)
+        corrupted = self.base / selected["asset"]["filename"]
+        with zipfile.ZipFile(path) as original, zipfile.ZipFile(corrupted, "w") as output:
+            for info in original.infolist():
+                data = original.read(info.filename)
+                if info.filename.endswith(".dist-info/METADATA"):
+                    data += b"tampered payload"
+                output.writestr(info, data)
+        policy = copy.deepcopy(POLICY)
+        # Even a fixture-supplied new asset pin cannot bypass RECORD validation.
+        pinned = policy["derivedWheels"][0]
+        pinned["asset"]["sha256"] = prep.file_digest(corrupted)
+        pinned["asset"]["size"] = corrupted.stat().st_size
+        report["download_info"]["url"] = corrupted.as_uri()
+        report["download_info"]["archive_info"]["hashes"]["sha256"] = pinned["asset"]["sha256"]
+        with self.assertRaisesRegex(prep.Invalid, "RECORD"):
+            prep.freeze_report_item(report, self.base, policy)
+
+    def test_actual_target_derived_freeze_still_requires_complete_pinned_facts(self):
+        for target in prep.TARGETS:
+            selected = next(w for w in POLICY["targets"][target]["derivedWheels"] if w["distribution"] == "lxml")
+            path = self.actual_freeze_asset(selected, native=True)
+            report, facts = self.freeze_item_for_actual(path, selected)
+            self.assertEqual(prep.freeze_report_item(report, path.parent, POLICY, target=target), selected)
+            for key in ("tags", "metadataSha256", "notices"):
+                for remove in (True, False):
+                    policy = copy.deepcopy(POLICY)
+                    pinned = next(w for w in policy["targets"][target]["derivedWheels"] if w["distribution"] == "lxml")
+                    if remove:
+                        del pinned[key]
+                    else:
+                        pinned[key] = [] if key == "tags" else ({} if key == "notices" else "0" * 64)
+                    error = KeyError if key == "notices" and remove else prep.Invalid
+                    with self.subTest(target=target, field=key, removed=remove), self.assertRaises(error):
+                        prep.freeze_report_item(report, path.parent, policy, target=target)
+
     def test_verified_asset_and_conflicting_filename_bytes(self):
         value = self.download()
         (self.base / value["filename"]).write_bytes(b"source")

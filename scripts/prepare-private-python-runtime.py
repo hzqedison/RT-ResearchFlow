@@ -2004,8 +2004,19 @@ def freeze_report_item(item, assets, policy, operations=None, target="win32-x64"
     metadata = item["metadata"]
     if actual["distribution"].lower() != metadata["name"].lower() or actual["version"] != metadata["version"] or actual["dependencies"] != metadata.get("requires_dist", []):
         raise Invalid("Actual METADATA differs from this normal resolver report")
-    if approved is not None and any(approved.get(key) != fact for key, fact in actual.items()):
-        raise Invalid("Target derived wheel actual metadata/notices differ from policy")
+    if approved is not None:
+        # Legacy global source recipes pin bytes/core identity, not every parsed
+        # field. Populate omitted facts only after asset SHA and RECORD checks.
+        # Target-native selections and every explicitly pinned fact stay strict.
+        legacy_generic = (approved in policy.get("derivedWheels", [])
+                          and approved.get("nativeBuildInputs") is None
+                          and approved["derived"]["recipe"]["path"] in {
+                              "scripts/build-provider-source-wheels.py",
+                              "scripts/build-mootdx-compat-wheel.py"})
+        if (any(key not in approved for key in ("distribution", "version", "dependencies"))
+                or any((not legacy_generic or key in approved) and approved.get(key) != fact
+                       for key, fact in actual.items())):
+            raise Invalid("Target derived wheel actual metadata/notices differ from policy")
     wheel.update(actual)
     wheel_contract(wheel, policy)
     return wheel
