@@ -198,4 +198,4 @@ if (require.main === module) {
     process.stderr.write(JSON.stringify({ status: 'pending', releaseEligible: false, code }) + '\n'); process.exitCode = 1
   })
 }
-module.exports = { options, artifactIdForTarget, acceptedResult, origin, EXTRACT, run }
+module.exports = { options, artifactIdForTarget, acceptedResult, origin, downloadArchive, EXTRACT, run }

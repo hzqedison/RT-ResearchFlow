@@ -129,6 +129,14 @@ jobs:
             core.setOutput('bootstrap_release', String(bootstrap));
 
       - uses: actions/checkout@v4
+
+        env:
+
+          GIT_CONFIG_COUNT: '1'
+
+          GIT_CONFIG_KEY_0: core.autocrlf
+
+          GIT_CONFIG_VALUE_0: 'false'
         with:
           ref: ${{ steps.source.outputs.source_sha }}
           persist-credentials: false
@@ -155,10 +163,98 @@ jobs:
             core.setOutput('version', version);
             core.setOutput('prerelease', String(version.includes('-beta.')));
 
+
+  runtime-seal:
+    name: runtime-seal-${{ matrix.target }}
+    needs: prepare
+    if: needs.prepare.outputs.build_required == 'true' && needs.prepare.outputs.version == '1.7.0'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: win32-x64
+            runner: windows-latest
+          - target: darwin-arm64
+            runner: macos-15
+          - target: darwin-x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+      RT_TARGET: ${{ matrix.target }}
+      RT_RUNTIME_RELEASE_AUTHORIZATION_REPOSITORY_ID: ${{ vars.RT_RUNTIME_RELEASE_AUTHORIZATION_REPOSITORY_ID }}
+      RT_RUNTIME_RELEASE_AUTHORIZATION_COMMIT: ${{ vars.RT_RUNTIME_RELEASE_AUTHORIZATION_COMMIT }}
+      RT_RUNTIME_RELEASE_AUTHORIZATION_PATH: ${{ vars.RT_RUNTIME_RELEASE_AUTHORIZATION_PATH }}
+      RT_RUNTIME_RELEASE_AUTHORIZATION_SHA256: ${{ vars.RT_RUNTIME_RELEASE_AUTHORIZATION_SHA256 }}
+      FORMAL_INPUTS_RUN_ID: ${{ vars.RT_RUNTIME_STAGE_FORMAL_INPUTS_RUN_ID }}
+      FORMAL_INPUTS_ARTIFACT_ID: ${{ vars.RT_RUNTIME_STAGE_FORMAL_INPUTS_ARTIFACT_ID }}
+      NODE_OPTIONS: ''
+      NODE_PATH: ''
+    steps:
+      - uses: actions/checkout@v4
+        env:
+          GIT_CONFIG_COUNT: '1'
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.13'
+      - name: Require actual formal input coordinates and existing authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e 'require("./scripts/seal-private-python-runtime-producer.cjs").protectedPins(process.env); for(const n of ["FORMAL_INPUTS_RUN_ID","FORMAL_INPUTS_ARTIFACT_ID"]){if(!/^[1-9][0-9]*$/.test(process.env[n]||"")||!Number.isSafeInteger(Number(process.env[n])))throw new Error("FORMAL_INPUT_COORDINATES_REQUIRED")}'
+      - name: Download existing formal lock and obligation proof metadata
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.FORMAL_INPUTS_RUN_ID }}
+          artifact-ids: ${{ env.FORMAL_INPUTS_ARTIFACT_ID }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/rt-final-formal-inputs
+      - name: Reuse existing six native derived assets without C rebuilding
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 37927640327
+          pattern: lxml-redistribution-*
+          merge-multiple: false
+          path: ${{ runner.temp }}/rt-final-derived
+      - name: Execute the actual final seal producer and archive only accepted output
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FINAL_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          set -euo pipefail
+          node scripts/run-private-runtime-final-seal-ci.cjs \
+            --target "$RT_TARGET" \
+            --formal-inputs "$RUNNER_TEMP/rt-final-formal-inputs" \
+            --derived-cache "$RUNNER_TEMP/rt-final-derived" \
+            --work-root "$RUNNER_TEMP/rt-final-seal-$RT_TARGET" \
+            --python "$FINAL_PYTHON"
+      - name: Upload the real final producer result and complete sealed runtime
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: private-runtime-sealed-${{ matrix.target }}
+          path: ${{ runner.temp }}/rt-final-seal-${{ matrix.target }}/evidence
+          if-no-files-found: error
+          retention-days: 14
+
   build:
     name: release-${{ matrix.platform }}-${{ matrix.arch }}
-    needs: prepare
-    if: needs.prepare.outputs.build_required == 'true'
+    needs: [prepare, runtime-seal]
+    if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.build_required == 'true' && (needs.prepare.outputs.version != '1.7.0' || needs.runtime-seal.result == 'success')
     strategy:
       fail-fast: false
       matrix:
@@ -188,6 +284,10 @@ jobs:
       npm_config_electron_mirror: https://github.com/electron/electron/releases/download/
     steps:
       - uses: actions/checkout@v4
+        env:
+          GIT_CONFIG_COUNT: '1'
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
         with:
           ref: ${{ needs.prepare.outputs.source_sha }}
           persist-credentials: false
@@ -247,6 +347,33 @@ jobs:
         if: matrix.platform == 'macos'
         run: node --test macos/sync-upstream.test.mjs
 
+      - name: Bind actual completed seal jobs and artifacts for this release run
+        id: sealed
+        if: needs.prepare.outputs.version == '1.7.0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const targets = ['win32-x64','darwin-arm64','darwin-x64'];
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRunAttempt,
+              {...context.repo,run_id:context.runId,attempt_number:context.runAttempt,per_page:100});
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts,
+              {...context.repo,run_id:context.runId,per_page:100});
+            const ids = {};
+            for (const target of targets) {
+              const matches = jobs.filter(j => j.name === 'runtime-seal-' + target);
+              if (matches.length !== 1 || matches[0].status !== 'completed' || matches[0].conclusion !== 'success' ||
+                  matches[0].run_id !== context.runId || matches[0].run_attempt !== context.runAttempt ||
+                  matches[0].head_sha !== process.env.SOURCE_SHA) throw new Error('ACTUAL_FINAL_SEAL_JOB_REQUIRED');
+              const selected = artifacts.filter(a => a.name === 'private-runtime-sealed-' + target);
+              if (selected.length !== 1 || selected[0].expired || !Number.isSafeInteger(selected[0].id) ||
+                  selected[0].id < 1 || selected[0].workflow_run.id !== context.runId ||
+                  selected[0].workflow_run.head_sha !== process.env.SOURCE_SHA ||
+                  !/^sha256:[a-f0-9]{64}$/.test(selected[0].digest || '')) throw new Error('ACTUAL_FINAL_SEAL_ARTIFACT_REQUIRED');
+              ids[target] = selected[0].id;
+            }
+            core.setOutput('run_id', String(context.runId));
+            core.setOutput('artifact_ids', JSON.stringify(ids));
+
       - name: Materialize the accepted formal private runtime before packaging 1.7
         if: needs.prepare.outputs.version == '1.7.0'
         shell: bash
@@ -256,8 +383,8 @@ jobs:
           RT_RUNTIME_RELEASE_AUTHORIZATION_COMMIT: ${{ vars.RT_RUNTIME_RELEASE_AUTHORIZATION_COMMIT }}
           RT_RUNTIME_RELEASE_AUTHORIZATION_PATH: ${{ vars.RT_RUNTIME_RELEASE_AUTHORIZATION_PATH }}
           RT_RUNTIME_RELEASE_AUTHORIZATION_SHA256: ${{ vars.RT_RUNTIME_RELEASE_AUTHORIZATION_SHA256 }}
-          RT_SEALED_RUN_ID: ${{ vars.RT_PRIVATE_RUNTIME_SEALED_RUN_ID }}
-          RT_SEALED_ARTIFACT_IDS: ${{ vars.RT_PRIVATE_RUNTIME_SEALED_ARTIFACT_IDS }}
+          RT_SEALED_RUN_ID: ${{ steps.sealed.outputs.run_id }}
+          RT_SEALED_ARTIFACT_IDS: ${{ steps.sealed.outputs.artifact_ids }}
           RUNTIME_PYTHON: ${{ steps.python.outputs.python-path }}
         run: |
           set -euo pipefail
@@ -477,6 +604,10 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        env:
+          GIT_CONFIG_COUNT: '1'
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
         with:
           ref: ${{ needs.prepare.outputs.source_sha }}
           persist-credentials: false
