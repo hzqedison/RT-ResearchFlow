@@ -1,0 +1,3540 @@
+{
+  "schemaVersion": 1,
+  "kind": "rt-private-python-preparation-policy",
+  "status": "pending",
+  "sourceCommit": null,
+  "networkResolution": true,
+  "minimumFreeBytes": 4294967296,
+  "toolchain": {
+    "win32-x64": {
+      "licenseDecoder": {
+        "asset": {
+          "kind": "download",
+          "size": 506232,
+          "sha256": "1f830a0dac88719af0ae43b8b2d6aef487d437036468ef3c2ea59c51f9d55fd5",
+          "filename": "zstandard-0.25.0-cp313-cp313-win_amd64.whl",
+          "url": "https://files.pythonhosted.org/packages/d9/82/b9c06c870f3bd8767c201f1edbdf9e8dc34be5b0fbc5682c4f80fe948475/zstandard-0.25.0-cp313-cp313-win_amd64.whl"
+        },
+        "distribution": "zstandard",
+        "version": "0.25.0"
+      },
+      "pipMetadataSha256": "3a561005822841f2c45f442f6c7a7505172c8c376c9fe274d876c8ac912968cb",
+      "pipVersion": "26.2.1"
+    },
+    "darwin-x64": {
+      "licenseDecoder": {
+        "asset": {
+          "kind": "download",
+          "size": 795735,
+          "sha256": "ec996f12524f88e151c339688c3897194821d7f03081ab35d31d1e12ec975e94",
+          "filename": "zstandard-0.25.0-cp313-cp313-macosx_10_13_x86_64.whl",
+          "url": "https://files.pythonhosted.org/packages/35/0b/8df9c4ad06af91d39e94fa96cc010a24ac4ef1378d3efab9223cc8593d40/zstandard-0.25.0-cp313-cp313-macosx_10_13_x86_64.whl"
+        },
+        "distribution": "zstandard",
+        "version": "0.25.0"
+      },
+      "pipMetadataSha256": "3a561005822841f2c45f442f6c7a7505172c8c376c9fe274d876c8ac912968cb",
+      "pipVersion": "26.2.1"
+    },
+    "darwin-arm64": {
+      "licenseDecoder": {
+        "asset": {
+          "kind": "download",
+          "size": 640440,
+          "sha256": "a1a4ae2dec3993a32247995bdfe367fc3266da832d82f8438c8570f989753de1",
+          "filename": "zstandard-0.25.0-cp313-cp313-macosx_11_0_arm64.whl",
+          "url": "https://files.pythonhosted.org/packages/3f/06/9ae96a3e5dcfd119377ba33d4c42a7d89da1efabd5cb3e366b156c45ff4d/zstandard-0.25.0-cp313-cp313-macosx_11_0_arm64.whl"
+        },
+        "distribution": "zstandard",
+        "version": "0.25.0"
+      },
+      "pipMetadataSha256": "3a561005822841f2c45f442f6c7a7505172c8c376c9fe274d876c8ac912968cb",
+      "pipVersion": "26.2.1"
+    }
+  },
+  "officialSources": [
+    "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/",
+    "https://nodejs.org/dist/v22.23.3/",
+    "https://files.pythonhosted.org/packages/"
+  ],
+  "recipePins": [
+    {
+      "path": "scripts/build-provider-source-wheels.py",
+      "sha256": "3d53de6ca20346ef6b284976d7ebd95c6a29ff9f6fe37b6b995127571ca801da"
+    },
+    {
+      "path": "scripts/build-mootdx-compat-wheel.py",
+      "sha256": "0cd01a1ce9a86cb8f3cc4bc57ebe81b43605ec6cf42ba694805907648f55b685"
+    }
+  ],
+  "targets": {
+    "win32-x64": {
+      "python": {
+        "version": "3.13.16",
+        "asset": {
+          "kind": "download",
+          "filename": "cpython-3.13.16+20261003-x86_64-pc-windows-msvc-install_only.tar.gz",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.13.16%2B20261003-x86_64-pc-windows-msvc-install_only.tar.gz",
+          "size": 47421192,
+          "sha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778"
+        },
+        "licenseSources": [
+          {
+            "kind": "download",
+            "filename": "cpython-3.13.16+20261003-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+            "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.13.16%2B20261003-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+            "size": 45844362,
+            "sha256": "cb3b6dcfcf179110486403204e4f5e507e8980d0ca50bb0d8c72e8c76b41b869"
+          }
+        ]
+      },
+      "node": {
+        "version": "22.23.3",
+        "asset": {
+          "kind": "download",
+          "filename": "node-v22.23.3-win-x64.zip",
+          "url": "https://nodejs.org/dist/v22.23.3/node-v22.23.3-win-x64.zip",
+          "size": 35574076,
+          "sha256": "2b0ff57b049cda1bbcea2240eec20467018713c1efe1f7360c2681859b90ed71"
+        }
+      }
+    },
+    "darwin-arm64": {
+      "python": {
+        "version": "3.13.16",
+        "asset": {
+          "kind": "download",
+          "filename": "cpython-3.13.16+20261003-aarch64-apple-darwin-install_only.tar.gz",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.13.16%2B20261003-aarch64-apple-darwin-install_only.tar.gz",
+          "size": 25365830,
+          "sha256": "d8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933"
+        },
+        "licenseSources": [
+          {
+            "filename": "cpython-3.13.16+20261003-aarch64-apple-darwin-pgo+lto-full.tar.zst",
+            "kind": "download",
+            "sha256": "ca3eb5bf8110eaed1c3e516be4bd4d52bcf636f8e888359353f274288406bae7",
+            "size": 59224664,
+            "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.13.16%2B20261003-aarch64-apple-darwin-pgo%2Blto-full.tar.zst"
+          }
+        ]
+      },
+      "node": {
+        "version": "22.23.3",
+        "asset": {
+          "kind": "download",
+          "filename": "node-v22.23.3-darwin-arm64.tar.gz",
+          "url": "https://nodejs.org/dist/v22.23.3/node-v22.23.3-darwin-arm64.tar.gz",
+          "size": 49963763,
+          "sha256": "23b25245dcfb9af7262f8ff142e9e2e0af025368117329e7a7458a51e5922f53"
+        }
+      }
+    },
+    "darwin-x64": {
+      "python": {
+        "version": "3.13.16",
+        "asset": {
+          "kind": "download",
+          "filename": "cpython-3.13.16+20261003-x86_64-apple-darwin-install_only.tar.gz",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.13.16%2B20261003-x86_64-apple-darwin-install_only.tar.gz",
+          "size": 25067280,
+          "sha256": "8e9cb087305bfb8969f68a905f79f41469d4aa5220c1aa71ada7fc9953bdba0f"
+        },
+        "licenseSources": [
+          {
+            "filename": "cpython-3.13.16+20261003-x86_64-apple-darwin-pgo+lto-full.tar.zst",
+            "kind": "download",
+            "sha256": "57030cb11a1e823903b13ada440f64e7a06fcaeaabe1051559ef8c34890c277a",
+            "size": 58427280,
+            "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.13.16%2B20261003-x86_64-apple-darwin-pgo%2Blto-full.tar.zst"
+          }
+        ]
+      },
+      "node": {
+        "version": "22.23.3",
+        "asset": {
+          "kind": "download",
+          "filename": "node-v22.23.3-darwin-x64.tar.gz",
+          "url": "https://nodejs.org/dist/v22.23.3/node-v22.23.3-darwin-x64.tar.gz",
+          "size": 51142049,
+          "sha256": "8a677b0219178efd6eb0e475457c4afb452b521a92f6e67845a73bd85727f2a8"
+        }
+      }
+    }
+  },
+  "derivedWheels": [
+    {
+      "distribution": "jsonpath",
+      "version": "0.82.2",
+      "dependencies": [],
+      "licenses": [],
+      "asset": {
+        "kind": "derived",
+        "filename": "jsonpath-0.82.2-py2.py3-none-any.whl",
+        "size": 45640,
+        "sha256": "f0cef8d52734c71e1c06a2da87940a72c8840d7f3e64cbb123b6b3b29f0db117"
+      },
+      "derived": {
+        "id": "jsonpath-original-source-wheel-v1",
+        "upstreamVersion": "0.82.2",
+        "upstreamSha256": "d87ef2bcbcded68ee96bc34c1809b69457ecec9b0c4dd471658a12bd391002d1",
+        "patchSha256": "3d53de6ca20346ef6b284976d7ebd95c6a29ff9f6fe37b6b995127571ca801da",
+        "upstreamAsset": {
+          "kind": "download",
+          "filename": "jsonpath-0.82.2.tar.gz",
+          "size": 10353,
+          "sha256": "d87ef2bcbcded68ee96bc34c1809b69457ecec9b0c4dd471658a12bd391002d1",
+          "url": "https://files.pythonhosted.org/packages/cf/a1/693351acd0a9edca4de9153372a65e75398898ea7f8a5c722ab00f464929/jsonpath-0.82.2.tar.gz"
+        },
+        "recipe": {
+          "path": "scripts/build-provider-source-wheels.py",
+          "sha256": "3d53de6ca20346ef6b284976d7ebd95c6a29ff9f6fe37b6b995127571ca801da"
+        }
+      }
+    },
+    {
+      "distribution": "PyExecJS",
+      "version": "1.5.1",
+      "dependencies": [
+        "six>=1.10.0"
+      ],
+      "licenses": [],
+      "asset": {
+        "kind": "derived",
+        "filename": "pyexecjs-1.5.1-py2.py3-none-any.whl",
+        "size": 73259,
+        "sha256": "de51fa4692182d14c6005396e2dafa45368090dc64526e7fea9fde7a856fce28"
+      },
+      "derived": {
+        "id": "pyexecjs-original-source-wheel-v1",
+        "upstreamVersion": "1.5.1",
+        "upstreamSha256": "34cc1d070976918183ff7bdc0ad71f8157a891c92708c00c5fbbff7a769f505c",
+        "patchSha256": "3d53de6ca20346ef6b284976d7ebd95c6a29ff9f6fe37b6b995127571ca801da",
+        "upstreamAsset": {
+          "kind": "download",
+          "filename": "PyExecJS-1.5.1.tar.gz",
+          "size": 13344,
+          "sha256": "34cc1d070976918183ff7bdc0ad71f8157a891c92708c00c5fbbff7a769f505c",
+          "url": "https://files.pythonhosted.org/packages/ba/8e/aedef81641c8dca6fd0fb7294de5bed9c45f3397d67fddf755c1042c2642/PyExecJS-1.5.1.tar.gz"
+        },
+        "recipe": {
+          "path": "scripts/build-provider-source-wheels.py",
+          "sha256": "3d53de6ca20346ef6b284976d7ebd95c6a29ff9f6fe37b6b995127571ca801da"
+        }
+      }
+    },
+    {
+      "distribution": "mootdx",
+      "version": "0.11.7+rt.1",
+      "dependencies": [
+        "click (>=8.1.3,<9.0.0)",
+        "httpx (>=0.25.0,<0.26.0)",
+        "prettytable (>=3.5.0,<4.0.0)",
+        "mini-racer (==0.12.4)",
+        "tdxpy (>=0.2.5,<0.3.0)",
+        "tenacity (>=8.1.0,<9.0.0)",
+        "tqdm",
+        "typing-extensions (>=4.5.0,<5.0.0)"
+      ],
+      "licenses": [],
+      "asset": {
+        "kind": "derived",
+        "filename": "mootdx-0.11.7+rt.1-py3-none-any.whl",
+        "size": 413852,
+        "sha256": "35f282624ed7a2a6908b4b847fba9119e7fb376cd00797606ee5ee97b6139f77"
+      },
+      "derived": {
+        "id": "mootdx-modern-mini-racer-v1",
+        "upstreamVersion": "0.11.7",
+        "upstreamSha256": "eab475f1d08b1c71ea51212c8b1b1038c4739798f7d95ad1a6fb7bb26e348ef2",
+        "patchSha256": "0cd01a1ce9a86cb8f3cc4bc57ebe81b43605ec6cf42ba694805907648f55b685",
+        "upstreamAsset": {
+          "kind": "download",
+          "filename": "mootdx-0.11.7-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/bd/7c/dff7de8e9d29d49a22ffcb03f765cf829be5097019a760319d908009da54/mootdx-0.11.7-py3-none-any.whl",
+          "size": 108803,
+          "sha256": "eab475f1d08b1c71ea51212c8b1b1038c4739798f7d95ad1a6fb7bb26e348ef2"
+        },
+        "recipe": {
+          "path": "scripts/build-mootdx-compat-wheel.py",
+          "sha256": "0cd01a1ce9a86cb8f3cc4bc57ebe81b43605ec6cf42ba694805907648f55b685"
+        }
+      }
+    }
+  ],
+  "pendingDerivedWheels": [],
+  "licenseRequirements": [
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.bdb.txt",
+      "sha256": "8f2d533ab34899499d5b07f209854b101b17dba2c69f3251860aecf3e4005faa",
+      "spdx": "NOASSERTION",
+      "size": 7419
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.bzip2.txt",
+      "sha256": "bd5628cc76fb0ebf9c657d1dd4d1a240a1a7b216c31663e7bbf1131c0b70a910",
+      "spdx": "NOASSERTION",
+      "size": 1780
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.cpython.txt",
+      "sha256": "8fe98bf9822926d854f56ffd8d97877d8b942617aa44eb7ea77fd99e22f2537e",
+      "spdx": "NOASSERTION",
+      "size": 36935
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.expat.txt",
+      "sha256": "8a9cfe4b5924f4b25881aa0c9f5e4561c5f31065d0c4a13cdcdbcf917edf39aa",
+      "spdx": "NOASSERTION",
+      "size": 1165
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.libedit.txt",
+      "sha256": "d9932ccdd42eccf6cdded7bcb35b088e64cfc7c24d355af2cc0d02edb6b637d3",
+      "spdx": "NOASSERTION",
+      "size": 1643
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.libffi.txt",
+      "sha256": "9afb8970cd29fc1031fa647278e4bef613399e2e3468a1e3a397f4d158c6101c",
+      "spdx": "NOASSERTION",
+      "size": 1153
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.liblzma.txt",
+      "sha256": "d87d218dd908b3243ec4cbc72af400e5b7437513ea9d9229291d0812b8464fec",
+      "spdx": "NOASSERTION",
+      "size": 673
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.libuuid.txt",
+      "sha256": "cbccaa3efe07a9a602751375085be572d4410a250b996716fbe8c5255c7ec6f2",
+      "spdx": "NOASSERTION",
+      "size": 1459
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.libX11.txt",
+      "sha256": "f353accfe2976df31ea297a77d1d454bd51ef6be8c3df39bd6aca95901579357",
+      "spdx": "NOASSERTION",
+      "size": 47960
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.libXau.txt",
+      "sha256": "cec808cd2163fccdc8de4a91d526490777afbaeea060e1168c40a804694b7444",
+      "spdx": "NOASSERTION",
+      "size": 1169
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.libxcb.txt",
+      "sha256": "29a9539190e6de1af5fd06a9139c7103137cd1f9290b08c7b11bce89c01c14d2",
+      "spdx": "NOASSERTION",
+      "size": 1367
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.mpdecimal.txt",
+      "sha256": "f094277cd46e1f6e4d87916cc4b51e22f613d45eb81f48231c3cb7caf8fc8a6a",
+      "spdx": "NOASSERTION",
+      "size": 1308
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.ncurses.txt",
+      "sha256": "4f571cad3ea6c888bf0a7092e5b215dddb3142e9e3f1857fd5fac6cf13d345d7",
+      "spdx": "NOASSERTION",
+      "size": 1476
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.openssl-1.1.txt",
+      "sha256": "ad89e3fed746413af1d34d5353978ee1520cedd361c853f8022e7bb210ac6b31",
+      "spdx": "NOASSERTION",
+      "size": 6244
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.openssl-3.txt",
+      "sha256": "ed72ce2b51ee58f117e5a021e2e04af158857f40269fbc03491f0b2a99dbcc96",
+      "spdx": "NOASSERTION",
+      "size": 10352
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.sqlite.txt",
+      "sha256": "d8eb9aba7ef6b5ed06cb3ec19a7242316af2e5933c638eb67fb781c13884e01d",
+      "spdx": "NOASSERTION",
+      "size": 1504
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.tcl.txt",
+      "sha256": "41613eabfc08921a7da9c4bfd7f3ce5d5406f55214b253d89f392ed86eebeb8f",
+      "spdx": "NOASSERTION",
+      "size": 2295
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.tix.txt",
+      "sha256": "8cdff3addb9e9eb108c78e2cf5e05f26b216c098304945733bbec382b2eaef66",
+      "spdx": "NOASSERTION",
+      "size": 2880
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/licenses/LICENSE.zlib.txt",
+      "sha256": "365e36720db366054863235aea5d6f440142ab968834bfaf81fa9d187c99b9b8",
+      "spdx": "NOASSERTION",
+      "size": 1016
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "member": "python/PYTHON.json",
+      "sha256": "c2bd7a699f18cd48dbf701b55a1229dcecec3e2ac74b59fba350fe52d4153e98",
+      "role": "provenance",
+      "size": 63788
+    },
+    {
+      "component": "node",
+      "version": "22.23.3",
+      "member": "LICENSE",
+      "sha256": "8cc9bb466b19fc7e7cc99d03e9df1132021fda8b01eea2624c58bb372dbef576",
+      "spdx": "NOASSERTION"
+    },
+    {
+      "component": "jsonpath",
+      "version": "0.82.2",
+      "member": "jsonpath-0.82.2.dist-info/licenses/embedded-license-jsonpath.py.txt",
+      "sha256": null,
+      "spdx": "MIT"
+    },
+    {
+      "component": "PyExecJS",
+      "version": "1.5.1",
+      "member": "pyexecjs-1.5.1.dist-info/licenses/LICENSE",
+      "sha256": null,
+      "spdx": "MIT"
+    },
+    {
+      "component": "mootdx",
+      "version": "0.11.7+rt.1",
+      "member": "mootdx-0.11.7+rt.1.dist-info/LICENSE",
+      "sha256": null,
+      "spdx": "NOASSERTION"
+    },
+    {
+      "component": "mootdx",
+      "version": "0.11.7+rt.1",
+      "member": "mootdx-0.11.7+rt.1.dist-info/METADATA",
+      "sha256": null,
+      "spdx": "NOASSERTION",
+      "note": "Retain upstream noncommercial description; requires explicit human judgment"
+    }
+  ],
+  "licenseApprovals": [
+    {
+      "id": "astra-20261009-akshare-1.19.1-1",
+      "component": "akshare",
+      "version": "1.19.1",
+      "artifactSha256": "8ab82d4a468d2c384df02de470df3a44e8b899fd8cfe116bceff52dd7b804df9",
+      "licenseSha256": "d1c84fbaccd5fdbc75cd12ab9a05f4f791d89ee266569bc976c8b0befafc2d65",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-akshare-1.19.1-2",
+      "component": "akshare",
+      "version": "1.19.1",
+      "artifactSha256": "8ab82d4a468d2c384df02de470df3a44e8b899fd8cfe116bceff52dd7b804df9",
+      "licenseSha256": "62eeb65899303550636c2fee622e00350e2e6ca9baeb08889c8e2669f7d1d440",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-anyio-4.15.1-1",
+      "component": "anyio",
+      "version": "4.15.1",
+      "artifactSha256": "6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101",
+      "licenseSha256": "5361ac9dc58f2ef5fd2e9b09c68297c17f04950909bbc8023bdb82eacf22c2b0",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-anyio-4.15.1-2",
+      "component": "anyio",
+      "version": "4.15.1",
+      "artifactSha256": "6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101",
+      "licenseSha256": "043aecb571af7189e8a6c528f5d8e32545f1b2cdfaaf761d51e6d5b67ea3ca81",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-beautifulsoup4-4.15.0-1",
+      "component": "beautifulsoup4",
+      "version": "4.15.0",
+      "artifactSha256": "d6f88de62e1d4e38ecb1077eb9724cd0eff29d2a08ca16a401e9b9e93f117cf9",
+      "licenseSha256": "b989238918e1fdac1e46717cb405b63e92497a272413af0d989c1df6c8abcb6f",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-beautifulsoup4-4.15.0-2",
+      "component": "beautifulsoup4",
+      "version": "4.15.0",
+      "artifactSha256": "d6f88de62e1d4e38ecb1077eb9724cd0eff29d2a08ca16a401e9b9e93f117cf9",
+      "licenseSha256": "55b4d8d4b1e5bc86d10efac91b74c87bcb77526b0f5b9edaf8b9cd2adc7397b2",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-beautifulsoup4-4.15.0-3",
+      "component": "beautifulsoup4",
+      "version": "4.15.0",
+      "artifactSha256": "d6f88de62e1d4e38ecb1077eb9724cd0eff29d2a08ca16a401e9b9e93f117cf9",
+      "licenseSha256": "b2f888103259f1607c85f3b1163be1bc49fc9941a3243c3b89a21075bfc6d4fb",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-click-8.5.0-1",
+      "component": "click",
+      "version": "8.5.0",
+      "artifactSha256": "255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360",
+      "licenseSha256": "9a8ad106a394e853bfe21f42f4e72d592819a22805d991b5f3275029292b658d",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-click-8.5.0-2",
+      "component": "click",
+      "version": "8.5.0",
+      "artifactSha256": "255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360",
+      "licenseSha256": "e87bce0bd194de70dfb8e708e0a6b0483009f25611804eaf87bfeb63e6c20501",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-colorama-0.4.6-1",
+      "component": "colorama",
+      "version": "0.4.6",
+      "artifactSha256": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6",
+      "licenseSha256": "cac35c02686e5d04a5a7140bfb3b36e73aed496656e891102e428886d7930318",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-colorama-0.4.6-2",
+      "component": "colorama",
+      "version": "0.4.6",
+      "artifactSha256": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6",
+      "licenseSha256": "7baed29eb50c3b29bdb33ff84e3177bf1bc05784f7685ecdcaa4471c7dd810cc",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-comm-0.2.3-1",
+      "component": "comm",
+      "version": "0.2.3",
+      "artifactSha256": "c615d91d75f7f04f095b30d1c1711babd43bdc6419c1be9886a85f2f4e489417",
+      "licenseSha256": "97a7e0a142b7c1dcd26461b20fc13980988b4449b7446ed776928826fd2ca9c4",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-comm-0.2.3-2",
+      "component": "comm",
+      "version": "0.2.3",
+      "artifactSha256": "c615d91d75f7f04f095b30d1c1711babd43bdc6419c1be9886a85f2f4e489417",
+      "licenseSha256": "e475291f8fdedbecbbfd788a2c5de9c912424d23574aba7b9fc51985d7158878",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-decorator-5.3.1-1",
+      "component": "decorator",
+      "version": "5.3.1",
+      "artifactSha256": "f47fe6fdbd2edd623ecfe36875d37aba411624e2670dd395dddae1358689bb3c",
+      "licenseSha256": "bd12cc51405c10872497c10ca21601f1d4abc50496595cc89e89ab5dad24fb62",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-decorator-5.3.1-2",
+      "component": "decorator",
+      "version": "5.3.1",
+      "artifactSha256": "f47fe6fdbd2edd623ecfe36875d37aba411624e2670dd395dddae1358689bb3c",
+      "licenseSha256": "2133792485403bbd739e1db5960228bedbcde6d00c0acc052b27f39dbae5b5c4",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-executing-2.2.1-1",
+      "component": "executing",
+      "version": "2.2.1",
+      "artifactSha256": "760643d3452b4d777d295bb167ccc74c64a81df23fb5e08eff250c425a4b2017",
+      "licenseSha256": "a476a2cb0ef4c41450340a577a28b91ac4c7f669136b2ee148047fabd5fc4181",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-executing-2.2.1-2",
+      "component": "executing",
+      "version": "2.2.1",
+      "artifactSha256": "760643d3452b4d777d295bb167ccc74c64a81df23fb5e08eff250c425a4b2017",
+      "licenseSha256": "d7586d1ae225bee126c4237eb0c4d7699a8580b81eb558cc500c263d29a633ff",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-h11-0.16.0-1",
+      "component": "h11",
+      "version": "0.16.0",
+      "artifactSha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86",
+      "licenseSha256": "37db5bb85926db28a427a25867f10b1232003aea1be69ccb851138adb8e6f361",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-h11-0.16.0-2",
+      "component": "h11",
+      "version": "0.16.0",
+      "artifactSha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86",
+      "licenseSha256": "28f326098ac09fcba79b8f180f96087c841fe2456215cb7b872a9c7d5cd19d64",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-html5lib-1.1-1",
+      "component": "html5lib",
+      "version": "1.1",
+      "artifactSha256": "0d78f8fde1c230e99fe37986a60526d7049ed4bf8a9fadbad5f00e22e58e041d",
+      "licenseSha256": "0eb3403227e80e9b90c899fe296f87e8af13b766b9aca9d5d94178f8346b1942",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-html5lib-1.1-2",
+      "component": "html5lib",
+      "version": "1.1",
+      "artifactSha256": "0d78f8fde1c230e99fe37986a60526d7049ed4bf8a9fadbad5f00e22e58e041d",
+      "licenseSha256": "16a39991619e92f18680932da2a9199fdf7d95df3ecaedc52ea06218aabafd6f",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-html5lib-1.1-3",
+      "component": "html5lib",
+      "version": "1.1",
+      "artifactSha256": "0d78f8fde1c230e99fe37986a60526d7049ed4bf8a9fadbad5f00e22e58e041d",
+      "licenseSha256": "637c3e9ddff6d87427411cb7cb2a55b15fe47b6145f78b940f8faf1a97360e72",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-httpcore-1.0.9-1",
+      "component": "httpcore",
+      "version": "1.0.9",
+      "artifactSha256": "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55",
+      "licenseSha256": "fdcb59154c74cbaba16a11242f7740bea9f23d6feb5547917d8c5f94a80392a5",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-httpcore-1.0.9-2",
+      "component": "httpcore",
+      "version": "1.0.9",
+      "artifactSha256": "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55",
+      "licenseSha256": "fe2d4fda6199128978779e0cf27f3c045c531863fcdd987eacc74f3a18d41c21",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-httpx-0.25.2-1",
+      "component": "httpx",
+      "version": "0.25.2",
+      "artifactSha256": "a05d3d052d9b2dfce0e3896636467f8a5342fb2b902c819428e1ac65413ca118",
+      "licenseSha256": "4ec59d544f12b5f539a3a716fd321ac58ccd8030b465221f2c880200cdf28d8d",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-httpx-0.25.2-2",
+      "component": "httpx",
+      "version": "0.25.2",
+      "artifactSha256": "a05d3d052d9b2dfce0e3896636467f8a5342fb2b902c819428e1ac65413ca118",
+      "licenseSha256": "759d9e9cd5e6bc68a2ba42c622dbaa038599401ca964f29047d623cc240a58f5",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-idna-3.20-1",
+      "component": "idna",
+      "version": "3.20",
+      "artifactSha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c",
+      "licenseSha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-idna-3.20-2",
+      "component": "idna",
+      "version": "3.20",
+      "artifactSha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c",
+      "licenseSha256": "dbd8c14c1e4ca1e0c9824a6dbc7cbbf78884f38eb52d91148cd3025f671e4b85",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-ipython-pygments-lexers-1.1.1-1",
+      "component": "ipython_pygments_lexers",
+      "version": "1.1.1",
+      "artifactSha256": "a9462224a505ade19a605f71f8fa63c2048833ce50abc86768a0d81d876dc81c",
+      "licenseSha256": "b1d0dbc0fa79774d34b8e2d0aec91d50d8caf05f7b40fc22c3010a4bd9ad2bf9",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-ipython-pygments-lexers-1.1.1-2",
+      "component": "ipython_pygments_lexers",
+      "version": "1.1.1",
+      "artifactSha256": "a9462224a505ade19a605f71f8fa63c2048833ce50abc86768a0d81d876dc81c",
+      "licenseSha256": "6b38c0946bdbc4778f4e38e2298547cbd7d13aeba9979ec4e4a412eabfbdfadb",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-jupyter-client-8.10.0-1",
+      "component": "jupyter_client",
+      "version": "8.10.0",
+      "artifactSha256": "5f73f24f22fa25192cfff6b23c051932a2473a797b05734aff495b392103e14e",
+      "licenseSha256": "5ca74e4d2eeb9330b0d129c25f874d3544a13413bc62ae8d367819100d095072",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-jupyter-client-8.10.0-2",
+      "component": "jupyter_client",
+      "version": "8.10.0",
+      "artifactSha256": "5f73f24f22fa25192cfff6b23c051932a2473a797b05734aff495b392103e14e",
+      "licenseSha256": "95ec04e32a2decceb7325efa691e6e160201e4e8184db1b1e36a239f9170f560",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-jupyter-core-5.9.1-1",
+      "component": "jupyter_core",
+      "version": "5.9.1",
+      "artifactSha256": "ebf87fdc6073d142e114c72c9e29a9d7ca03fad818c5d300ce2adc1fb0743407",
+      "licenseSha256": "448f1835f5fa08dd075088e46f76f73eb9ac9c2aef0a6c8816be06d30ef592c7",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-jupyter-core-5.9.1-2",
+      "component": "jupyter_core",
+      "version": "5.9.1",
+      "artifactSha256": "ebf87fdc6073d142e114c72c9e29a9d7ca03fad818c5d300ce2adc1fb0743407",
+      "licenseSha256": "68a656d7e2ebe45d40becf6032998192790d8a7536942f72167d79b8559e5ded",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-matplotlib-inline-0.2.2-1",
+      "component": "matplotlib-inline",
+      "version": "0.2.2",
+      "artifactSha256": "3c821cf1c209f59fb2d2d64abbf5b23b67bcb2210d663f9918dd851c6da1fcf6",
+      "licenseSha256": "8521b036c6448e0e0aa7213d4713b6fdee0f4c64c9f320450f77346bf5c0e8e4",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-matplotlib-inline-0.2.2-2",
+      "component": "matplotlib-inline",
+      "version": "0.2.2",
+      "artifactSha256": "3c821cf1c209f59fb2d2d64abbf5b23b67bcb2210d663f9918dd851c6da1fcf6",
+      "licenseSha256": "fedb3d587ec2d3fa4b0a81fd5353df697d2534c8ee714dbf050009afc60bcab7",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-nest-asyncio2-1.7.4-1",
+      "component": "nest-asyncio2",
+      "version": "1.7.4",
+      "artifactSha256": "86e77b52c3d1496b294af3c944b44213b9b82a12a5ee590c0acc4ca4692ef6c7",
+      "licenseSha256": "cec819c02a99e78449d64f3c0217d415c3a210f2a6abfcd827c6b1cb76954e78",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-nest-asyncio2-1.7.4-2",
+      "component": "nest-asyncio2",
+      "version": "1.7.4",
+      "artifactSha256": "86e77b52c3d1496b294af3c944b44213b9b82a12a5ee590c0acc4ca4692ef6c7",
+      "licenseSha256": "5aa5b09a2e2d3f6f51a54498c96a77b94097eba06e194c136a9ec87707d758b0",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-openpyxl-3.1.5-1",
+      "component": "openpyxl",
+      "version": "3.1.5",
+      "artifactSha256": "5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2",
+      "licenseSha256": "0c84bb42f5d367e5ebf9fc2dde35b16141df5ee0fdc189250858bc6c5560f69e",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-openpyxl-3.1.5-2",
+      "component": "openpyxl",
+      "version": "3.1.5",
+      "artifactSha256": "5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2",
+      "licenseSha256": "23f80ca9830dd89435da1710f26deda8f81e5409287e74540210c72627a4ad96",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-platformdirs-4.12.4-1",
+      "component": "platformdirs",
+      "version": "4.12.4",
+      "artifactSha256": "78bfb9db2a8471ed7eebe3c3c932da413911042994e699b384fbb4493fa872d7",
+      "licenseSha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-platformdirs-4.12.4-2",
+      "component": "platformdirs",
+      "version": "4.12.4",
+      "artifactSha256": "78bfb9db2a8471ed7eebe3c3c932da413911042994e699b384fbb4493fa872d7",
+      "licenseSha256": "2418b715af2d19c99d62ebf721c2e02075f20479ac9c0557a06e119fdbe14a3f",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-prettytable-3.18.0-1",
+      "component": "prettytable",
+      "version": "3.18.0",
+      "artifactSha256": "b3346e0e6f79180833aebaac088ae926340586cf6d7d991b9eb125b65f72313a",
+      "licenseSha256": "0c8adcc204c8af6cdfdf7887dfd1f99c29901f6c1d505a78bba96efa4fb2cb05",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-prettytable-3.18.0-2",
+      "component": "prettytable",
+      "version": "3.18.0",
+      "artifactSha256": "b3346e0e6f79180833aebaac088ae926340586cf6d7d991b9eb125b65f72313a",
+      "licenseSha256": "271a5357524f01c8ce05af4ecd0d9fb8ea969e774f80aa2dcaa1d39005255558",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-prompt-toolkit-3.0.53-1",
+      "component": "prompt_toolkit",
+      "version": "3.0.53",
+      "artifactSha256": "01c0891d7f9237d5e339f7d3e42cdae80b7534abb1c7c0e3352efba6231492f2",
+      "licenseSha256": "d3dc62c6bc8436658495ab89aea37511e7fa9391d282657239c9cfb80dbd42e5",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-prompt-toolkit-3.0.53-2",
+      "component": "prompt_toolkit",
+      "version": "3.0.53",
+      "artifactSha256": "01c0891d7f9237d5e339f7d3e42cdae80b7534abb1c7c0e3352efba6231492f2",
+      "licenseSha256": "303574d9bdd85c757d6025017942bf17baeedf2778f62bd7f425d07d880f4c4a",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-prompt-toolkit-3.0.53-3",
+      "component": "prompt_toolkit",
+      "version": "3.0.53",
+      "artifactSha256": "01c0891d7f9237d5e339f7d3e42cdae80b7534abb1c7c0e3352efba6231492f2",
+      "licenseSha256": "d04994e4401b88abf884ca54fb3b85e50a8b4fb1fde1ed7eb3ece9d8bf5459a9",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pure-eval-0.2.4-1",
+      "component": "pure_eval",
+      "version": "0.2.4",
+      "artifactSha256": "96cae060a313cfaad51bb761278bfb0e62dc0248d9315a81173752dc546cd37a",
+      "licenseSha256": "a476a2cb0ef4c41450340a577a28b91ac4c7f669136b2ee148047fabd5fc4181",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pure-eval-0.2.4-2",
+      "component": "pure_eval",
+      "version": "0.2.4",
+      "artifactSha256": "96cae060a313cfaad51bb761278bfb0e62dc0248d9315a81173752dc546cd37a",
+      "licenseSha256": "4fe70f69411b9963d7275084210743afa819c2350899a29150bc43b1abf105d0",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pycparser-3.1-1",
+      "component": "pycparser",
+      "version": "3.1",
+      "artifactSha256": "f09d358c840bd147b79e55f2bc494f18ea869dc897f5852a8f5766b74f787882",
+      "licenseSha256": "0a9e78156ae8b96caf1b4f11ac2df424b83de29736f9e757630548a6272fdf90",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pycparser-3.1-2",
+      "component": "pycparser",
+      "version": "3.1",
+      "artifactSha256": "f09d358c840bd147b79e55f2bc494f18ea869dc897f5852a8f5766b74f787882",
+      "licenseSha256": "f4a14c8bb8bcb1139830e9722da8725fc36c8e22ee0d13e5d094b5b354f80a9d",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pydash-7.0.7-1",
+      "component": "pydash",
+      "version": "7.0.7",
+      "artifactSha256": "c3c5b54eec0a562e0080d6f82a14ad4d5090229847b7e554235b5c1558c745e1",
+      "licenseSha256": "6f61fcb95e6a64d2c2cf519d01165348d2d833eaaa7dbd0f1cf3dca1795e24c8",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pydash-7.0.7-2",
+      "component": "pydash",
+      "version": "7.0.7",
+      "artifactSha256": "c3c5b54eec0a562e0080d6f82a14ad4d5090229847b7e554235b5c1558c745e1",
+      "licenseSha256": "1bba57c33cce44a00d2edf0794e14bd0c6dc1569a4e78d834c8f4103b8e9623f",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pydash-7.0.7-3",
+      "component": "pydash",
+      "version": "7.0.7",
+      "artifactSha256": "c3c5b54eec0a562e0080d6f82a14ad4d5090229847b7e554235b5c1558c745e1",
+      "licenseSha256": "312f4f59d7073acecbb94e9bbca53f97ae1047976ec24c4a6d4710cdedbe5efe",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pywencai-0.13.1-1",
+      "component": "pywencai",
+      "version": "0.13.1",
+      "artifactSha256": "6786a014baed92cef25d855f8f175c5265868552dfacd7e37c098f92e4e038ff",
+      "licenseSha256": "f619e8a9798a5fd5be106923ab8a02f17aa0f3820195aa310cdf62b154724368",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pywencai-0.13.1-2",
+      "component": "pywencai",
+      "version": "0.13.1",
+      "artifactSha256": "6786a014baed92cef25d855f8f175c5265868552dfacd7e37c098f92e4e038ff",
+      "licenseSha256": "45b93f2bf5eac8cd5d89f1bc51d026639adf2a0343ee9d6f71bb4a3135a9878d",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-six-1.17.0-1",
+      "component": "six",
+      "version": "1.17.0",
+      "artifactSha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274",
+      "licenseSha256": "4375ba20e2b9c6c4e7cad2940a628fd90e95cc3d50ee92aae755715d8ba1fbd0",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-six-1.17.0-2",
+      "component": "six",
+      "version": "1.17.0",
+      "artifactSha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274",
+      "licenseSha256": "562042078c2752549f6d8a7c86dbc5dd708088a7be6d80672ec7b07100b72468",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-soupsieve-2.10-1",
+      "component": "soupsieve",
+      "version": "2.10",
+      "artifactSha256": "8596eb8967d744174820280fa62b4542a2e955bfaccca73ed8a13c6eb8e9b502",
+      "licenseSha256": "76a0acdb98c3a63681e20b6f096699ef8cad5fb35d56eef8387e0fa71d797a9a",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-soupsieve-2.10-2",
+      "component": "soupsieve",
+      "version": "2.10",
+      "artifactSha256": "8596eb8967d744174820280fa62b4542a2e955bfaccca73ed8a13c6eb8e9b502",
+      "licenseSha256": "02ecd6c72d2fa0911bedfd99d53b2198e1bbf556f4606108819e8c19fdf32880",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-stack-data-0.6.3-1",
+      "component": "stack-data",
+      "version": "0.6.3",
+      "artifactSha256": "d5558e0c25a4cb0853cddad3d77da9891a08cb85dd9f9f91b9f8cd66e511e695",
+      "licenseSha256": "a476a2cb0ef4c41450340a577a28b91ac4c7f669136b2ee148047fabd5fc4181",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-stack-data-0.6.3-2",
+      "component": "stack-data",
+      "version": "0.6.3",
+      "artifactSha256": "d5558e0c25a4cb0853cddad3d77da9891a08cb85dd9f9f91b9f8cd66e511e695",
+      "licenseSha256": "f28a66f2adde54e7031355e09a166e437bc0d023a31c10c973ac494288ca4c6f",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-tabulate-0.10.0-1",
+      "component": "tabulate",
+      "version": "0.10.0",
+      "artifactSha256": "f0b0622e567335c8fabaaa659f1b33bcb6ddfe2e496071b743aa113f8774f2d3",
+      "licenseSha256": "cdfab50d37d8ead06468fb76a3abafcd05c16749ec8a18eebfa50fd48c7cb2d2",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-tabulate-0.10.0-2",
+      "component": "tabulate",
+      "version": "0.10.0",
+      "artifactSha256": "f0b0622e567335c8fabaaa659f1b33bcb6ddfe2e496071b743aa113f8774f2d3",
+      "licenseSha256": "38dfc6db689745ff4c3890b3c30ef7e5d0b156fdbeeb765b9027fd917043d84b",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-urllib3-2.8.0-1",
+      "component": "urllib3",
+      "version": "2.8.0",
+      "artifactSha256": "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3",
+      "licenseSha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-urllib3-2.8.0-2",
+      "component": "urllib3",
+      "version": "2.8.0",
+      "artifactSha256": "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3",
+      "licenseSha256": "10898c620e8007c030e07fa5622b68358a43010025dfbd78a1cb797699de2bb4",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-webencodings-0.6.1-1",
+      "component": "webencodings",
+      "version": "0.6.1",
+      "artifactSha256": "7fab6269c8bf237c657876b52058ccb182e861518d1c695c1a9aaa8c1c105d5b",
+      "licenseSha256": "e06ef33485e7498ad592887c41fa79cc8a7fecde576c7210e11bfdddef58040e",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-webencodings-0.6.1-2",
+      "component": "webencodings",
+      "version": "0.6.1",
+      "artifactSha256": "7fab6269c8bf237c657876b52058ccb182e861518d1c695c1a9aaa8c1c105d5b",
+      "licenseSha256": "3d9819d1209e5b56d4c6315efca7d5ca452ba7e55d4c3617ec63555c099bfb70",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-requests-2.34.2-1",
+      "component": "requests",
+      "version": "2.34.2",
+      "artifactSha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0",
+      "licenseSha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-requests-2.34.2-2",
+      "component": "requests",
+      "version": "2.34.2",
+      "artifactSha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0",
+      "licenseSha256": "f5110972dedad2b4e9d314518daf3b7d72d6e02e499acd802181de6f74571dcc",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-requests-2.34.2-3",
+      "component": "requests",
+      "version": "2.34.2",
+      "artifactSha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0",
+      "licenseSha256": "8c384ba3e979480faae2859d3c5e6c1276dd2c3616e322e124d52c8cfc556f27",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-asttokens-3.0.2-1",
+      "component": "asttokens",
+      "version": "3.0.2",
+      "artifactSha256": "9da13157f5b28becde0bd374fc677dcd3c290614264eff096f167c469cd9f933",
+      "licenseSha256": "62fb8a3a9621dc2388174caaabe9c2317b694bb9a1d46c98bcf5655b68f51be3",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-asttokens-3.0.2-2",
+      "component": "asttokens",
+      "version": "3.0.2",
+      "artifactSha256": "9da13157f5b28becde0bd374fc677dcd3c290614264eff096f167c469cd9f933",
+      "licenseSha256": "8b3567b29654e6e9a60ab50fde2c317899152790acadaab7868a708bf931c3d3",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-tenacity-8.5.0-1",
+      "component": "tenacity",
+      "version": "8.5.0",
+      "artifactSha256": "b594c2a5945830c267ce6b79a166228323ed52718f30302c1359836112346687",
+      "licenseSha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-tenacity-8.5.0-2",
+      "component": "tenacity",
+      "version": "8.5.0",
+      "artifactSha256": "b594c2a5945830c267ce6b79a166228323ed52718f30302c1359836112346687",
+      "licenseSha256": "f02051f69607a22dd857ae82902404e700cb365991e984b215ece3584f4e408a",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-traitlets-5.16.1-1",
+      "component": "traitlets",
+      "version": "5.16.1",
+      "artifactSha256": "f775618166caa0396c8e337099240f2bd3e5e917d203b2e6fbe21a58d3cb1f6b",
+      "licenseSha256": "2f51727d9063b54856773cb51388bdb79f2936ee4a1b692ef553d8c4201311ab",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-traitlets-5.16.1-2",
+      "component": "traitlets",
+      "version": "5.16.1",
+      "artifactSha256": "f775618166caa0396c8e337099240f2bd3e5e917d203b2e6fbe21a58d3cb1f6b",
+      "licenseSha256": "e42b503240c058625ffb30c390818d72933117840cb25060614cb24f0be9e587",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pygments-2.21.0-1",
+      "component": "Pygments",
+      "version": "2.21.0",
+      "artifactSha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9",
+      "licenseSha256": "71a83872ad82f57be692cf827e048e2cd51d45169cfa1ea3f28706d97a872c0f",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pygments-2.21.0-2",
+      "component": "Pygments",
+      "version": "2.21.0",
+      "artifactSha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9",
+      "licenseSha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pygments-2.21.0-3",
+      "component": "Pygments",
+      "version": "2.21.0",
+      "artifactSha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9",
+      "licenseSha256": "1dde075570136774c706bf0009183a793fe0ee262e4a5590cc6eff8453eedd43",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-packaging-26.3-1",
+      "component": "packaging",
+      "version": "26.3",
+      "artifactSha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+      "licenseSha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-packaging-26.3-2",
+      "component": "packaging",
+      "version": "26.3",
+      "artifactSha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+      "licenseSha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-packaging-26.3-3",
+      "component": "packaging",
+      "version": "26.3",
+      "artifactSha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+      "licenseSha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-packaging-26.3-4",
+      "component": "packaging",
+      "version": "26.3",
+      "artifactSha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+      "licenseSha256": "70fdb89fc4d4a9a043bf7372b8972bcc883fddff34ab55e9cf80d73875384763",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-sniffio-1.3.1-1",
+      "component": "sniffio",
+      "version": "1.3.1",
+      "artifactSha256": "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2",
+      "licenseSha256": "652c878488d1456361e08c3f8607fd7ba59892a14103d15cce4ff93c85b5cc8b",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-sniffio-1.3.1-2",
+      "component": "sniffio",
+      "version": "1.3.1",
+      "artifactSha256": "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2",
+      "licenseSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-sniffio-1.3.1-3",
+      "component": "sniffio",
+      "version": "1.3.1",
+      "artifactSha256": "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2",
+      "licenseSha256": "3e6dae555eb92787fc82d1d48355677f454c7f65aeb38d3f9e72bf9a3daf034b",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-sniffio-1.3.1-4",
+      "component": "sniffio",
+      "version": "1.3.1",
+      "artifactSha256": "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2",
+      "licenseSha256": "0b318b57098edeccf585e60a889a6b6a7b5c4086f3a9aa62eff76a1d3cee12d9",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-python-dateutil-2.9.0.post0-1",
+      "component": "python-dateutil",
+      "version": "2.9.0.post0",
+      "artifactSha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427",
+      "licenseSha256": "ba00f51a0d92823b5a1cde27d8b5b9d2321e67ed8da9bc163eff96d5e17e577e",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-python-dateutil-2.9.0.post0-2",
+      "component": "python-dateutil",
+      "version": "2.9.0.post0",
+      "artifactSha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427",
+      "licenseSha256": "a9d436da322be808332f98d88325998e87cb693a678a9969feb4cfad729a6e93",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-parso-0.8.7-1",
+      "component": "parso",
+      "version": "0.8.7",
+      "artifactSha256": "a8926eb2a1b915486941fdbd31e86a4baf88fe8c210f25f2f35ecec5b574ca1c",
+      "licenseSha256": "4830a0bbc85794105c8cf3f2513f92296db4fc83363315bef7984a15a448ab22",
+      "spdx": "MIT AND PSF-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-parso-0.8.7-2",
+      "component": "parso",
+      "version": "0.8.7",
+      "artifactSha256": "a8926eb2a1b915486941fdbd31e86a4baf88fe8c210f25f2f35ecec5b574ca1c",
+      "licenseSha256": "fa67973073753d17624caf8684d5ee816d70c89d912c5bca7ca0f08e7b150edb",
+      "spdx": "MIT AND PSF-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-parso-0.8.7-3",
+      "component": "parso",
+      "version": "0.8.7",
+      "artifactSha256": "a8926eb2a1b915486941fdbd31e86a4baf88fe8c210f25f2f35ecec5b574ca1c",
+      "licenseSha256": "2fd8c9f8209218163a6c086ba8075d177122430645fea770cc02c53cd426119d",
+      "spdx": "MIT AND PSF-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-jedi-0.20.0-1",
+      "component": "jedi",
+      "version": "0.20.0",
+      "artifactSha256": "7bdd9c2634f56713299976f4cbd59cb3fa92165cc5e05ea811fb253480728b67",
+      "licenseSha256": "235e993965d399a25e7d493d25c8622f78718510884b9c051f1f1866b6f34e9d",
+      "spdx": "MIT AND Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-jedi-0.20.0-2",
+      "component": "jedi",
+      "version": "0.20.0",
+      "artifactSha256": "7bdd9c2634f56713299976f4cbd59cb3fa92165cc5e05ea811fb253480728b67",
+      "licenseSha256": "295f8538c94ae5c3043301cf7cff1c852dab6a786a8ddee471e061b40d5ecabe",
+      "spdx": "MIT AND Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-jedi-0.20.0-3",
+      "component": "jedi",
+      "version": "0.20.0",
+      "artifactSha256": "7bdd9c2634f56713299976f4cbd59cb3fa92165cc5e05ea811fb253480728b67",
+      "licenseSha256": "d0b472b36617b4af87481671338dd649139e5c619090937ba317c98bed2bbff2",
+      "spdx": "MIT AND Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-jedi-0.20.0-4",
+      "component": "jedi",
+      "version": "0.20.0",
+      "artifactSha256": "7bdd9c2634f56713299976f4cbd59cb3fa92165cc5e05ea811fb253480728b67",
+      "licenseSha256": "78e60cd0b8f28694f30195482c33d76908d846b0d15278deb7332aa22ba8e412",
+      "spdx": "MIT AND Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-jedi-0.20.0-5",
+      "component": "jedi",
+      "version": "0.20.0",
+      "artifactSha256": "7bdd9c2634f56713299976f4cbd59cb3fa92165cc5e05ea811fb253480728b67",
+      "licenseSha256": "436bd0fb249b82dee15e85e2fb91d08d8e797481a16af48a725b8e4fb5340478",
+      "spdx": "MIT AND Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-et-xmlfile-2.0.0-1",
+      "component": "et_xmlfile",
+      "version": "2.0.0",
+      "artifactSha256": "7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa",
+      "licenseSha256": "7f038029ea5463605dd2278d300099a381bce9e90dda83ccab2042346b6c8107",
+      "spdx": "MIT AND LicenseRef-et-xmlfile-2.0.0-Python-Notices",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-et-xmlfile-2.0.0-2",
+      "component": "et_xmlfile",
+      "version": "2.0.0",
+      "artifactSha256": "7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa",
+      "licenseSha256": "4ccdaaebc0f44b83720ec0399bb7ab329adce067dd62f73c5535a2dc05628ab2",
+      "spdx": "MIT AND LicenseRef-et-xmlfile-2.0.0-Python-Notices",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-et-xmlfile-2.0.0-3",
+      "component": "et_xmlfile",
+      "version": "2.0.0",
+      "artifactSha256": "7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa",
+      "licenseSha256": "0c84bb42f5d367e5ebf9fc2dde35b16141df5ee0fdc189250858bc6c5560f69e",
+      "spdx": "MIT AND LicenseRef-et-xmlfile-2.0.0-Python-Notices",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-et-xmlfile-2.0.0-4",
+      "component": "et_xmlfile",
+      "version": "2.0.0",
+      "artifactSha256": "7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa",
+      "licenseSha256": "0e97d7ea909ed0fbe03d88bc8b6f58677cee1b07bd3353ce361cd2405915204e",
+      "spdx": "MIT AND LicenseRef-et-xmlfile-2.0.0-Python-Notices",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-typing-extensions-4.16.0-1",
+      "component": "typing_extensions",
+      "version": "4.16.0",
+      "artifactSha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+      "licenseSha256": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf",
+      "spdx": "LicenseRef-typing-extensions-4.16.0-Python-Notices",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-typing-extensions-4.16.0-2",
+      "component": "typing_extensions",
+      "version": "4.16.0",
+      "artifactSha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+      "licenseSha256": "b05084ca1d50879865178d9fff9fabeab61bdfb1f361bfbde95421ffc8f9be46",
+      "spdx": "LicenseRef-typing-extensions-4.16.0-Python-Notices",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-jsonpath-0.82.2-1",
+      "component": "jsonpath",
+      "version": "0.82.2",
+      "artifactSha256": "f0cef8d52734c71e1c06a2da87940a72c8840d7f3e64cbb123b6b3b29f0db117",
+      "licenseSha256": "41a1d195649383e13efd72b8dbedebf66c68865a690a2aa3c6c62da52ee369fb",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-jsonpath-0.82.2-2",
+      "component": "jsonpath",
+      "version": "0.82.2",
+      "artifactSha256": "f0cef8d52734c71e1c06a2da87940a72c8840d7f3e64cbb123b6b3b29f0db117",
+      "licenseSha256": "9e957e97d407ef4c031f23f56b930594b08b856d90251daf4f93efebc9ec57e5",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pyexecjs-1.5.1-1",
+      "component": "PyExecJS",
+      "version": "1.5.1",
+      "artifactSha256": "de51fa4692182d14c6005396e2dafa45368090dc64526e7fea9fde7a856fce28",
+      "licenseSha256": "b78c9017c899272226bb1cbd8ffe79f43630699bf2ba1fdae3d4e7b41d85ae04",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-pyexecjs-1.5.1-2",
+      "component": "PyExecJS",
+      "version": "1.5.1",
+      "artifactSha256": "de51fa4692182d14c6005396e2dafa45368090dc64526e7fea9fde7a856fce28",
+      "licenseSha256": "b56844d9ab2f9ddcd2719476c9a11a2f08cd1f9d10a9b770acfd82fea12a1f00",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-node-22.23.3-win-x64-notices",
+      "component": "node",
+      "version": "22.23.3",
+      "artifactSha256": "2b0ff57b049cda1bbcea2240eec20467018713c1efe1f7360c2681859b90ed71",
+      "licenseSha256": "8cc9bb466b19fc7e7cc99d03e9df1132021fda8b01eea2624c58bb372dbef576",
+      "spdx": "LicenseRef-Node-22.23.3-Bundled-Notices",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-decisions-20261009"
+    },
+    {
+      "id": "astra-20261009-h-001",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "4eb1fb1705e2def898e81bcba19c3aac80620d27ba3569d6a6df7b4629d1b5c2",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-002",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-003",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-004",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
+      "spdx": "LicenseRef-distlib-Python-Notices",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-005",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-006",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-007",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-008",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-009",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-010",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-011",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-012",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-013",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-014",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-015",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
+      "spdx": "ISC",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-016",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-017",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-018",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-019",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-020",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "0d1e4405f6273f091732764ed89b57066be63ce64869be6c71ea337dc4f2f9b5",
+      "spdx": "TCL",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-021",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "bd5628cc76fb0ebf9c657d1dd4d1a240a1a7b216c31663e7bbf1131c0b70a910",
+      "spdx": "bzip2-1.0.6",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-022",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "8a9cfe4b5924f4b25881aa0c9f5e4561c5f31065d0c4a13cdcdbcf917edf39aa",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-023",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "d9932ccdd42eccf6cdded7bcb35b088e64cfc7c24d355af2cc0d02edb6b637d3",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-024",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "9afb8970cd29fc1031fa647278e4bef613399e2e3468a1e3a397f4d158c6101c",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-025",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "d87d218dd908b3243ec4cbc72af400e5b7437513ea9d9229291d0812b8464fec",
+      "spdx": "0BSD",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-026",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "cbccaa3efe07a9a602751375085be572d4410a250b996716fbe8c5255c7ec6f2",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-027",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "cec808cd2163fccdc8de4a91d526490777afbaeea060e1168c40a804694b7444",
+      "spdx": "MIT-open-group",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-028",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "29a9539190e6de1af5fd06a9139c7103137cd1f9290b08c7b11bce89c01c14d2",
+      "spdx": "LicenseRef-PBS-libxcb-Permission",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-029",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "f094277cd46e1f6e4d87916cc4b51e22f613d45eb81f48231c3cb7caf8fc8a6a",
+      "spdx": "BSD-2-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-030",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "4f571cad3ea6c888bf0a7092e5b215dddb3142e9e3f1857fd5fac6cf13d345d7",
+      "spdx": "LicenseRef-PBS-ncurses-Permission",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-031",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "d8eb9aba7ef6b5ed06cb3ec19a7242316af2e5933c638eb67fb781c13884e01d",
+      "spdx": "LicenseRef-SQLite-Public-Domain",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-032",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "41613eabfc08921a7da9c4bfd7f3ce5d5406f55214b253d89f392ed86eebeb8f",
+      "spdx": "TCL",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-033",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "licenseSha256": "365e36720db366054863235aea5d6f440142ab968834bfaf81fa9d187c99b9b8",
+      "spdx": "Zlib",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-034",
+      "component": "cffi",
+      "version": "2.1.1",
+      "artifactSha256": "1aa5645c30469b09530c4ebca77ebf8f17618293c58f8549cb1a543a50236e7d",
+      "licenseSha256": "5ba24ddc57067f9249add644c3afc41a5d6dc37e23433ef759d95df370b0af63",
+      "spdx": "MIT-0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-035",
+      "component": "charset-normalizer",
+      "version": "3.5.2",
+      "artifactSha256": "78456a747de8dc58360ffa581f30a002baf5aa28cb262536545e91f113ed7639",
+      "licenseSha256": "18577485d3704f1a479ded8e573c0976cfed315fd2fd17983fa988da4c2f70d1",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-036",
+      "component": "pandas",
+      "version": "3.0.6",
+      "artifactSha256": "f3ce8a6968045481e91a3990e797e348ce13db45ee164a7095bbc824e26c09dd",
+      "licenseSha256": "9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-037",
+      "component": "wcwidth",
+      "version": "0.9.2",
+      "artifactSha256": "2a9746de704242bd4fdaabb31dd46b82f694a56a8d21081ad89b679a89da9fec",
+      "licenseSha256": "dff08668b8cfca00ec90011eb318e450c3719fcd40893bf375781a6beef7143a",
+      "spdx": "MIT AND LicenseRef-Markus-Kuhn-Permission",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-038",
+      "component": "fake-useragent",
+      "version": "1.5.1",
+      "artifactSha256": "57415096557c8a4e23b62a375c21c55af5fd4ba30549227f562d2c4f5b60e3b3",
+      "licenseSha256": "aaf1d49d3b941a098bde959939cbe357b589cd96acd4b05acc121cb8565bf009",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-039",
+      "component": "fake-useragent",
+      "version": "1.5.1",
+      "artifactSha256": "57415096557c8a4e23b62a375c21c55af5fd4ba30549227f562d2c4f5b60e3b3",
+      "licenseSha256": "fd9b6273f22b7c29dbc5160b800f8824b74cf048f89e39a11b5c23c10f46d692",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-040",
+      "component": "ipykernel",
+      "version": "7.4.0",
+      "artifactSha256": "a6757f790ddc5a6006b813d82da1a9dbb65b3a00f2b6607df776418c6566ec1c",
+      "licenseSha256": "36ec29c871f7a382cde301cba47698191cf327c3f95ff5c240065e95dde80bfd",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-041",
+      "component": "ipython",
+      "version": "9.17.1",
+      "artifactSha256": "6d1645743cfd1a07eb695d85aa2b5fa66721f8cbae9431d4049f7084bbf06509",
+      "licenseSha256": "8387aac32433e5b121c355aa9e6ce2b9a399da7edd59ab94b19d4f5326b1ced0",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-042",
+      "component": "ipython",
+      "version": "9.17.1",
+      "artifactSha256": "6d1645743cfd1a07eb695d85aa2b5fa66721f8cbae9431d4049f7084bbf06509",
+      "licenseSha256": "e0e390748ed440ab893ca1f135a88a920aaf5409dbb90a5b427c75c5e51268fb",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-043",
+      "component": "psutil",
+      "version": "7.2.2",
+      "artifactSha256": "eb7e81434c8d223ec4a219b5fc1c47d0417b12be7ea866e24fb5ad6e84b3d988",
+      "licenseSha256": "c7adc4d5d1337a548b967421f1fbe258b93033a0417708fd6f4e38f8ecbceb80",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-044",
+      "component": "tornado",
+      "version": "6.5.10",
+      "artifactSha256": "37ae8f150cecfdbf747fc4e12f5e9a97ecd8cf1d4cdb3f119e2de84b11196918",
+      "licenseSha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-045",
+      "component": "tzdata",
+      "version": "2026.5",
+      "artifactSha256": "b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac",
+      "licenseSha256": "df58f69ea88683035d720b5375bcef0cf5aeaa98a1d098d572e0992c378deb46",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-046",
+      "component": "tzdata",
+      "version": "2026.5",
+      "artifactSha256": "b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac",
+      "licenseSha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-047",
+      "component": "certifi",
+      "version": "2026.7.22",
+      "artifactSha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
+      "licenseSha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+      "spdx": "MPL-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-048",
+      "component": "tqdm",
+      "version": "4.70.1",
+      "artifactSha256": "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73",
+      "licenseSha256": "fcff87c3a47ce8028a8512aa182d4fcf0ad1c90544ee75cf9b343684cac194de",
+      "spdx": "MPL-2.0 AND MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-049",
+      "component": "pyzmq",
+      "version": "27.2.0",
+      "artifactSha256": "2c218c6ab8bc447ba62054b581fd30209689d199c6ecb253f79615ca74a38e12",
+      "licenseSha256": "947ffe0146e8b3c23a759ddff8eccb8b0d2b201ccbc0a5750db4ac3cfc034e2a",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-050",
+      "component": "pyzmq",
+      "version": "27.2.0",
+      "artifactSha256": "2c218c6ab8bc447ba62054b581fd30209689d199c6ecb253f79615ca74a38e12",
+      "licenseSha256": "508a76d186356c0dd807a670ef510964f8724557024796a2c426c6c0e19ab683",
+      "spdx": "ISC",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-051",
+      "component": "pyzmq",
+      "version": "27.2.0",
+      "artifactSha256": "2c218c6ab8bc447ba62054b581fd30209689d199c6ecb253f79615ca74a38e12",
+      "licenseSha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5",
+      "spdx": "Apache-2.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-052",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "d544761558b510866c21f7e8a2d5716fca76e0b98117e3b6b86314db7244d150",
+      "spdx": "Zlib",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-053",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "aea41976c720f91bd19725c16916a1ace40eb1ea42620d340e587a5de4bbcea0",
+      "spdx": "0BSD",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-054",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "d208152e2777ffd0126eacc1bd21c0320d69e4e6b622d21a2a12a47e8ef73763",
+      "spdx": "BSD-3-Clause AND CC0-1.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-055",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "b0fd592d4ead563148e3977e7b589169d46a5ef2ff133c755a81af880a3fc919",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-056",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "a732977853530066790c42817087f4829b518dd98d340c916acbfd227e39d3cb",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-057",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "585483905b13d4b42f800c55ba99e89d6e2e33ccd5f503e201c07531d148ff41",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-058",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "8db000e158c162e7249787852d8c69764706502ccee725c06641b31c1e95c8af",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-059",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "19060ef465e1797d682ee0fc3081bd25ab1395e995e43d25c9d13c95d9a3cd6b",
+      "spdx": "BSD-3-Clause-Open-MPI",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-060",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "d78dbb208b80d92b4d333e41a4baae50d12444f46e53199fa7726a91de6e2da7",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-061",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "b4bc2f4fa1c95778f1ed3dd8f14706bece399475b978f9f34b5d3cd72521b48a",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-062",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "cf5619f25b112d5ce7c896efffc8e610bcb345dfadcc19f2c1460aa48fff2c9e",
+      "spdx": "BSD-3-Clause AND MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-063",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "92c10699884321f1c2947fe2a70ab23b0fbf1507f756d89dd08f38c61fc3d4fa",
+      "spdx": "BSD-3-Clause AND MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-064",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "41190663b77bee5302386495a07b7eabfbfa571aa0ae2f11da6764162062fc4f",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-065",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "322ac46d870c8aeead6c53adcccc839296fb3c8e456eae155081297daf7f8013",
+      "spdx": "BSD-3-Clause",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-066",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "28cad82ce1379dc529df30da78ec012d7d0d1d576b03ddcb93388aee53659f59",
+      "spdx": "MIT",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    },
+    {
+      "id": "astra-20261009-h-067",
+      "component": "numpy",
+      "version": "2.5.3",
+      "artifactSha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "licenseSha256": "454ec7350e478e037061850b67395753b425b1cb0a34bbc26290b020bf89d763",
+      "spdx": "CC0-1.0",
+      "decision": "approved",
+      "reviewedBy": "Astra / engineering redistribution review / 2026-10-09",
+      "reviewReference": "resources/python-runtime/license-review.md#astra-license-batch-h-20261009"
+    }
+  ],
+  "metadataProvenance": [
+    {
+      "component": "certifi",
+      "version": "2026.7.22",
+      "artifactSha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
+      "metadataSha256": "ef5af1638fbb23676ac3c5777dfcfc2cd9c348fe4172ed5ba3d277655b248090",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant",
+      "path": "providers/akshare/site/certifi-2026.7.22.dist-info/METADATA"
+    },
+    {
+      "component": "cffi",
+      "version": "2.1.1",
+      "artifactSha256": "1aa5645c30469b09530c4ebca77ebf8f17618293c58f8549cb1a543a50236e7d",
+      "metadataSha256": "67b6a7595df7ede2195016a05d285faa7d362a8f57c238984edb8bb674b5770d",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant",
+      "path": "providers/akshare/site/cffi-2.1.1.dist-info/METADATA"
+    },
+    {
+      "component": "tqdm",
+      "version": "4.70.1",
+      "artifactSha256": "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73",
+      "metadataSha256": "a5da70b966afea3a759716041bad7187f2ece02c22348cf9e7c0a512bbf15f57",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant",
+      "path": "providers/akshare/site/tqdm-4.70.1.dist-info/METADATA"
+    },
+    {
+      "component": "tzdata",
+      "version": "2026.5",
+      "artifactSha256": "b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac",
+      "metadataSha256": "e0780e8b6dc8882ce87e871a9d4589d59cb05a0c2d64f58b1ba62cde1ee91f6a",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant",
+      "path": "providers/akshare/site/tzdata-2026.5.dist-info/METADATA"
+    },
+    {
+      "component": "debugpy",
+      "version": "1.8.22",
+      "artifactSha256": "f49b1d6cecf326b63c06d7f517e4a6642777f758c58cb799e7bc5a6dd74721c2",
+      "metadataSha256": "dad0ffa81756bcf79a9ef2961c532e411545c608159378446f087e6a2f2ea41a",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant",
+      "path": "providers/pywencai/site/debugpy-1.8.22.dist-info/METADATA"
+    },
+    {
+      "component": "fake-useragent",
+      "version": "1.5.1",
+      "artifactSha256": "57415096557c8a4e23b62a375c21c55af5fd4ba30549227f562d2c4f5b60e3b3",
+      "metadataSha256": "a838f4b3cc6736d2e8470af28dcbfb89f171c2b4e2b2444570738a242292b524",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant",
+      "path": "providers/pywencai/site/fake_useragent-1.5.1.dist-info/METADATA"
+    },
+    {
+      "component": "ipython",
+      "version": "9.17.1",
+      "artifactSha256": "6d1645743cfd1a07eb695d85aa2b5fa66721f8cbae9431d4049f7084bbf06509",
+      "metadataSha256": "e78cb2a71fde4012b32de9b2db8d3c50ba618a1bb1975acc1bf107453365a1be",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant",
+      "path": "providers/pywencai/site/ipython-9.17.1.dist-info/METADATA"
+    },
+    {
+      "component": "psutil",
+      "version": "7.2.2",
+      "artifactSha256": "eb7e81434c8d223ec4a219b5fc1c47d0417b12be7ea866e24fb5ad6e84b3d988",
+      "metadataSha256": "a263a40220d921d9cb963fc636d34f817aa2eb72c2696e3e3465d088cdb1976b",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant",
+      "path": "providers/pywencai/site/psutil-7.2.2.dist-info/METADATA"
+    },
+    {
+      "component": "pyzmq",
+      "version": "27.2.0",
+      "artifactSha256": "2c218c6ab8bc447ba62054b581fd30209689d199c6ecb253f79615ca74a38e12",
+      "metadataSha256": "efca840a7cf3173e6ffce4c77e50b5b449a6c44388abc272bc3e82bb27e97043",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant",
+      "path": "providers/pywencai/site/pyzmq-27.2.0.dist-info/METADATA"
+    },
+    {
+      "component": "tornado",
+      "version": "6.5.10",
+      "artifactSha256": "37ae8f150cecfdbf747fc4e12f5e9a97ecd8cf1d4cdb3f119e2de84b11196918",
+      "metadataSha256": "03bcc8559e97f43334405cdeee921ce39dfde8e09397c48c7f41ff044a48d839",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant",
+      "path": "providers/pywencai/site/tornado-6.5.10.dist-info/METADATA"
+    },
+    {
+      "component": "certifi",
+      "version": "2026.7.22",
+      "artifactSha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
+      "metadataSha256": "ef5af1638fbb23676ac3c5777dfcfc2cd9c348fe4172ed5ba3d277655b248090",
+      "path": "providers/mootdx/site/certifi-2026.7.22.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant"
+    },
+    {
+      "component": "tqdm",
+      "version": "4.70.1",
+      "artifactSha256": "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73",
+      "metadataSha256": "a5da70b966afea3a759716041bad7187f2ece02c22348cf9e7c0a512bbf15f57",
+      "path": "providers/mootdx/site/tqdm-4.70.1.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant"
+    },
+    {
+      "component": "tzdata",
+      "version": "2026.5",
+      "artifactSha256": "b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac",
+      "metadataSha256": "e0780e8b6dc8882ce87e871a9d4589d59cb05a0c2d64f58b1ba62cde1ee91f6a",
+      "path": "providers/mootdx/site/tzdata-2026.5.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant"
+    },
+    {
+      "component": "certifi",
+      "version": "2026.7.22",
+      "artifactSha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
+      "metadataSha256": "ef5af1638fbb23676ac3c5777dfcfc2cd9c348fe4172ed5ba3d277655b248090",
+      "path": "providers/pywencai/site/certifi-2026.7.22.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant"
+    },
+    {
+      "component": "tzdata",
+      "version": "2026.5",
+      "artifactSha256": "b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac",
+      "metadataSha256": "e0780e8b6dc8882ce87e871a9d4589d59cb05a0c2d64f58b1ba62cde1ee91f6a",
+      "path": "providers/pywencai/site/tzdata-2026.5.dist-info/METADATA",
+      "role": "provenance-and-license-reference",
+      "decision": "not-an-independent-license-grant"
+    }
+  ],
+  "pending": [
+    "Human approval of PBS/Windows Distributable Code, BDB/Tix and complete vendor notices remains pending",
+    "Human approval of all actual provider artifacts/notices, including lxml LGPL/XSL and mootdx noncommercial description, remains pending",
+    "Reviewed sourceCommit not provided; candidate binds actual source SHA snapshot instead",
+    "Mac native resolve/materialize and formal manifest bootstrap acceptance have not been executed"
+  ],
+  "providerVersions": {
+    "akshare": "1.19.1",
+    "pywencai": "0.13.1",
+    "mootdx": "0.11.7+rt.1"
+  },
+  "nativeLicenseInputs": {
+    "darwin-x64": {
+      "node": {
+        "member": "LICENSE",
+        "size": 145485,
+        "sha256": "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4"
+      },
+      "pythonFull": {
+        "members": [
+          {
+            "path": "python/install/lib/python3.13/LICENSE.txt",
+            "sha256": "78b12c3a81360b357002334f0e70ea0e92eebf7a9b358805c03c48484945f3bb",
+            "size": 13809
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/AUTHORS.txt",
+            "sha256": "4eb1fb1705e2def898e81bcba19c3aac80620d27ba3569d6a6df7b4629d1b5c2",
+            "size": 12139
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/LICENSE.txt",
+            "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104",
+            "size": 1093
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt",
+            "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
+            "size": 558
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/certifi/LICENSE",
+            "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+            "size": 989
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt",
+            "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
+            "size": 14531
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distro/LICENSE",
+            "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
+            "size": 11325
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md",
+            "sha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04",
+            "size": 1541
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/msgpack/COPYING",
+            "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
+            "size": 614
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE",
+            "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+            "size": 197
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE",
+            "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+            "size": 10174
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD",
+            "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+            "size": 1344
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE",
+            "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+            "size": 1023
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE",
+            "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
+            "size": 1089
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pygments/LICENSE",
+            "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
+            "size": 1331
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE",
+            "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
+            "size": 1081
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/requests/LICENSE",
+            "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
+            "size": 10142
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE",
+            "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
+            "size": 751
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/rich/LICENSE",
+            "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
+            "size": 1056
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "size": 1072
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "size": 1072
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/truststore/LICENSE",
+            "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
+            "size": 1086
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt",
+            "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686",
+            "size": 1093
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/cachecontrol/LICENSE.txt",
+            "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
+            "size": 558
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/certifi/LICENSE",
+            "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+            "size": 989
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/distlib/LICENSE.txt",
+            "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
+            "size": 14531
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/distro/LICENSE",
+            "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
+            "size": 11325
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/idna/LICENSE.md",
+            "sha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04",
+            "size": 1541
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/msgpack/COPYING",
+            "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
+            "size": 614
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/packaging/LICENSE",
+            "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+            "size": 197
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/packaging/LICENSE.APACHE",
+            "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+            "size": 10174
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/packaging/LICENSE.BSD",
+            "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+            "size": 1344
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/pkg_resources/LICENSE",
+            "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+            "size": 1023
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/platformdirs/LICENSE",
+            "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
+            "size": 1089
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/pygments/LICENSE",
+            "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
+            "size": 1331
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/pyproject_hooks/LICENSE",
+            "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
+            "size": 1081
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/requests/LICENSE",
+            "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
+            "size": 10142
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/resolvelib/LICENSE",
+            "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
+            "size": 751
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/rich/LICENSE",
+            "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
+            "size": 1056
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/tomli_w/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "size": 1072
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/tomli/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "size": 1072
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/truststore/LICENSE",
+            "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
+            "size": 1086
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/urllib3/LICENSE.txt",
+            "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686",
+            "size": 1093
+          },
+          {
+            "path": "python/licenses/LICENSE.bdb.txt",
+            "sha256": "3bdff06e69991c94664f2ef5c5f8096f60b7dbec071756ea6cc26b445e06ec5b",
+            "size": 7293
+          },
+          {
+            "path": "python/licenses/LICENSE.bzip2.txt",
+            "sha256": "1f38bbc7caacafd65169276d759c0d88c991b753b643ce35d0e45ea1971dd441",
+            "size": 1743
+          },
+          {
+            "path": "python/licenses/LICENSE.cpython.txt",
+            "sha256": "86e61415828a8b5b06ec8d024e6f086ce155a8b85fd0c419c0ba4dc004e74fdd",
+            "size": 36164
+          },
+          {
+            "path": "python/licenses/LICENSE.expat.txt",
+            "sha256": "122f2c27000472a201d337b9b31f7eb2b52d091b02857061a8880371612d9534",
+            "size": 1144
+          },
+          {
+            "path": "python/licenses/LICENSE.libedit.txt",
+            "sha256": "29cea33c32bbc9785142386377915612a2fa786482c46843383384aded2e09b1",
+            "size": 1614
+          },
+          {
+            "path": "python/licenses/LICENSE.libffi.txt",
+            "sha256": "deaf3a42effb551a5b140fa9afefed183a27f1341c6d1bf430d106a5e6931fc0",
+            "size": 1132
+          },
+          {
+            "path": "python/licenses/LICENSE.liblzma.txt",
+            "sha256": "9a4062de0a2c388a98cf35a35d348b62fa97c838a71c3c28ee1a2d7d0a565b02",
+            "size": 660
+          },
+          {
+            "path": "python/licenses/LICENSE.libuuid.txt",
+            "sha256": "122ee1f7e258f2c3c0e538a75c037684f420454bf3850ddc74ce750bbf5fe86b",
+            "size": 1432
+          },
+          {
+            "path": "python/licenses/LICENSE.libX11.txt",
+            "sha256": "2daec087a88e7c9b8082557cdeebad5bbb8155a4137472f0b22e269cd99d0c1e",
+            "size": 47018
+          },
+          {
+            "path": "python/licenses/LICENSE.libXau.txt",
+            "sha256": "56abe29bb1d9806a9e04fa9f80fed2c0f18027594df3f098148d814aef6bddfa",
+            "size": 1148
+          },
+          {
+            "path": "python/licenses/LICENSE.libxcb.txt",
+            "sha256": "c5ffbfeaa501071ceeb97b7de2c0d703fdaa35de01c0fb6cbac1c28453a3e9fd",
+            "size": 1337
+          },
+          {
+            "path": "python/licenses/LICENSE.mpdecimal.txt",
+            "sha256": "669512af7219f58be03a398766d7c9da11a3b3df9d3f05cb74c5ceca25c8da3b",
+            "size": 1284
+          },
+          {
+            "path": "python/licenses/LICENSE.ncurses.txt",
+            "sha256": "87a4c4442337b8968ef956031c406b74f9cb7149b7ba87311bdaba534816201c",
+            "size": 1447
+          },
+          {
+            "path": "python/licenses/LICENSE.openssl-1.1.txt",
+            "sha256": "9c04cce50c4989d5601dd8b07f6ab922c40388b66ac736c9007cb1ed9d9dd560",
+            "size": 6120
+          },
+          {
+            "path": "python/licenses/LICENSE.openssl-3.txt",
+            "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+            "size": 10175
+          },
+          {
+            "path": "python/licenses/LICENSE.sqlite.txt",
+            "sha256": "38bef3d28b24f145ea293bd3b6eb4b20396982abc8303128fb493986ea5bc719",
+            "size": 1481
+          },
+          {
+            "path": "python/licenses/LICENSE.tcl.txt",
+            "sha256": "c0a69a2bfd757361ec7e6143973b103c90409316b49e9c88db26ad6388e79f16",
+            "size": 2255
+          },
+          {
+            "path": "python/licenses/LICENSE.tix.txt",
+            "sha256": "3ac5cdd0bef6c43ce34c6a7ced452081d9e5a0bf94082b9f9147d23ec9e214f5",
+            "size": 2826
+          },
+          {
+            "path": "python/licenses/LICENSE.zlib.txt",
+            "sha256": "818922b2620f12801a12bf78e399644a30990e66824abd8ca8ec24d451d6f92c",
+            "size": 995
+          },
+          {
+            "path": "python/PYTHON.json",
+            "sha256": "0b90eadd5f9359ae2e549b47bcb397af2f8cf687e67c4bd238d4147b85325e8b",
+            "size": 132916
+          }
+        ]
+      }
+    },
+    "darwin-arm64": {
+      "node": {
+        "member": "LICENSE",
+        "size": 145485,
+        "sha256": "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4"
+      },
+      "pythonFull": {
+        "members": [
+          {
+            "path": "python/install/lib/python3.13/LICENSE.txt",
+            "sha256": "78b12c3a81360b357002334f0e70ea0e92eebf7a9b358805c03c48484945f3bb",
+            "size": 13809
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/AUTHORS.txt",
+            "sha256": "4eb1fb1705e2def898e81bcba19c3aac80620d27ba3569d6a6df7b4629d1b5c2",
+            "size": 12139
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/LICENSE.txt",
+            "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104",
+            "size": 1093
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt",
+            "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
+            "size": 558
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/certifi/LICENSE",
+            "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+            "size": 989
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt",
+            "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
+            "size": 14531
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distro/LICENSE",
+            "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
+            "size": 11325
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md",
+            "sha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04",
+            "size": 1541
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/msgpack/COPYING",
+            "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
+            "size": 614
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE",
+            "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+            "size": 197
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE",
+            "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+            "size": 10174
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD",
+            "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+            "size": 1344
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE",
+            "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+            "size": 1023
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE",
+            "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
+            "size": 1089
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pygments/LICENSE",
+            "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
+            "size": 1331
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE",
+            "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
+            "size": 1081
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/requests/LICENSE",
+            "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
+            "size": 10142
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE",
+            "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
+            "size": 751
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/rich/LICENSE",
+            "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
+            "size": 1056
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "size": 1072
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "size": 1072
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/truststore/LICENSE",
+            "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
+            "size": 1086
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt",
+            "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686",
+            "size": 1093
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/cachecontrol/LICENSE.txt",
+            "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
+            "size": 558
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/certifi/LICENSE",
+            "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+            "size": 989
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/distlib/LICENSE.txt",
+            "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
+            "size": 14531
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/distro/LICENSE",
+            "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
+            "size": 11325
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/idna/LICENSE.md",
+            "sha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04",
+            "size": 1541
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/msgpack/COPYING",
+            "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
+            "size": 614
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/packaging/LICENSE",
+            "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+            "size": 197
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/packaging/LICENSE.APACHE",
+            "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+            "size": 10174
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/packaging/LICENSE.BSD",
+            "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+            "size": 1344
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/pkg_resources/LICENSE",
+            "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+            "size": 1023
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/platformdirs/LICENSE",
+            "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
+            "size": 1089
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/pygments/LICENSE",
+            "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
+            "size": 1331
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/pyproject_hooks/LICENSE",
+            "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
+            "size": 1081
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/requests/LICENSE",
+            "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
+            "size": 10142
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/resolvelib/LICENSE",
+            "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
+            "size": 751
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/rich/LICENSE",
+            "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
+            "size": 1056
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/tomli_w/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "size": 1072
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/tomli/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "size": 1072
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/truststore/LICENSE",
+            "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
+            "size": 1086
+          },
+          {
+            "path": "python/install/lib/python3.13/site-packages/pip/_vendor/urllib3/LICENSE.txt",
+            "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686",
+            "size": 1093
+          },
+          {
+            "path": "python/licenses/LICENSE.bdb.txt",
+            "sha256": "3bdff06e69991c94664f2ef5c5f8096f60b7dbec071756ea6cc26b445e06ec5b",
+            "size": 7293
+          },
+          {
+            "path": "python/licenses/LICENSE.bzip2.txt",
+            "sha256": "1f38bbc7caacafd65169276d759c0d88c991b753b643ce35d0e45ea1971dd441",
+            "size": 1743
+          },
+          {
+            "path": "python/licenses/LICENSE.cpython.txt",
+            "sha256": "86e61415828a8b5b06ec8d024e6f086ce155a8b85fd0c419c0ba4dc004e74fdd",
+            "size": 36164
+          },
+          {
+            "path": "python/licenses/LICENSE.expat.txt",
+            "sha256": "122f2c27000472a201d337b9b31f7eb2b52d091b02857061a8880371612d9534",
+            "size": 1144
+          },
+          {
+            "path": "python/licenses/LICENSE.libedit.txt",
+            "sha256": "29cea33c32bbc9785142386377915612a2fa786482c46843383384aded2e09b1",
+            "size": 1614
+          },
+          {
+            "path": "python/licenses/LICENSE.libffi.txt",
+            "sha256": "deaf3a42effb551a5b140fa9afefed183a27f1341c6d1bf430d106a5e6931fc0",
+            "size": 1132
+          },
+          {
+            "path": "python/licenses/LICENSE.liblzma.txt",
+            "sha256": "9a4062de0a2c388a98cf35a35d348b62fa97c838a71c3c28ee1a2d7d0a565b02",
+            "size": 660
+          },
+          {
+            "path": "python/licenses/LICENSE.libuuid.txt",
+            "sha256": "122ee1f7e258f2c3c0e538a75c037684f420454bf3850ddc74ce750bbf5fe86b",
+            "size": 1432
+          },
+          {
+            "path": "python/licenses/LICENSE.libX11.txt",
+            "sha256": "2daec087a88e7c9b8082557cdeebad5bbb8155a4137472f0b22e269cd99d0c1e",
+            "size": 47018
+          },
+          {
+            "path": "python/licenses/LICENSE.libXau.txt",
+            "sha256": "56abe29bb1d9806a9e04fa9f80fed2c0f18027594df3f098148d814aef6bddfa",
+            "size": 1148
+          },
+          {
+            "path": "python/licenses/LICENSE.libxcb.txt",
+            "sha256": "c5ffbfeaa501071ceeb97b7de2c0d703fdaa35de01c0fb6cbac1c28453a3e9fd",
+            "size": 1337
+          },
+          {
+            "path": "python/licenses/LICENSE.mpdecimal.txt",
+            "sha256": "669512af7219f58be03a398766d7c9da11a3b3df9d3f05cb74c5ceca25c8da3b",
+            "size": 1284
+          },
+          {
+            "path": "python/licenses/LICENSE.ncurses.txt",
+            "sha256": "87a4c4442337b8968ef956031c406b74f9cb7149b7ba87311bdaba534816201c",
+            "size": 1447
+          },
+          {
+            "path": "python/licenses/LICENSE.openssl-1.1.txt",
+            "sha256": "9c04cce50c4989d5601dd8b07f6ab922c40388b66ac736c9007cb1ed9d9dd560",
+            "size": 6120
+          },
+          {
+            "path": "python/licenses/LICENSE.openssl-3.txt",
+            "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+            "size": 10175
+          },
+          {
+            "path": "python/licenses/LICENSE.sqlite.txt",
+            "sha256": "38bef3d28b24f145ea293bd3b6eb4b20396982abc8303128fb493986ea5bc719",
+            "size": 1481
+          },
+          {
+            "path": "python/licenses/LICENSE.tcl.txt",
+            "sha256": "c0a69a2bfd757361ec7e6143973b103c90409316b49e9c88db26ad6388e79f16",
+            "size": 2255
+          },
+          {
+            "path": "python/licenses/LICENSE.tix.txt",
+            "sha256": "3ac5cdd0bef6c43ce34c6a7ced452081d9e5a0bf94082b9f9147d23ec9e214f5",
+            "size": 2826
+          },
+          {
+            "path": "python/licenses/LICENSE.zlib.txt",
+            "sha256": "818922b2620f12801a12bf78e399644a30990e66824abd8ca8ec24d451d6f92c",
+            "size": 995
+          },
+          {
+            "path": "python/PYTHON.json",
+            "sha256": "c790554ad25809b202d3ee8b16c312dafd96936307a040c9099c6ecb4a0cf5ac",
+            "size": 125628
+          }
+        ]
+      }
+    },
+    "win32-x64": {
+      "node": {
+        "member": "LICENSE",
+        "size": 148217,
+        "sha256": "8cc9bb466b19fc7e7cc99d03e9df1132021fda8b01eea2624c58bb372dbef576"
+      },
+      "pythonFull": {
+        "members": [
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/AUTHORS.txt",
+            "sha256": "4eb1fb1705e2def898e81bcba19c3aac80620d27ba3569d6a6df7b4629d1b5c2",
+            "size": 12139
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/LICENSE.txt",
+            "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104",
+            "size": 1093
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt",
+            "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
+            "size": 558
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/certifi/LICENSE",
+            "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+            "size": 989
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt",
+            "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
+            "size": 14531
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distro/LICENSE",
+            "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
+            "size": 11325
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md",
+            "sha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04",
+            "size": 1541
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/msgpack/COPYING",
+            "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
+            "size": 614
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE",
+            "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+            "size": 197
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE",
+            "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+            "size": 10174
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD",
+            "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+            "size": 1344
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE",
+            "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+            "size": 1023
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE",
+            "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
+            "size": 1089
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pygments/LICENSE",
+            "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
+            "size": 1331
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE",
+            "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
+            "size": 1081
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/requests/LICENSE",
+            "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
+            "size": 10142
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE",
+            "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
+            "size": 751
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/rich/LICENSE",
+            "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
+            "size": 1056
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "size": 1072
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "size": 1072
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/truststore/LICENSE",
+            "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
+            "size": 1086
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt",
+            "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686",
+            "size": 1093
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/cachecontrol/LICENSE.txt",
+            "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
+            "size": 558
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/certifi/LICENSE",
+            "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+            "size": 989
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/distlib/LICENSE.txt",
+            "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
+            "size": 14531
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/distro/LICENSE",
+            "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
+            "size": 11325
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/idna/LICENSE.md",
+            "sha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04",
+            "size": 1541
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/msgpack/COPYING",
+            "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
+            "size": 614
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/packaging/LICENSE",
+            "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+            "size": 197
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/packaging/LICENSE.APACHE",
+            "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+            "size": 10174
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/packaging/LICENSE.BSD",
+            "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+            "size": 1344
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/pkg_resources/LICENSE",
+            "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+            "size": 1023
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/platformdirs/LICENSE",
+            "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
+            "size": 1089
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/pygments/LICENSE",
+            "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
+            "size": 1331
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/pyproject_hooks/LICENSE",
+            "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
+            "size": 1081
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/requests/LICENSE",
+            "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
+            "size": 10142
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/resolvelib/LICENSE",
+            "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
+            "size": 751
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/rich/LICENSE",
+            "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
+            "size": 1056
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/tomli_w/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "size": 1072
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/tomli/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "size": 1072
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/truststore/LICENSE",
+            "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
+            "size": 1086
+          },
+          {
+            "path": "python/install/Lib/site-packages/pip/_vendor/urllib3/LICENSE.txt",
+            "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686",
+            "size": 1093
+          },
+          {
+            "path": "python/install/LICENSE.txt",
+            "sha256": "76900732e5f075b725f754000ad5cab1b2cf89e355c1570138476956b6413cd3",
+            "size": 22055
+          },
+          {
+            "path": "python/install/tcl/tk8.6/demos/license.terms",
+            "sha256": "0d1e4405f6273f091732764ed89b57066be63ce64869be6c71ea337dc4f2f9b5",
+            "size": 2307
+          },
+          {
+            "path": "python/install/tcl/tk8.6/license.terms",
+            "sha256": "0d1e4405f6273f091732764ed89b57066be63ce64869be6c71ea337dc4f2f9b5",
+            "size": 2307
+          },
+          {
+            "path": "python/licenses/LICENSE.bdb.txt",
+            "sha256": "8f2d533ab34899499d5b07f209854b101b17dba2c69f3251860aecf3e4005faa",
+            "size": 7419
+          },
+          {
+            "path": "python/licenses/LICENSE.bzip2.txt",
+            "sha256": "bd5628cc76fb0ebf9c657d1dd4d1a240a1a7b216c31663e7bbf1131c0b70a910",
+            "size": 1780
+          },
+          {
+            "path": "python/licenses/LICENSE.cpython.txt",
+            "sha256": "8fe98bf9822926d854f56ffd8d97877d8b942617aa44eb7ea77fd99e22f2537e",
+            "size": 36935
+          },
+          {
+            "path": "python/licenses/LICENSE.expat.txt",
+            "sha256": "8a9cfe4b5924f4b25881aa0c9f5e4561c5f31065d0c4a13cdcdbcf917edf39aa",
+            "size": 1165
+          },
+          {
+            "path": "python/licenses/LICENSE.libedit.txt",
+            "sha256": "d9932ccdd42eccf6cdded7bcb35b088e64cfc7c24d355af2cc0d02edb6b637d3",
+            "size": 1643
+          },
+          {
+            "path": "python/licenses/LICENSE.libffi.txt",
+            "sha256": "9afb8970cd29fc1031fa647278e4bef613399e2e3468a1e3a397f4d158c6101c",
+            "size": 1153
+          },
+          {
+            "path": "python/licenses/LICENSE.liblzma.txt",
+            "sha256": "d87d218dd908b3243ec4cbc72af400e5b7437513ea9d9229291d0812b8464fec",
+            "size": 673
+          },
+          {
+            "path": "python/licenses/LICENSE.libuuid.txt",
+            "sha256": "cbccaa3efe07a9a602751375085be572d4410a250b996716fbe8c5255c7ec6f2",
+            "size": 1459
+          },
+          {
+            "path": "python/licenses/LICENSE.libX11.txt",
+            "sha256": "f353accfe2976df31ea297a77d1d454bd51ef6be8c3df39bd6aca95901579357",
+            "size": 47960
+          },
+          {
+            "path": "python/licenses/LICENSE.libXau.txt",
+            "sha256": "cec808cd2163fccdc8de4a91d526490777afbaeea060e1168c40a804694b7444",
+            "size": 1169
+          },
+          {
+            "path": "python/licenses/LICENSE.libxcb.txt",
+            "sha256": "29a9539190e6de1af5fd06a9139c7103137cd1f9290b08c7b11bce89c01c14d2",
+            "size": 1367
+          },
+          {
+            "path": "python/licenses/LICENSE.mpdecimal.txt",
+            "sha256": "f094277cd46e1f6e4d87916cc4b51e22f613d45eb81f48231c3cb7caf8fc8a6a",
+            "size": 1308
+          },
+          {
+            "path": "python/licenses/LICENSE.ncurses.txt",
+            "sha256": "4f571cad3ea6c888bf0a7092e5b215dddb3142e9e3f1857fd5fac6cf13d345d7",
+            "size": 1476
+          },
+          {
+            "path": "python/licenses/LICENSE.openssl-1.1.txt",
+            "sha256": "ad89e3fed746413af1d34d5353978ee1520cedd361c853f8022e7bb210ac6b31",
+            "size": 6244
+          },
+          {
+            "path": "python/licenses/LICENSE.openssl-3.txt",
+            "sha256": "ed72ce2b51ee58f117e5a021e2e04af158857f40269fbc03491f0b2a99dbcc96",
+            "size": 10352
+          },
+          {
+            "path": "python/licenses/LICENSE.sqlite.txt",
+            "sha256": "d8eb9aba7ef6b5ed06cb3ec19a7242316af2e5933c638eb67fb781c13884e01d",
+            "size": 1504
+          },
+          {
+            "path": "python/licenses/LICENSE.tcl.txt",
+            "sha256": "41613eabfc08921a7da9c4bfd7f3ce5d5406f55214b253d89f392ed86eebeb8f",
+            "size": 2295
+          },
+          {
+            "path": "python/licenses/LICENSE.tix.txt",
+            "sha256": "8cdff3addb9e9eb108c78e2cf5e05f26b216c098304945733bbec382b2eaef66",
+            "size": 2880
+          },
+          {
+            "path": "python/licenses/LICENSE.zlib.txt",
+            "sha256": "365e36720db366054863235aea5d6f440142ab968834bfaf81fa9d187c99b9b8",
+            "size": 1016
+          },
+          {
+            "path": "python/PYTHON.json",
+            "sha256": "c2bd7a699f18cd48dbf701b55a1229dcecec3e2ac74b59fba350fe52d4153e98",
+            "size": 63788
+          }
+        ]
+      }
+    }
+  }
+}
