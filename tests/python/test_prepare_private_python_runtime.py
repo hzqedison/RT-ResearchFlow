@@ -633,6 +633,26 @@ class PreparationTests(unittest.TestCase):
 
 
 class PortableNativePreparationTests(unittest.TestCase):
+    def test_nested_vendor_metadata_keeps_original_root_and_record_protection(self):
+        nested = "vendor/bytecode-0.13.dist-info/METADATA"
+        original = b"Metadata-Version: 2.4\nName: bytecode\nVersion: 0.13\n"
+        wheel = self.fixture_wheel("outer", extra_files={nested: original})
+        self.assertEqual(wheel["distribution"], "outer")
+        path = self.base / "outer-1-py3-none-any.whl"
+        with zipfile.ZipFile(path) as archive:
+            self.assertEqual(archive.read(nested), original)
+        changed = self.base / "changed-nested.whl"
+        with zipfile.ZipFile(path) as source, zipfile.ZipFile(changed, "w") as destination:
+            for member in source.infolist():
+                destination.writestr(member, b"tampered" if member.filename == nested else source.read(member))
+        with self.assertRaises(prep.Invalid):
+            prep.read_wheel(changed)
+
+    def test_multiple_root_metadata_stays_invalid(self):
+        with self.assertRaises(prep.Invalid):
+            self.fixture_wheel("outer", extra_files={"other-1.dist-info/METADATA":
+                                                  b"Metadata-Version: 2.4\nName: other\nVersion: 1\n"})
+
     setUp = PreparationTests.setUp
     download = PreparationTests.download
     fixture_wheel = PreparationTests.fixture_wheel

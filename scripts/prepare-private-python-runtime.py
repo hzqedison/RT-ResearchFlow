@@ -534,7 +534,7 @@ def read_wheel(path):
             if total > MAX_EXPANSION:
                 raise Invalid("Wheel expanded size exceeds budget")
             files[name] = archive.read(item)
-    metadata_names = [name for name in files if name.endswith(".dist-info/METADATA")]
+    metadata_names = [name for name in files if name.count("/") == 1 and name.endswith(".dist-info/METADATA")]
     if len(metadata_names) != 1:
         raise Invalid("Wheel must have one original METADATA")
     info = metadata_names[0].rsplit("/", 1)[0]
@@ -1379,7 +1379,7 @@ def write_dependency_audit(tree, provider, lock, target, toolchain, closure):
     installed = [{**item, "metadataPath": lock["site"] + "/" + relative(item["metadataPath"])} for item in closure["installed"]]
     wheels = []
     for wheel in lock["wheels"]:
-        metadata = [path for path in wheel["notices"] if path.endswith(".dist-info/METADATA")]
+        metadata = [path for path in wheel["notices"] if path.count("/") == 1 and path.endswith(".dist-info/METADATA")]
         if len(metadata) != 1:
             raise Invalid("Original wheel metadata path is not unique")
         name = re.sub(r"[-_.]+", "-", wheel["distribution"]).lower()
