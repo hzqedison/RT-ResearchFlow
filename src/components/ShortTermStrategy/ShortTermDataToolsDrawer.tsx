@@ -22,6 +22,10 @@ interface ShortTermDataToolsDrawerProps {
   sourceSyncProgress: SyncProgress | null
   fullSyncProgress: FullSyncProgress | null
   tushareReady: boolean | null
+  checkingTushare: boolean
+  tushareCheckError: string | null
+  syncingMembers: boolean
+  changingSource: boolean
   syncingBaseData: boolean
   syncingAllConcepts: boolean
   message: string | null
@@ -29,6 +33,7 @@ interface ShortTermDataToolsDrawerProps {
   onSyncCurrentSource: () => void
   onSyncBaseData: () => void
   onSyncAllConcepts: () => void
+  onRefreshTushareStatus: () => void
   onClose: () => void
 }
 
@@ -82,6 +87,10 @@ export function ShortTermDataToolsDrawer({
   sourceSyncProgress,
   fullSyncProgress,
   tushareReady,
+  checkingTushare,
+  tushareCheckError,
+  syncingMembers,
+  changingSource,
   syncingBaseData,
   syncingAllConcepts,
   message,
@@ -89,9 +98,11 @@ export function ShortTermDataToolsDrawer({
   onSyncCurrentSource,
   onSyncBaseData,
   onSyncAllConcepts,
+  onRefreshTushareStatus,
   onClose,
 }: ShortTermDataToolsDrawerProps): JSX.Element {
   const sourceMeta = SOURCE_META[source]
+  const busy = syncingBaseData || syncingAllConcepts || syncingMembers || changingSource
   const sourceProgressPercent = sourceSyncProgress && sourceSyncProgress.total > 0
     ? Math.round(sourceSyncProgress.current / sourceSyncProgress.total * 100)
     : 5
@@ -127,7 +138,7 @@ export function ShortTermDataToolsDrawer({
         <section className="rounded-md border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
           <div>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">题材来源</h3>
-            <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">切换后，短线页面统一使用所选来源的本地题材成分。</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">切换后，短线页面统一使用所选来源的本地题材成分。当前开盘啦、同花顺、东方财富题材接口均经 Tushare 获取，并非免 Key 数据源；免费接口的全面解耦尚未实现。</p>
           </div>
 
           <div className="mt-3 grid grid-cols-3 gap-1 rounded-md bg-slate-100 p-1 dark:bg-slate-950" role="group" aria-label="题材数据来源">
@@ -139,8 +150,9 @@ export function ShortTermDataToolsDrawer({
                   key={item}
                   type="button"
                   aria-pressed={selected}
+                  disabled={busy}
                   onClick={() => onSourceChange(item)}
-                  className={`min-h-11 rounded px-2 py-1.5 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/30 ${selected
+                  className={`min-h-11 rounded px-2 py-1.5 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50 ${selected
                     ? 'bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:text-cyan-200 dark:ring-slate-700'
                     : 'text-slate-500 hover:bg-white/70 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-slate-100'}`}
                 >
@@ -170,6 +182,7 @@ export function ShortTermDataToolsDrawer({
                 <span className="block h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
                   <span className="block h-full rounded-full bg-cyan-600 transition-[width] duration-200 motion-reduce:transition-none" style={{ width: `${sourceProgressPercent}%` }} />
                 </span>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">进度仅表示采集，写入结果以返回回执为准。</p>
               </div>
             )}
             {syncingAllConcepts && (
@@ -184,16 +197,16 @@ export function ShortTermDataToolsDrawer({
               <button
                 type="button"
                 onClick={onSyncCurrentSource}
-                disabled={Boolean(sourceSyncProgress) || tushareReady === false}
+                disabled={busy || tushareReady !== true}
                 className="min-h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
               >
-                {sourceReady === false ? `同步${sourceMeta.name}题材` : `更新${sourceMeta.name}题材`}
+                {syncingMembers ? `同步${sourceMeta.name}题材中…` : sourceReady === false ? `同步${sourceMeta.name}题材` : `更新${sourceMeta.name}题材`}
               </button>
             )}
             <button
               type="button"
               onClick={onSyncAllConcepts}
-              disabled={syncingAllConcepts || tushareReady === false}
+              disabled={busy || tushareReady !== true}
               className={`min-h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 ${(source === 'kpl') ? 'sm:col-span-2' : ''}`}
             >
               {syncingAllConcepts ? '同步全量题材中…' : '同步全量股票题材'}
@@ -207,25 +220,29 @@ export function ShortTermDataToolsDrawer({
           <button
             type="button"
             onClick={onSyncBaseData}
-            disabled={syncingBaseData || tushareReady === false}
+            disabled={busy || tushareReady !== true}
             className="mt-3 min-h-10 w-full rounded-md bg-cyan-700 px-3 text-xs font-semibold text-white hover:bg-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            {syncingBaseData ? '同步盘后数据中…' : '同步盘后基础数据'}
+            {syncingBaseData ? '提交盘后任务中…' : '同步盘后基础数据'}
           </button>
         </section>
 
         {message && (
-          <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-800 dark:border-blue-800 dark:bg-blue-950/35 dark:text-blue-200" role="status">
+          <div className="whitespace-pre-line rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-800 dark:border-blue-800 dark:bg-blue-950/35 dark:text-blue-200" role="status">
             {message}
           </div>
         )}
 
-        {tushareReady === false && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-            Tushare 未配置或当前套餐不可用，暂时无法执行同步；已有本地数据仍可继续读取。
+        <section className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+          <div className="flex items-center justify-between gap-3">
+            <p role="status">{checkingTushare ? '正在检查 Tushare 配置…' : tushareCheckError ?? (tushareReady === true ? 'Tushare 已启用且已配置；接口权限尚未验证。' : tushareReady === false ? 'Tushare 未启用或尚未配置，暂时无法提交同步。' : 'Tushare 配置状态尚未确认。')}</p>
+            <button type="button" onClick={onRefreshTushareStatus} disabled={checkingTushare} className="shrink-0 rounded border border-amber-300 px-2 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700">
+              {checkingTushare ? '检查中…' : '刷新配置状态'}
+            </button>
           </div>
-        )}
+          <p className="mt-1">在应用的数据源配置中启用 Tushare 并保存 Token，然后点击「刷新配置状态」或重新打开本抽屉。这里只检查配置标志，不读取或展示 Token；已有本地数据仍可读取。同步题材不代表免费行情或竞价历史已有数据。</p>
+        </section>
       </div>
     </RightDrawer>
   )
-}
+}

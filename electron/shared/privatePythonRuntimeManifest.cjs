@@ -99,13 +99,14 @@ function validateOfficialDownload(value, policy) {
     try { if (!text(source)) fail('invalid official source'); url = new URL(source) }
     catch { fail('invalid official source') }
     if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash ||
-        !url.pathname.endsWith('/') || /%/.test(url.pathname)) fail('invalid official source')
+        /%/.test(url.pathname)) fail('invalid official source')
     return url
   })
   const download = new URL(value.url)
   // Compare URL authorities, not string prefixes (userinfo, suffix hosts and ports).
-  // A trailing slash enforces a directory boundary instead of /packages-evil.
-  if (!prefixes.some(prefix => download.origin === prefix.origin && download.pathname.startsWith(prefix.pathname))) {
+  // Directories retain a slash boundary; pinned file URLs require exact paths.
+  if (!prefixes.some(prefix => download.origin === prefix.origin &&
+      (prefix.pathname.endsWith('/') ? download.pathname.startsWith(prefix.pathname) : download.pathname === prefix.pathname))) {
     fail('download source not approved by policy')
   }
   return value
