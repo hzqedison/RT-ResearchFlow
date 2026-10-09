@@ -52,6 +52,11 @@ test('fixture scope is never product approval and watcher uses kernel observatio
   assert.match(harness.WORKER_PROBE, /super\(\)\.__init__\(\*arguments,\*\*keywords\)/)
   assert.match(harness.WATCHER_PROBE, /select\.kqueue\(\)/)
   assert.match(harness.WATCHER_PROBE, /select\.KQ_NOTE_EXIT/)
+  assert.match(harness.WATCHER_PROBE, /select\.KQ_EV_ONESHOT/)
+  assert.match(harness.WATCHER_PROBE, /watcher-python-failure\.json/)
+  assert.match(harness.WATCHER_PROBE, /traceback\.format_exc\(\)/)
+  assert.match(harness.WATCHER_PROBE, /timeout-live\.json/)
+  assert.match(harness.WATCHER_PROBE, /os\.kill\(pid,0\)/)
   assert.match(harness.WATCHER_PROBE, /os\.killpg\(root,0\)/)
 })
 
@@ -101,6 +106,15 @@ test('native Mac separately tests fixed reporter rejection and real API chains w
     assert.equal(root.pid, root.pgid); assert.equal(root.pid, root.sid)
     assert.deepEqual(root.argv.slice(-2), ['--pre-seal-owned-posix-root', String(root.pid)])
     assert.equal(node.rootPid, root.pid)
+    if (row.scenario === 'outer-timeout') {
+      assert.equal(row.outerDeadlineMs, 12000)
+      assert.equal(row.timeoutLiveObservation.nodePid, node.pid)
+      assert.equal(row.timeoutLiveObservation.workerPid, row.processes.find(process => process.role === 'worker').pid)
+      assert.ok(Date.parse(row.timeoutLiveObservation.aliveObservedAt) <= Date.parse(row.outerStartedAt) + row.outerDeadlineMs)
+      for (const event of row.kernelEvidence.processes) {
+        assert.ok(Date.parse(event.exitObservedAt) >= Date.parse(row.outerStartedAt) + row.outerDeadlineMs - 50)
+      }
+    }
   }
   for (const api of ['bootstrap.check_dependency_audits', 'adapter.run_token']) {
     assert.deepEqual(report.cases.filter(row => row.api === api).map(row => row.scenario), ['positive', 'outer-timeout', 'root-first'])

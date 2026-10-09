@@ -154,7 +154,8 @@ try:
             if role=='worker': check(record['parentPid']==root)
             if role=='node': check(record['parentPid']==registered['worker'])
             queue.control([select.kevent(pid,filter=select.KQ_FILTER_PROC,
-                          flags=select.KQ_EV_ADD|select.KQ_EV_ENABLE,fflags=select.KQ_NOTE_EXIT)],0,0)
+                          flags=select.KQ_EV_ADD|select.KQ_EV_ENABLE|select.KQ_EV_ONESHOT,
+                          fflags=select.KQ_NOTE_EXIT)],0,0)
             os.kill(pid,0)
             registered[role]=pid
             atomic(base/(role+'-registered.json'),{'pid':pid,'registeredAt':stamp(),
@@ -167,6 +168,16 @@ try:
             exits[role]={'role':role,'pid':event.ident,'exitObservedAt':stamp(),
                          'observationMethod':'darwin-kqueue-NOTE_EXIT','kernelEventData':event.data,
                          'kernelEventFlags':event.fflags}
+        if cfg['scenario']=='outer-timeout' and len(registered)==3 and not (base/'timeout-live.json').exists():
+            start_file=base/'outer-start.json'
+            if start_file.exists():
+                launch=read_json(start_file)
+                if time.time()*1000>=launch['unixMs']+launch['deadlineMs']-1000:
+                    check(not exits)
+                    for pid in registered.values():
+                        os.kill(pid,0); check(os.getpgid(pid)==root and os.getsid(pid)==root)
+                    atomic(base/'timeout-live.json',{'rootPid':root,'workerPid':registered['worker'],
+                           'nodePid':registered['node'],'aliveObservedAt':stamp(),'nonce':cfg['nonce']})
     # Root may already be gone: probe the known group, never root liveness.
     limit=time.monotonic()+5
     while True:
@@ -178,6 +189,12 @@ try:
               'watcherSid':os.getsid(0),'processes':[exits[role] for role in ('root','worker','node')],
               'knownGroupAbsentObservedAt':stamp()}
     atomic(base/'kernel-evidence.json',evidence); print(json.dumps(evidence,allow_nan=False))
+except BaseException as error:
+    import traceback
+    atomic(base/'watcher-python-failure.json',{'exceptionType':type(error).__name__,
+           'message':str(error),'traceback':traceback.format_exc()[-8192:],
+           'registered':registered,'exits':exits,'observedAt':stamp(),'nonce':cfg['nonce']})
+    raise
 finally:
     queue.close()
 `
@@ -214,6 +231,10 @@ function captureWatcher(python, filename, config, cwd, env) {
     child.once('error', error => { clearTimeout(timer); reject(error) })
     child.once('close', (code, signal) => {
       clearTimeout(timer)
+      fs.writeFileSync(path.join(cwd, 'watcher-exit.json'), JSON.stringify({ pid: child.pid,
+        exitCode: code, signal, observedAt: new Date().toISOString(),
+        reason: failed ? failed.message : null, stdout: Buffer.concat(stdout).toString('utf8'),
+        stderr: Buffer.concat(stderr).toString('utf8') }), { flag: 'wx' })
       if (failed || code !== 0 || signal || stderr.length) reject(failed || new Error('KQUEUE_WATCHER_FAILED'))
       else resolve(JSON.parse(Buffer.concat(stdout).toString('utf8')))
     })
@@ -337,7 +358,7 @@ async function runCase(base, python, node, pins, api, scenario) {
   const fixedArgs = [...FLAGS, pins.reporter.path, '--pre-seal-bootstrap-contract', fixture.configPath]
   const spec = { executable: python, args: fixedArgs,
     cwd: fixture.root, env, input: Buffer.alloc(0), shell: false, ownershipMode: 'posix-owned-session',
-    preSealPosixInherited: scenario === 'actual-reporter-gate', deadlineMs: scenario === 'outer-timeout' ? 3000 : 20000,
+    preSealPosixInherited: scenario === 'actual-reporter-gate', deadlineMs: scenario === 'outer-timeout' ? 12000 : 20000,
     stdoutByteCap: 65536, stderrByteCap: 8192 }
   let gateDerivation
   if (!fixedReporterCase) {
@@ -374,6 +395,9 @@ async function runCase(base, python, node, pins, api, scenario) {
   }
   const watcher = captureWatcher(python, fixture.watcher, fixture.configPath, fixture.root, env)
   const start = performance.now()
+  const outerStartedAt = new Date().toISOString()
+  fs.writeFileSync(path.join(fixture.root, 'outer-start.json'), JSON.stringify({ unixMs: Date.parse(outerStartedAt),
+    startedAt: outerStartedAt, deadlineMs: spec.deadlineMs }), { flag: 'wx' })
   let execution, error, outerReturnObservedAt
   try {
     try { execution = await runOwnedPrivatePython(spec) } catch (failure) { error = failure.message }
@@ -391,7 +415,20 @@ async function runCase(base, python, node, pins, api, scenario) {
       assert.equal(result.calledApi, api)
     } else {
       assert.equal(error, 'OWNED_SUPERVISOR_GROUP_FAILED')
-      if (scenario === 'outer-timeout') assert.ok(elapsedMs >= spec.deadlineMs - 50)
+      if (scenario === 'outer-timeout') {
+        assert.ok(elapsedMs >= spec.deadlineMs - 50)
+        const live = JSON.parse(fs.readFileSync(path.join(fixture.root, 'timeout-live.json')))
+        assert.equal(live.nonce, fixture.config.nonce)
+        assert.equal(live.rootPid, evidence.rootPid); assert.equal(live.workerPid, records[1].pid)
+        assert.equal(live.nodePid, runtime.pid)
+        const aliveMs = Date.parse(live.aliveObservedAt)
+        assert.ok(aliveMs >= Date.parse(outerStartedAt) + spec.deadlineMs - 1100)
+        assert.ok(aliveMs <= Date.parse(outerStartedAt) + spec.deadlineMs)
+        for (const event of evidence.processes) {
+          assert.ok(Date.parse(event.exitObservedAt) >= Date.parse(outerStartedAt) + spec.deadlineMs - 50)
+        }
+        assert.ok(!fs.existsSync(path.join(fixture.root, 'api-result.json')))
+      }
       if (scenario === 'root-first') {
         const intent = JSON.parse(fs.readFileSync(path.join(fixture.root, 'root-exit-intent.json')))
         assert.equal(intent.nodePid, runtime.pid); assert.equal(intent.rootPid, evidence.rootPid)
@@ -401,7 +438,9 @@ async function runCase(base, python, node, pins, api, scenario) {
       controlRoute: 'ordinary-outer-supervisor-with-exact-exported-posix-gate-and-test-successor',
       productionReporterGateCoversThisApiCase: false,
       gateDerivation: gateDerivation.observation,
-      outerDeadlineMs: spec.deadlineMs, outerElapsedMs: elapsedMs, outerReturnObservedAt, supervisorError: error || null,
+      outerDeadlineMs: spec.deadlineMs, outerStartedAt, outerElapsedMs: elapsedMs, outerReturnObservedAt, supervisorError: error || null,
+      timeoutLiveObservation: scenario === 'outer-timeout'
+        ? JSON.parse(fs.readFileSync(path.join(fixture.root, 'timeout-live.json'))) : null,
       node: { ...records[2], actualRuntime: runtime }, processes: records,
       kernelEvidence: evidence, fixtureTokenJsPinOverride: api === 'adapter.run_token',
       auditExecutableBinding: api === 'bootstrap.check_dependency_audits' ? 'owned-byte-identical-runner-copy-required-by-contained-root-API' : null }
