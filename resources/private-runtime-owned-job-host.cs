@@ -55,7 +55,11 @@ public static class RTPrivateRuntimeOwnedJobHost {
     var security=Directory.GetAccessControl(root,AccessControlSections.Access|AccessControlSections.Owner);
     var user=WindowsIdentity.GetCurrent().User.Value;
     var owner=((SecurityIdentifier)security.GetOwner(typeof(SecurityIdentifier))).Value;
-    if(owner!=user)throw new IOException("cache-owner");
+    // Elevated hosted runners create our NEW empty directory with the local
+    // Administrators owner. Accept it only when this very token is an admin;
+    // a foreign user owner remains forbidden and no elevation is requested.
+    bool adminOwner=owner=="S-1-5-32-544" && new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
+    if(owner!=user && !adminOwner)throw new IOException("cache-owner");
     security.SetAccessRuleProtection(true,false);
     foreach(FileSystemAccessRule old in security.GetAccessRules(true,false,typeof(SecurityIdentifier)))security.RemoveAccessRuleSpecific(old);
     foreach(string sid in new string[]{user,"S-1-5-18","S-1-5-32-544"})security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(sid),FileSystemRights.FullControl,InheritanceFlags.ContainerInherit|InheritanceFlags.ObjectInherit,PropagationFlags.None,AccessControlType.Allow));

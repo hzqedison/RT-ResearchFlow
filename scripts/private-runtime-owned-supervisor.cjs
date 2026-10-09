@@ -39,6 +39,8 @@ function validateSpec(spec, platform = process.platform) {
       !Number.isInteger(spec.stderrByteCap) || spec.stderrByteCap < 0 || spec.stderrByteCap > 8192 ||
       spec.ownershipMode !== (platform === 'win32' ? 'windows-job' : 'posix-owned-session') ||
       !spec.env || typeof spec.env !== 'object' || Array.isArray(spec.env)) fail('OWNED_SUPERVISOR_SPEC')
+  if (spec.preSealPosixInherited !== undefined && (typeof spec.preSealPosixInherited !== 'boolean' ||
+      (spec.preSealPosixInherited && platform === 'win32'))) fail('OWNED_SUPERVISOR_PRESEAL_MODE')
   for (const [key, value] of Object.entries(spec.env)) {
     if (!ENV_KEYS.has(key) || typeof value !== 'string' || /[\x00\r\n]/.test(value)) fail('OWNED_SUPERVISOR_ENV')
   }
@@ -167,9 +169,19 @@ async function cleanGroup(pid) {
   while (Date.now() < end && groupExists(pid)) await new Promise(resolve => setTimeout(resolve, 20))
   return !groupExists(pid)
 }
+function posixLaunchArgs(spec) {
+  if (spec.preSealPosixInherited !== true) return [...spec.args]
+  if (path.basename(spec.args[5]) !== 'report-private-runtime-native-bootstrap.py' ||
+      !spec.args.includes('--pre-seal-bootstrap-contract') || spec.args.includes('--pre-seal-owned-posix-root')) fail('OWNED_SUPERVISOR_PRESEAL_REPORTER')
+  // Child PID is unknown while constructing argv. This source-bound standard
+  // library gate derives its ACTUAL new session identity, then execs the pinned
+  // reporter without changing PID or the final interpreter isolation flags.
+  const gate = 'import os,sys; p=os.getpid(); assert p>1 and os.getpgrp()==p and os.getsid(0)==p; os.execv(sys.executable,[sys.executable]+sys.argv[1:]+["--pre-seal-owned-posix-root",str(p)])'
+  return ['-X', 'utf8', '-I', '-S', '-B', '-c', gate, ...spec.args]
+}
 function runPosix(spec) {
   return new Promise((resolve, reject) => {
-    const proc = spawn(spec.executable, spec.args, { cwd: spec.cwd, env: spec.env,
+    const proc = spawn(spec.executable, posixLaunchArgs(spec), { cwd: spec.cwd, env: spec.env,
       shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'] })
     let out = 0, err = 0, failed = false, exitObserved = false
     const stdout = [], stderr = []
@@ -197,8 +209,10 @@ function runPosix(spec) {
 }
 async function runOwnedPrivatePython(spec) {
   validateSpec(spec)
+  spec = { ...spec, args: [...spec.args], env: { ...spec.env }, input: Buffer.from(spec.input),
+    ...(spec.nativeHostSource ? { nativeHostSource: { ...spec.nativeHostSource } } : {}) }
   regularFile(spec.executable, 128 * 1024 * 1024)
   if (!fs.lstatSync(spec.cwd).isDirectory() || fs.lstatSync(spec.cwd).isSymbolicLink()) fail('OWNED_SUPERVISOR_CWD')
   return process.platform === 'win32' ? runWindows(spec) : runPosix(spec)
 }
-module.exports = { runOwnedPrivatePython, validateSpec, quoteWindowsArgument, parseWindowsProof, WINDOWS_LOADER }
+module.exports = { runOwnedPrivatePython, validateSpec, quoteWindowsArgument, parseWindowsProof, posixLaunchArgs, WINDOWS_LOADER }

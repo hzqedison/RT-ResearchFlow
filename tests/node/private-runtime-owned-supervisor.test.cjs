@@ -2,7 +2,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')
-const { validateSpec, quoteWindowsArgument, parseWindowsProof, WINDOWS_LOADER } = require('../../scripts/private-runtime-owned-supervisor.cjs')
+const { validateSpec, quoteWindowsArgument, parseWindowsProof, posixLaunchArgs, WINDOWS_LOADER } = require('../../scripts/private-runtime-owned-supervisor.cjs')
 function spec() {
   return { executable: path.resolve('private-python'), args: ['-X', 'utf8', '-I', '-S', '-B', path.resolve('reporter.py')],
     cwd: path.resolve('owned-cache'), input: Buffer.alloc(0), shell: false, deadlineMs: 1000,
@@ -44,4 +44,20 @@ test('fixed native loader waits stdin before launching Python and clears inherit
   assert.ok(WINDOWS_LOADER.includes('EnvironmentVariables.Clear()'))
   assert.ok(WINDOWS_LOADER.includes("$ProgressPreference='SilentlyContinue'"))
   assert.ok(!WINDOWS_LOADER.includes('Invoke-Expression'))
+})
+test('POSIX explicit preseal gate derives actual OS leader and preserves final argv', () => {
+  const input = { ...spec(), ownershipMode: 'posix-owned-session', preSealPosixInherited: true,
+    args: ['-X', 'utf8', '-I', '-S', '-B', path.resolve('report-private-runtime-native-bootstrap.py'), '--pre-seal-bootstrap-contract', path.resolve('contract.json')] }
+  assert.doesNotThrow(() => validateSpec(input, 'darwin'))
+  const args = posixLaunchArgs(input)
+  assert.deepEqual(args.slice(0, 6), ['-X', 'utf8', '-I', '-S', '-B', '-c'])
+  assert.ok(args[6].includes('os.getpgrp()==p and os.getsid(0)==p'))
+  assert.ok(args[6].includes('os.execv(sys.executable'))
+  assert.deepEqual(args.slice(7), input.args)
+  assert.throws(() => posixLaunchArgs({ ...input, args: [...input.args, '--pre-seal-owned-posix-root', '42'] }))
+  assert.throws(() => posixLaunchArgs({ ...input, args: spec().args }))
+})
+test('ordinary non-preseal POSIX path never enables the inherited mode', () => {
+  assert.deepEqual(posixLaunchArgs(spec()), spec().args)
+  assert.throws(() => validateSpec({ ...spec(), preSealPosixInherited: true }, 'win32'))
 })

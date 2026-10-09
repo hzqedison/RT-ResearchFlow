@@ -1,0 +1,80 @@
+name: Isolated Windows lxml rebuild and relink
+
+on:
+  push:
+    branches: [codex/verify-1.7]
+    paths:
+      - .github/workflows/lxml-relink-native.yml
+      - scripts/rebuild-lxml-native.py
+      - scripts/restore-lxml-build-tools.py
+      - tests/python/test_rebuild_lxml_native.py
+      - tests/python/test_restore_lxml_build_tools.py
+      - tests/fixtures/lxml-build-tools/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-relink:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONDONTWRITEBYTECODE: '1'
+      RT_CACHE: D:/RT-ResearchFlow-BuildCache
+      RT_TOOLS_SHA: 7b63f9d52edbedcaef3e59692588a4ddb9a7279a5917f231ee4cc0bc076d2d9e
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Restore exact reviewed local-origin build tools without pip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Disposable hosted runner required' }
+          $job = "$env:RT_CACHE/lx-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          New-Item -ItemType Directory -Path $job -ErrorAction Stop | Out-Null
+          "RT_JOB=$job" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Copy-Item -LiteralPath tests/fixtures/lxml-build-tools/source-relink-delta.json -Destination "$job/source-relink-delta.json"
+          if ((Get-FileHash "$job/source-relink-delta.json" -Algorithm SHA256).Hash.ToLowerInvariant() -ne '0d4154519b7eae84197bb2f92440037715870ceefb6809eb7e7108cc4b24dfa5') { throw 'Reviewed source manifest mismatch' }
+          python scripts/restore-lxml-build-tools.py --output "$job/tools-snapshot.zip"
+          if ($LASTEXITCODE -ne 0) { throw 'Locked tool reconstruction failed' }
+          python scripts/rebuild-lxml-native.py fetch --materials-dir "$job/inputs" --tools-archive "$job/tools-snapshot.zip" --tools-sha256 "$env:RT_TOOLS_SHA"
+          if ($LASTEXITCODE -ne 0) { throw 'Fixed source/runtime acquisition failed' }
+      - name: Isolated wrapper and exact tool restoration tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:TEMP = "$env:RT_JOB/test-temp"
+          $env:TMP = $env:TEMP
+          New-Item -ItemType Directory -Path $env:TEMP -ErrorAction Stop | Out-Null
+          python -m unittest discover -s tests/python -p test_rebuild_lxml_native.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Wrapper tests failed' }
+          python -m unittest discover -s tests/python -p test_restore_lxml_build_tools.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Tool restoration tests failed' }
+      - name: Real compilation and modified-iconv relink with reviewed fixed targets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'Preinstalled MSVC unavailable; no tool installer fallback' }
+          # Python network guard and reviewed fixed native commands. Do not
+          # claim an OS-wide network block or break the hosted runner control plane.
+          python scripts/rebuild-lxml-native.py build --manifest "$env:RT_JOB/source-relink-delta.json" --materials-dir "$env:RT_JOB/inputs" --pbs "$env:RT_JOB/inputs/cpython-3.13.16+20261003-x86_64-pc-windows-msvc-install_only.tar.gz" --tools-archive "$env:RT_JOB/inputs/tools-snapshot.zip" --tools-sha256 "$env:RT_TOOLS_SHA" --original-wheel "$env:RT_JOB/inputs/lxml-6.1.3-cp313-cp313-win_amd64.whl" --vc-root "$vs" --msvc-version 14.44.35207 --sdk-version 10.0.26100.0 --network-enforcement python-audit-and-reviewed-native-targets --work "$env:RT_JOB/b"
+          if ($LASTEXITCODE -ne 0) { throw 'Native rebuild/relink failed; no release decision' }
+      - name: Preserve actual evidence and complete reconstruction materials
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: lxml-native-relink-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            D:/RT-ResearchFlow-BuildCache/lx-${{ github.run_id }}-${{ github.run_attempt }}/b/*.json
+            D:/RT-ResearchFlow-BuildCache/lx-${{ github.run_id }}-${{ github.run_attempt }}/b/*.whl
+            D:/RT-ResearchFlow-BuildCache/lx-${{ github.run_id }}-${{ github.run_attempt }}/b/*.md
+            D:/RT-ResearchFlow-BuildCache/lx-${{ github.run_id }}-${{ github.run_attempt }}/b/source-materials.zip
+            D:/RT-ResearchFlow-BuildCache/lx-${{ github.run_id }}-${{ github.run_attempt }}/b/logs/
+            D:/RT-ResearchFlow-BuildCache/lx-${{ github.run_id }}-${{ github.run_attempt }}/inputs/acquisition-evidence.json
+          if-no-files-found: warn
+          retention-days: 30
