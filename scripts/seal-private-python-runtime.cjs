@@ -12,12 +12,25 @@ const TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64']
 const POLICY = 'resources/python-runtime/preparation.policy.json'
 const RULES = 'resources/python-runtime/distribution-obligations.policy.json'
 const IMPLEMENTATION = 'scripts/seal-private-python-runtime.cjs'
-const PREPARATION_SOURCE = ['electron/shared/privatePythonRuntimeManifest.cjs',
-  'resources/python-runtime/bootstrap.py', 'resources/python-runtime/miniracer_unicode_adapter.py',
-  'resources/python-runtime/pywencai_adapter.py', 'scripts/build-mootdx-compat-wheel.py',
-  'scripts/build-provider-source-wheels.py', 'scripts/prepare-private-python-runtime.py',
-  'scripts/rebuild-lxml-native.py', 'scripts/build-lxml-redistribution-wheel.py',
-  'scripts/build-lxml-matched-public-source.py'].sort()
+const PREPARATION_SOURCE = [
+  'LICENSE',
+  'electron/shared/privatePythonRuntimeManifest.cjs',
+  'resources/python-runtime/bootstrap.py',
+  'resources/python-runtime/miniracer_unicode_adapter.py',
+  'resources/python-runtime/pywencai_adapter.py',
+  'resources/python-runtime/reviewed-materials/fetch-runtime-license-materials-ci.py',
+  'resources/python-runtime/reviewed-materials/runtime-license-materials.json',
+  'scripts/build-akshare-node-wheel.py',
+  'scripts/build-lxml-matched-public-source.py',
+  'scripts/build-lxml-redistribution-wheel.py',
+  'scripts/build-mootdx-compat-wheel.py',
+  'scripts/build-private-node-js-runtime-wheel.py',
+  'scripts/build-provider-source-wheels.py',
+  'scripts/prepare-private-python-runtime.py',
+  'scripts/private-node-js-runtime/rt_private_node_js_runtime/__init__.py',
+  'scripts/private-node-js-runtime/rt_private_node_js_runtime/worker.cjs',
+  'scripts/rebuild-lxml-native.py',
+].sort()
 const REQUIRED_SOURCE = [IMPLEMENTATION, POLICY,
   'scripts/bundle-private-python-runtime.cjs', 'scripts/validate-private-python-runtime.cjs',
   'scripts/private-python-runtime-builder.cjs', ...PREPARATION_SOURCE]

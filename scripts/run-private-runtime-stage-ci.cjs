@@ -127,13 +127,15 @@ archive, output = map(pathlib.Path, sys.argv[1:])
 required={'prepare/candidate-lock.json','prepare/candidate-fragment.json','handoff.json'}
 tree='prepare/materialize/tree'
 seen=set(); total=0; count=0
-def checked(member, destination):
+def preflight(member):
  global total,count
  name=member.name
  if name.startswith('/') or chr(92) in name or any(p in ('','..','.') or ':' in p for p in name.split('/')): raise ValueError('ARCHIVE_PATH')
- if name in seen: raise ValueError('ARCHIVE_DUPLICATE')
+ if name in seen: raise ValueError('ARCHIVE_DUPLICATE:'+name)
  seen.add(name); count+=1; total+=member.size
  if count>150000 or total>8*1024**3: raise ValueError('ARCHIVE_BUDGET')
+def checked(member, destination):
+ name=member.name
  if name not in required and name!=tree and not name.startswith(tree+'/'): return None
  if name in required and not member.isfile(): raise ValueError('ARCHIVE_METADATA_KIND')
  if not (member.isfile() or member.isdir() or member.issym() or member.islnk()): raise ValueError('ARCHIVE_KIND')
@@ -143,7 +145,11 @@ def checked(member, destination):
  if member.islnk() and not (output/member.linkname).resolve().is_relative_to((output/tree).resolve()): raise ValueError('ARCHIVE_TREE_HARDLINK')
  filtered=tarfile.data_filter(member,destination)
  return filtered.replace(mode=member.mode & 0o777) if member.isfile() or member.isdir() else filtered
-with tarfile.open(archive,'r:gz') as packed: packed.extractall(output,filter=checked)
+with tarfile.open(archive,'r:gz') as packed:
+ members=[]
+ for member in packed:
+  preflight(member);members.append(member)
+ packed.extractall(output,members=members,filter=checked)
 if not required.issubset(seen) or not (output/tree).is_dir(): raise ValueError('ARCHIVE_INCOMPLETE')
 `
 const CACHE = String.raw`
