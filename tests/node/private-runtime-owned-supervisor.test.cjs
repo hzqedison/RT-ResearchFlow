@@ -47,7 +47,7 @@ test('fixed native loader waits stdin before launching Python and clears inherit
 })
 test('POSIX explicit preseal gate derives actual OS leader and preserves final argv', () => {
   const input = { ...spec(), ownershipMode: 'posix-owned-session', preSealPosixInherited: true,
-    args: ['-X', 'utf8', '-I', '-S', '-B', path.resolve('report-private-runtime-native-bootstrap.py'), '--pre-seal-bootstrap-contract', path.resolve('contract.json')] }
+    args: ['-X', 'utf8', '-I', '-S', '-B', path.resolve(__dirname, '../../scripts/report-private-runtime-native-bootstrap.py'), '--pre-seal-bootstrap-contract', path.resolve('contract.json')] }
   assert.doesNotThrow(() => validateSpec(input, 'darwin'))
   const args = posixLaunchArgs(input)
   assert.deepEqual(args.slice(0, 6), ['-X', 'utf8', '-I', '-S', '-B', '-c'])
@@ -55,6 +55,9 @@ test('POSIX explicit preseal gate derives actual OS leader and preserves final a
   assert.ok(args[6].includes('os.execv(sys.executable'))
   assert.deepEqual(args.slice(7), input.args)
   assert.throws(() => posixLaunchArgs({ ...input, args: [...input.args, '--pre-seal-owned-posix-root', '42'] }))
+  assert.throws(() => posixLaunchArgs({ ...input, args: [...input.args, '--pre-seal-owned-posix-root=42'] }))
+  assert.throws(() => posixLaunchArgs({ ...input, args: [...input.args.slice(0, 5), path.resolve('other/report-private-runtime-native-bootstrap.py'), ...input.args.slice(6)] }))
+  assert.throws(() => posixLaunchArgs({ ...input, args: [...input.args.slice(0, 7), 'relative.json'] }))
   assert.throws(() => posixLaunchArgs({ ...input, args: spec().args }))
 })
 test('ordinary non-preseal POSIX path never enables the inherited mode', () => {

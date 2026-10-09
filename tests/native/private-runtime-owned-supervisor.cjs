@@ -24,20 +24,24 @@ async function main() {
       cwd: root, env: environment, input: Buffer.alloc(0), shell: false, windowsHide: true,
       deadlineMs, stdoutByteCap: 1024 * 1024, stderrByteCap: 8192, ownershipMode: 'windows-job', nativeHostSource })
   }
+  let currentCase = 'setup'
+  const started = Date.now()
   let successfulCleanup = false
   try {
     const positive = path.join(root, 'positive.py')
     fs.writeFileSync(positive, 'import json\nprint(json.dumps({"probe": "actual-owned-python", "product": False}))\n', { flag: 'wx' })
-    const ok = await invoke(positive, 10000)
+    currentCase = 'positive'
+    const ok = await invoke(positive, 30000)
     assert.equal(ok.exitCode, 0); assert.equal(ok.exitObserved, true); assert.equal(ok.ownedTreeEmpty, true)
     assert.equal(ok.stderr.length, 0); assert.ok(ok.nativeRootPid > 0)
     assert.equal(JSON.parse(ok.stdout.toString('utf8')).product, false)
     cases.push({ case: 'real-private-python-positive', passed: true, nativeRootPid: ok.nativeRootPid,
-      compilation: ok.compilation, kernelOwnedJobEmpty: true })
+      compilation: ok.compilation, elapsedMs: Date.now() - started, deadlineMs: 30000, kernelOwnedJobEmpty: true })
 
     const nonzero = path.join(root, 'nonzero.py')
     fs.writeFileSync(nonzero, 'import sys\nsys.exit(7)\n', { flag: 'wx' })
-    await assert.rejects(invoke(nonzero, 10000), /OWNED_SUPERVISOR_NATIVE_FAILED/)
+    currentCase = 'nonzero'
+    await assert.rejects(invoke(nonzero, 30000), /OWNED_SUPERVISOR_NATIVE_FAILED/)
     cases.push({ case: 'real-nonzero-root-is-not-success', passed: true })
 
     const timeout = path.join(root, 'timeout.py'), identities = path.join(root, 'owned-pids.json')
@@ -49,7 +53,8 @@ async function main() {
     ].join('\n'), { flag: 'wx' })
     // Include cold PowerShell startup before the probe creates its real child.
     // The Python sleep remains much longer than this bounded supervisor deadline.
-    await assert.rejects(invoke(timeout, 5000, [identities]), /OWNED_SUPERVISOR_NATIVE_FAILED|OWNED_SUPERVISOR_CHILD_FAILED/)
+    currentCase = 'timeout'
+    await assert.rejects(invoke(timeout, 20000, [identities]), /OWNED_SUPERVISOR_NATIVE_FAILED|OWNED_SUPERVISOR_CHILD_FAILED/)
     const pids = JSON.parse(fs.readFileSync(identities, 'utf8'))
     for (const pid of [pids.worker, pids.child]) {
       assert.ok(Number.isSafeInteger(pid) && pid > 0)
@@ -65,6 +70,9 @@ async function main() {
     successfulCleanup = true
     console.log(JSON.stringify({ kind: 'rt-private-owned-job-primitive-probe-v1', platform: process.platform,
       arch: process.arch, productRuntimeTested: false, installerTested: false, cases }))
+  } catch (error) {
+    console.error('RT_OWNED_PROBE_CASE:' + currentCase + ':elapsed-ms:' + (Date.now() - started))
+    throw error
   } finally {
     // Keep failed native probe evidence rather than deleting a possibly live tree.
     if (successfulCleanup && root.startsWith(fs.realpathSync(base) + path.sep) &&

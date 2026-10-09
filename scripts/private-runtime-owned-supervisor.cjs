@@ -171,8 +171,9 @@ async function cleanGroup(pid) {
 }
 function posixLaunchArgs(spec) {
   if (spec.preSealPosixInherited !== true) return [...spec.args]
-  if (path.basename(spec.args[5]) !== 'report-private-runtime-native-bootstrap.py' ||
-      !spec.args.includes('--pre-seal-bootstrap-contract') || spec.args.includes('--pre-seal-owned-posix-root')) fail('OWNED_SUPERVISOR_PRESEAL_REPORTER')
+  const reporter = path.resolve(__dirname, 'report-private-runtime-native-bootstrap.py')
+  if (spec.args.length !== 8 || spec.args[5] !== reporter ||
+      spec.args[6] !== '--pre-seal-bootstrap-contract' || !path.isAbsolute(spec.args[7])) fail('OWNED_SUPERVISOR_PRESEAL_REPORTER')
   // Child PID is unknown while constructing argv. This source-bound standard
   // library gate derives its ACTUAL new session identity, then execs the pinned
   // reporter without changing PID or the final interpreter isolation flags.
