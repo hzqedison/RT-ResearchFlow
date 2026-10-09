@@ -5,6 +5,7 @@ import json
 import os
 import pathlib
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -92,6 +93,38 @@ def child_environment(home):
     return env
 
 
+def resolver_metadata(work, proof):
+    """Export a bounded allowlist, never URLs, environment or raw resolver reports."""
+    copied = []
+    for provider in ("akshare", "mootdx", "pywencai"):
+        path = work / "resolve" / (provider + "-normal-resolver.json")
+        if not path.is_file() or path.is_symlink() or path.stat().st_size > 10_000_000:
+            continue
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+            installs = report.get("install", [])
+            if not isinstance(installs, list) or len(installs) > 512:
+                continue
+            wheels = []
+            for item in installs:
+                metadata = item.get("metadata", {})
+                download = item.get("download_info", {})
+                filename = urllib.parse.unquote(urllib.parse.urlsplit(download.get("url", "")).path.rsplit("/", 1)[-1])
+                safe = lambda value, limit: value if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.+\-]{1," + str(limit) + r"}", value) else "REDACTED"
+                sha = download.get("archive_info", {}).get("hashes", {}).get("sha256")
+                wheels.append({"distribution": safe(metadata.get("name"), 128),
+                    "version": safe(metadata.get("version"), 128), "filename": safe(filename, 240),
+                    "sha256": sha if isinstance(sha, str) and re.fullmatch(r"[a-f0-9]{64}", sha) else None})
+            name = provider + "-resolver-metadata.json"
+            (proof / name).write_text(json.dumps({"provider": provider, "wheelCount": len(wheels),
+                "wheels": wheels}, indent=2) + "\n", encoding="utf-8")
+            copied.append(name)
+        except (ValueError, TypeError, AttributeError, OSError):
+            # Incomplete failure reports must not hide the original preparation exit.
+            continue
+    return copied
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True,
@@ -151,13 +184,12 @@ def main():
     with log.open("rb") as stream:
         stream.seek(max(0, log.stat().st_size - 32768))
         print(stream.read().decode("utf-8", errors="replace"), flush=True)
-    if result.returncode != 0:
-        raise SystemExit(result.returncode)
-    if not handoff.is_file():
+    if result.returncode == 0 and not handoff.is_file():
         raise ValueError("Successful preparation did not produce a handoff")
-    shutil.copyfile(handoff, proof / "handoff.json")
+    if result.returncode == 0:
+        shutil.copyfile(handoff, proof / "handoff.json")
     # Only metadata is exported. No unapproved runtime, wheel, or vendor payload.
-    copied = []
+    copied = resolver_metadata(work, proof)
     for directory in (work, work / "resolve", work / "materialize"):
         for name in ("candidate-lock.json", "candidate-fragment.json", "native-evidence.json"):
             path = directory / name
@@ -178,12 +210,15 @@ def main():
         "sourceHashes": {p: digest(repo / p) for p in source_paths},
         "prepareExit": result.returncode, "metadataFiles": copied,
         "releaseEligible": False, "formalBundle": False, "installedApplication": False,
+        "formalBootstrapTested": False,
         "minimumMacOSLiveVerified": False, "operatingSystemNetworkSandboxVerified": False,
         "sourceAttestation": False, "providerRequestAPIsInvoked": False}
     (proof / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     sums = [digest(path) + "  " + path.name for path in sorted(proof.iterdir()) if path.is_file()]
     (proof / "SHA256SUMS.txt").write_text("\n".join(sums) + "\n", encoding="utf-8")
     print("stage=candidate-evidence-complete releaseEligible=false", flush=True)
+    if result.returncode != 0:
+        raise SystemExit(result.returncode)
 
 
 if __name__ == "__main__":

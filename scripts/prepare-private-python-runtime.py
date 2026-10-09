@@ -844,6 +844,41 @@ def bound_source_copy(candidate, source_name, destination):
     exclusive_bytes(destination, raw)
 
 
+def provider_failure_diagnostic(work, target, provider, stage, error):
+    """Leave a bounded failure marker without serializing exception data or paths."""
+    source = {"file": "scripts/prepare-private-python-runtime.py", "function": "resolve", "line": 0}
+    frame = error.__traceback__
+    while frame is not None:
+        code = frame.tb_frame.f_code
+        if Path(code.co_filename).resolve() == Path(__file__).resolve():
+            source = {"file": source["file"], "function": code.co_name, "line": frame.tb_lineno}
+        frame = frame.tb_next
+    if isinstance(error, Invalid):
+        error_type = "Invalid"
+    elif isinstance(error, Pending):
+        error_type = "Pending"
+    elif isinstance(error, subprocess.SubprocessError):
+        error_type = "SubprocessError"
+    elif isinstance(error, OSError):
+        error_type = "OSError"
+    elif isinstance(error, ValueError):
+        error_type = "ValueError"
+    elif isinstance(error, KeyError):
+        error_type = "KeyError"
+    elif isinstance(error, TypeError):
+        error_type = "TypeError"
+    else:
+        error_type = "UnexpectedError"
+    report = {"schemaVersion": 1, "kind": "rt-private-runtime-failure-diagnostic-v1", "status": "failed",
+              "phase": "resolve", "target": target, "provider": provider, "stage": stage,
+              "errorType": error_type, "source": source}
+    try:
+        exclusive_bytes(work / "failure-diagnostic.json", encoded(report))
+    except (Invalid, OSError):
+        # A full disk or conflicting evidence must not replace the original failure.
+        pass
+
+
 def resolve(policy, policy_sha, target, work_root, operation_input=None):
     result = candidate_base("rt-private-python-candidate-lock", policy_sha, target)
     result["pending"] = pending_inputs(policy, target)
@@ -871,28 +906,40 @@ def resolve(policy, policy_sha, target, work_root, operation_input=None):
     sites = work / "resolver-sites"
     sites.mkdir()
     for provider in PROVIDERS:
-        site = sites / provider
-        site.mkdir()
-        constraints, seed = resolution_constraints(policy, provider, assets, work, target, operations)
-        report_path = work / (provider + "-normal-resolver.json")
-        command = pip_command(tools, assets, site, report_path, False)
-        command += ["--constraint", str(constraints), provider + "==" + policy["providerVersions"][provider]]
-        if target.startswith("darwin"):
-            command += ["--platform", "macosx_12_0_" + ("arm64" if target.endswith("arm64") else "x86_64"),
-                        "--python-version", "3.13", "--implementation", "cp", "--abi", "cp313"]
-        run(command, work)
-        pip_report = json.loads(report_path.read_bytes())
-        if pip_report.get("environment", {}).get("python_full_version") != "3.13.16":
-            raise Invalid("Resolver report did not come from native PBS 3.13.16")
-        wheels = [freeze_report_item(item, assets, policy, operations) for item in pip_report["install"]]
-        closure = validate_closure(tools, wheels, [provider + "==" + policy["providerVersions"][provider]], work)
-        native_wheels = wheel_native_evidence(wheels, assets, target)
-        providers[provider] = {"version": policy["providerVersions"][provider], "site": "providers/" + provider + "/site",
-                               "wheels": sorted(wheels, key=lambda wheel: wheel["distribution"].lower()),
-                               "closure": closure}
-        resolver_evidence[provider] = {"reportSha256": file_digest(report_path), "seed": seed,
-                                       "normalResolverExecuted": True, "wheelCount": len(wheels), "nativeWheels": native_wheels}
-        print("resolved " + provider + ": " + str(len(wheels)) + " actual wheels", flush=True)
+        stage = "create-provider-site"
+        try:
+            site = sites / provider
+            site.mkdir()
+            stage = "build-constraints"
+            constraints, seed = resolution_constraints(policy, provider, assets, work, target, operations)
+            report_path = work / (provider + "-normal-resolver.json")
+            command = pip_command(tools, assets, site, report_path, False)
+            command += ["--constraint", str(constraints), provider + "==" + policy["providerVersions"][provider]]
+            if target.startswith("darwin"):
+                command += ["--platform", "macosx_12_0_" + ("arm64" if target.endswith("arm64") else "x86_64"),
+                            "--python-version", "3.13", "--implementation", "cp", "--abi", "cp313"]
+            stage = "normal-pip-resolve"
+            run(command, work)
+            stage = "parse-resolver-report"
+            pip_report = json.loads(report_path.read_bytes())
+            if pip_report.get("environment", {}).get("python_full_version") != "3.13.16":
+                raise Invalid("Resolver report did not come from native PBS 3.13.16")
+            stage = "freeze-resolved-wheels"
+            wheels = [freeze_report_item(item, assets, policy, operations) for item in pip_report["install"]]
+            stage = "validate-closure"
+            closure = validate_closure(tools, wheels, [provider + "==" + policy["providerVersions"][provider]], work)
+            stage = "validate-native-wheel"
+            native_wheels = wheel_native_evidence(wheels, assets, target)
+            stage = "commit-provider-evidence"
+            providers[provider] = {"version": policy["providerVersions"][provider], "site": "providers/" + provider + "/site",
+                                   "wheels": sorted(wheels, key=lambda wheel: wheel["distribution"].lower()),
+                                   "closure": closure}
+            resolver_evidence[provider] = {"reportSha256": file_digest(report_path), "seed": seed,
+                                           "normalResolverExecuted": True, "wheelCount": len(wheels), "nativeWheels": native_wheels}
+            print("resolved " + provider + ": " + str(len(wheels)) + " actual wheels", flush=True)
+        except Exception as error:
+            provider_failure_diagnostic(work, target, provider, stage, error)
+            raise
     source_evidence = source_receipt(operations.get("sourceReceipt"), snapshot)
     operation_receipts = finish_operation(operations, work, tool_receipt, source_evidence, {name: value["seed"] for name, value in resolver_evidence.items()})
     result.update(status="candidate", resolutionComplete=True, sourceCommit=source_evidence.get("sourceCommit"),
@@ -1815,8 +1862,21 @@ def main(argv=None):
     except Pending:
         print("PRIVATE_RUNTIME_PENDING", file=sys.stderr)
         return 2
-    except (Invalid, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+    except (Invalid, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print("PRIVATE_RUNTIME_INVALID", file=sys.stderr)
+        # Static source locations only: exception messages may contain private inputs.
+        locations = []
+        trace = error.__traceback__
+        while trace is not None:
+            if trace.tb_frame.f_code.co_filename == __file__:
+                locations.append(trace.tb_lineno)
+            trace = trace.tb_next
+        error_type = type(error).__name__
+        if not error_type.isascii() or not error_type.isidentifier() or len(error_type) > 64:
+            error_type = "Invalid"
+        print(json.dumps({"kind": "rt-private-runtime-safe-failure-v1",
+                          "command": args.command, "errorType": error_type,
+                          "sourceLines": locations[-16:]}), file=sys.stderr)
         return 1
 
 
