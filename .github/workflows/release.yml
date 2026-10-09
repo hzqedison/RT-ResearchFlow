@@ -186,9 +186,6 @@ jobs:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
       npm_config_electron_mirror: https://github.com/electron/electron/releases/download/
-      electron_config_cache: ${{ runner.temp }}/rt-release-cache/electron
-      ELECTRON_CACHE: ${{ runner.temp }}/rt-release-cache/electron
-      ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/rt-release-cache/electron-builder
     steps:
       - uses: actions/checkout@v4
         with:
@@ -214,6 +211,10 @@ jobs:
             if (process.env.RUNNER_ENVIRONMENT !== 'github-hosted') {
               throw new Error('Installation tests require a disposable GitHub-hosted runner.');
             }
+            const cacheRoot = require('node:path').join(process.env.RUNNER_TEMP, 'rt-release-cache');
+            core.exportVariable('electron_config_cache', require('node:path').join(cacheRoot, 'electron'));
+            core.exportVariable('ELECTRON_CACHE', require('node:path').join(cacheRoot, 'electron'));
+            core.exportVariable('ELECTRON_BUILDER_CACHE', require('node:path').join(cacheRoot, 'electron-builder'));
             core.exportVariable('PLAYWRIGHT_JSON_OUTPUT_NAME',
               require('node:path').join(process.env.RUNNER_TEMP, 'release-installed-tests.json'));
             if (process.arch !== process.env.RELEASE_ARCH ||
