@@ -44,3 +44,8 @@ const config = {
 }
 
 module.exports = config
+
+// All packaged data extensions must be complete and offline before packaging.
+module.exports = require("./scripts/private-python-runtime-builder.cjs").withPrivatePythonPostPackValidation(
+  require("./scripts/private-python-runtime-builder.cjs").withPrivatePythonRuntime(module.exports),
+)

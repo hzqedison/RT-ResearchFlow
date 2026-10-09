@@ -4,8 +4,11 @@ import { mkdir } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import type { MultiSourcePreference } from '../../shared/dataSourceTypes'
 import { minimumDataSourcePythonMinor, supportsDataSourcePython } from '../../shared/pythonSourceRequirements'
+import { privateProviderForOperation, privatePythonInvocation, resolvePrivatePythonRuntime } from './privatePythonRuntimeResolver'
+import type { PrivatePythonProvider } from '../../shared/privatePythonRuntimeTypes'
 
-// Packages are optional, installed into a private venv, never the system Python.
+// Packaged applications use only the complete, offline, per-provider runtime.
+// Explicit development interpreter selection remains available for isolated fixtures.
 // JSON travels through stdin, not command arguments. Raw package logs are discarded.
 const PYTHON_BRIDGE = String.raw`
 import contextlib, datetime, importlib.metadata, io, json, sys
@@ -83,9 +86,14 @@ const bridgeMessages: Record<string, string> = {
   BRIDGE_TIMEOUT: '本地数据扩展请求超时，已停止本次请求。',
   BRIDGE_INVALID_RESPONSE: '本地扩展响应不符合预期，请检查依赖版本。',
   BRIDGE_INSTALL_FAILED: '扩展安装未完成，请检查 Python、网络与磁盘空间；原有数据未被改动。',
+  PRIVATE_RUNTIME_PENDING: '随包数据扩展尚未准备完整，不能使用系统 Python 或在线安装代替；原有数据保持不变。',
+  PRIVATE_RUNTIME_INVALID: '随包数据扩展校验失败，已停止本次调用；原有数据保持不变。',
 }
 
 export function dataBridgeMessage(error: unknown): string {
+  if (error instanceof Error && error.message.startsWith('PRIVATE_RUNTIME_')) {
+    return bridgeMessages[error.message.startsWith('PRIVATE_RUNTIME_PENDING') ? 'PRIVATE_RUNTIME_PENDING' : 'PRIVATE_RUNTIME_INVALID']
+  }
   return error instanceof Error ? bridgeMessages[error.message] ?? '数据源请求未完成，请检查连接与权限。' : '数据源请求未完成。'
 }
 
@@ -96,14 +104,16 @@ function pythonExecutable(config: MultiSourcePreference): string {
   return value
 }
 
-function runPython(executable: string, args: string[], input = '', timeoutMs = 25_000, collect = true): Promise<string> {
+function runPython(executable: string, args: string[], input = '', timeoutMs = 25_000, collect = true,
+  privateOptions?: { env: NodeJS.ProcessEnv; cwd: string }): Promise<string> {
   return new Promise((resolve, reject) => {
     // Isolated mode ignores PYTHONUTF8. Explicit UTF-8 also protects Chinese stdin/JSON on Windows.
     const child = spawn(executable, ['-X', 'utf8', ...args], {
       shell: false,
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
+      cwd: privateOptions?.cwd,
+      env: privateOptions?.env ?? {
         ...process.env,
         PYTHONUTF8: '1',
         PYTHONDONTWRITEBYTECODE: '1',
@@ -150,9 +160,33 @@ export async function callPythonDataSource(
   config: MultiSourcePreference,
   request: Record<string, unknown>,
 ): Promise<unknown> {
+  if (app.isPackaged) {
+    const runtime = resolvePrivatePythonRuntime(process.resourcesPath)
+    const invoke = async (provider: PrivatePythonProvider) => {
+      const command = await privatePythonInvocation(runtime, provider, app.getPath('userData'), PYTHON_BRIDGE, request)
+      const output = await runPython(command.executable, command.args, command.input, 25_000, true, command)
+      return parseBridgeOutput(output)
+    }
+    if (request.operation === 'status') {
+      const packages: Record<string, unknown> = {}
+      for (const provider of ['akshare', 'mootdx', 'pywencai'] as const) {
+        const status = await invoke(provider) as { python?: string; packages?: Record<string, unknown> }
+        if (status.python !== runtime.manifest.python.version || status.packages?.[provider] !== runtime.manifest.providers[provider].version) {
+          throw new Error('PRIVATE_RUNTIME_INVALID')
+        }
+        packages[provider] = status.packages[provider]
+      }
+      return { python: runtime.manifest.python.version, packages }
+    }
+    return invoke(privateProviderForOperation(request.operation))
+  }
   const temporary = join(app.getPath('userData'), 'data-source-cache', 'tmp')
   await mkdir(temporary, { recursive: true })
   const output = await runPython(pythonExecutable(config), ['-I', '-c', PYTHON_BRIDGE], JSON.stringify(request))
+  return parseBridgeOutput(output)
+}
+
+function parseBridgeOutput(output: string): unknown {
   let parsed: BridgeEnvelope
   try {
     parsed = JSON.parse(output) as BridgeEnvelope
@@ -168,23 +202,30 @@ let installation: Promise<string> | null = null
 export function installSelectedDataSourceExtensions(config: MultiSourcePreference): Promise<string> {
   if (installation) return installation
   installation = (async () => {
-    const packages: string[] = []
-    if (config.dailyProviders.includes('akshare') || config.reportProviders.includes('akshare')) packages.push('akshare==1.19.1')
-    if (config.dailyProviders.includes('tdx')) packages.push('mootdx==0.11.7')
-    if (config.wencaiEnabled) packages.push('pywencai==0.13.1')
-    if (packages.length === 0) throw new Error('DEPENDENCY_NOT_INSTALLED')
-    const root = join(app.getPath('userData'), 'data-source-cache')
-    await mkdir(join(root, 'tmp'), { recursive: true })
-    const envDir = join(root, 'python-venv')
-    const status = await callPythonDataSource(config, { operation: 'status' }) as { python?: string }
-    if (!supportsDataSourcePython(String(status.python ?? ''), config)) {
+    const selected: PrivatePythonProvider[] = []
+    if (config.dailyProviders.includes('akshare') || config.reportProviders.includes('akshare')) selected.push('akshare')
+    if (config.dailyProviders.includes('tdx')) selected.push('mootdx')
+    if (config.wencaiEnabled) selected.push('pywencai')
+    if (selected.length === 0) throw new Error('DEPENDENCY_NOT_INSTALLED')
+    // Keep the explicit development interpreter version guard. Packaged callers
+    // never reach this branch, and neither branch runs pip or downloads anything.
+    if (!app.isPackaged) {
+      const status = await callPythonDataSource(config, { operation: 'status' }) as { python?: string }
+      if (!supportsDataSourcePython(String(status.python ?? ''), config)) {
+        throw new Error(minimumDataSourcePythonMinor(config) === 11 ? 'AKSHARE_PYTHON_VERSION_UNSUPPORTED' : 'PYTHON_UNAVAILABLE')
+      }
+    }
+    // Compatibility entry point: validate the offline bundle, never install or fetch.
+    const runtime = resolvePrivatePythonRuntime(process.resourcesPath)
+    if (!supportsDataSourcePython(runtime.manifest.python.version, config)) {
       throw new Error(minimumDataSourcePythonMinor(config) === 11 ? 'AKSHARE_PYTHON_VERSION_UNSUPPORTED' : 'PYTHON_UNAVAILABLE')
     }
-    await runPython(pythonExecutable(config), ['-I', '-m', 'venv', envDir], '', 90_000, false)
-    const managed = process.platform === 'win32' ? join(envDir, 'Scripts', 'python.exe') : join(envDir, 'bin', 'python')
-    await runPython(managed, ['-I', '-m', 'pip', 'install', '--disable-pip-version-check',
-      '--no-input', '--index-url', 'https://pypi.org/simple', ...packages], '', 600_000, false)
-    return managed
+    for (const provider of selected) {
+      const command = await privatePythonInvocation(runtime, provider, app.getPath('userData'), PYTHON_BRIDGE, { operation: 'status' })
+      const status = parseBridgeOutput(await runPython(command.executable, command.args, command.input, 25_000, true, command)) as { packages?: Record<string, unknown> }
+      if (status.packages?.[provider] !== runtime.manifest.providers[provider].version) throw new Error('PRIVATE_RUNTIME_INVALID')
+    }
+    return runtime.executable
   })().finally(() => { installation = null })
   return installation
 }
