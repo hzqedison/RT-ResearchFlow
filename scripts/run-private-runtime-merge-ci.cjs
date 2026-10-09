@@ -13,16 +13,16 @@ const merge = require('./merge-private-runtime-formal-lock.cjs')
 const ROOT = path.resolve(__dirname, '..')
 const REPOSITORY = 'hzqedison/RT-ResearchFlow'
 const REPOSITORY_ID = 1408465497
-const RUN = 37970374403
-const SOURCE = '95b41cf09e2218f93ab97aeffab5df5d168b1f5c'
-const POLICY_SHA = '8092f5c60ccda7fb9254ef407c01028ca03f2c6844585257b619263a93a43a46'
+const RUN = 37974116851
+const SOURCE = 'b0ac15a4dbb7366757e87eedbe9d5d49c64ad99b'
+const POLICY_SHA = 'd7cb20a0894c245ce2f942c5932cc550128003a8d2eab61dd8e9e477ac42b264'
 const PINS = {
-  'win32-x64': { artifactId: 11634649241, jobId: 113955152298, size: 319283556,
-    digest: '2f67b5d4e972b96072c27e165b491ab0decb06927fd87b3f4522c54dad942320' },
-  'darwin-arm64': { artifactId: 11634918332, jobId: 113955152264, size: 308562066,
-    digest: '1b56d9c6c32b9cf7223f610f0f793d3c46bde99e54cfc4ea6f7a0f34dc72b651' },
-  'darwin-x64': { artifactId: 11635207574, jobId: 113955152171, size: 325920016,
-    digest: '6bc33af8d0a3a2e2a1e9f7e4600889b62b7f31335fe3552194d1a12cbcc047f6' },
+  'win32-x64': { artifactId: 11637518821, jobId: 113967912155, size: 319290857,
+    digest: 'fb8c7dfda6728adfd87b1257a5ed293db994408878babdb79cd382ad84691e1c' },
+  'darwin-arm64': { artifactId: 11638257879, jobId: 113967912473, size: 308561518,
+    digest: 'a5aeca3f9a39fa05e5974138e2883d2f7c9af9c076a83222c7329a6c8ae326ac' },
+  'darwin-x64': { artifactId: 11637708563, jobId: 113967912455, size: 325917534,
+    digest: '25453250d7b9852ba3ff527d488b68c03cb3cf9335fcfc87673f01f3a2368832' },
 }
 function fail(code) { const error = new Error(code); error.code = code; throw error }
 function hash(bytes) { return crypto.createHash('sha256').update(bytes).digest('hex') }
