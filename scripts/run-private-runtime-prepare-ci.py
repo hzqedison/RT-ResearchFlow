@@ -173,25 +173,71 @@ def verify_checkout(repo, receipt, proof_path, check=False):
 
 
 def retain_native_candidate(lab, proof):
-    """Preserve unapproved build inputs; never copy into product bundles."""
-    required = ("prepare", "handoff.json", "source-receipt.json", "python.tar.gz")
-    if any(not (lab / name).exists() for name in required):
-        raise ValueError("Complete native candidate inputs are required")
+    """Retain the prepared tree and exact evidence, never raw input caches."""
+    required = ("prepare/candidate-lock.json", "prepare/candidate-fragment.json",
+                "handoff.json", "source-receipt.json")
+    optional = ("prepare/materialize/inventory.json",
+                "prepare/materialize/native-evidence.json",
+                "prepare/resolve/operation-public.json",
+                "prepare/materialize/operation-public.json",
+                "operations.json", "python.tar.gz")
+    tree_name = "prepare/materialize/tree"
+    tree = lab / tree_name
+
+    def checked_path(name, directory=False, needed=True):
+        candidate = lab / name
+        if not candidate.exists() and not candidate.is_symlink() and not candidate.is_junction():
+            if needed:
+                raise ValueError("Complete native candidate inputs are required")
+            return None
+        current = candidate
+        while current != lab:
+            if current.is_symlink() or current.is_junction():
+                raise ValueError("Candidate evidence must not traverse links")
+            current = current.parent
+        if not (candidate.is_dir() if directory else candidate.is_file()):
+            raise ValueError("Unexpected candidate evidence kind")
+        return name
+
+    selected = [checked_path(name) for name in required]
+    checked_path(tree_name, directory=True)
+    selected.append(tree_name)
+    selected.extend(name for item in optional if (name := checked_path(item, needed=False)) is not None)
+    tree_root = tree.resolve(strict=True)
+    if proof.resolve(strict=True).is_relative_to(tree_root):
+        raise ValueError("Candidate archive must be outside its prepared tree")
+
+    def checked_tree(member):
+        local = lab / member.name
+        if local.is_junction() or not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
+            raise ValueError("Unsupported prepared tree member")
+        if member.issym():
+            link = pathlib.PurePosixPath(member.linkname)
+            if (link.is_absolute() or "\\" in member.linkname or
+                    any(":" in part for part in link.parts) or
+                    not local.resolve(strict=True).is_relative_to(tree_root)):
+                raise ValueError("Prepared tree link escapes retained tree")
+        return member
+
     archive = proof / "native-preparation-candidate.tar.gz"
-    # Keep the original relative structure and link bytes. Extraction/rebinding
-    # remains a separate checked stage; this archive grants no execution rights.
+    # Never recurse over prepare: its resolve/materialize assets and private
+    # native-build inputs are not distributable. Do not filter names inside the
+    # complete runtime tree; inventory bytes, modes and safe links stay intact.
     with archive.open("xb") as output:
         with tarfile.open(fileobj=output, mode="w:gz", compresslevel=1, dereference=False) as packed:
-            for name in required:
-                packed.add(lab / name, arcname=name, recursive=True)
+            for name in selected:
+                packed.add(lab / name, arcname=name, recursive=name == tree_name,
+                           filter=checked_tree if name == tree_name else None)
     if archive.stat().st_size > 2 * 1024**3:
         raise ValueError("Native candidate archive budget exceeded")
     return {"kind": "rt-unapproved-native-preparation-payload-v1",
             "filename": archive.name, "size": archive.stat().st_size,
             "sha256": digest(archive), "originalRoot": str(lab),
             "releaseEligible": False, "formalBundle": False,
-            "relocalizationApproved": False,
-            "members": list(required)}
+            "formalApproval": False, "relocalizationApproved": False,
+            "rawInputAssets": False, "privateNativeBuildMaterials": False,
+            "assetsRootIncluded": False, "cleanAssetsRequired": True,
+            "members": selected}
 
 
 def validated_cache_roots(values, temporary):
@@ -228,7 +274,7 @@ def main():
     parser.add_argument("--cache-root", action="append", default=[],
                         help="Exact derived-input cache below this runner temporary directory")
     parser.add_argument("--retain-payload", action="store_true",
-                        help="Preserve unapproved native build inputs in the CI artifact")
+                        help="Retain prepared tree/evidence without raw input assets; not formal approval")
     args = parser.parse_args()
     if (os.environ.get("GITHUB_ACTIONS") != "true" or
             os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"):
@@ -301,8 +347,8 @@ def main():
         raise ValueError("Successful preparation did not produce a handoff")
     if result.returncode == 0:
         shutil.copyfile(handoff, proof / "handoff.json")
-    # The default remains metadata-only. Explicit retained inputs are build-only,
-    # unapproved and excluded from release bundles.
+    # The default remains metadata-only. Explicit retention adds only the full
+    # prepared tree and allowlisted evidence, not resolve/materialize assets.
     copied = resolver_metadata(work, proof)
     shutil.copyfile(receipt, proof / "source-receipt.json")
     copied.extend(("source-before.json", "source-after.json", "source-receipt.json"))

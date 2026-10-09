@@ -2,21 +2,33 @@ name: Native private runtime preparation candidates
 
 on:
   push:
-    branches: [codex/verify-1.7]
+    branches: [codex/verify-1.7, codex/verify-mac-1.7]
     paths:
       - .github/workflows/private-runtime-prepare-native.yml
       - scripts/run-private-runtime-prepare-ci.py
+      - scripts/cache-private-runtime-inputs-ci.py
       - scripts/collect-private-runtime-ci-source.py
       - scripts/prepare-private-python-runtime.py
       - scripts/build-provider-source-wheels.py
       - scripts/build-mootdx-compat-wheel.py
-      - resources/python-runtime/**
+      - scripts/rebuild-lxml-native.py
+      - scripts/build-lxml-redistribution-wheel.py
+      - scripts/build-lxml-matched-public-source.py
+      - resources/python-runtime/preparation.policy.json
+      - resources/python-runtime/bootstrap.py
+      - resources/python-runtime/miniracer_unicode_adapter.py
+      - resources/python-runtime/pywencai_adapter.py
       - electron/shared/privatePythonRuntimeManifest.cjs
   workflow_dispatch:
 
 permissions:
   contents: read
   actions: read
+
+# Only candidate preparation is superseded. Signed/tested release jobs are not.
+concurrency:
+  group: native-private-prepare-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   native-prepare:
@@ -43,11 +55,38 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.13'
-      - name: Run isolated checkout source collector contracts
+      - name: Reuse exact successful derived native assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: hzqedison/RT-ResearchFlow
+          run-id: 37917355513
+          name: lxml-redistribution-${{ matrix.target }}
+          path: ${{ runner.temp }}/rt-lxml-reuse
+      - name: Reuse Windows original native input proof
+        if: matrix.target == 'win32-x64'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: hzqedison/RT-ResearchFlow
+          run-id: 37896686196
+          name: lxml-native-relink-37896686196-1
+          path: ${{ runner.temp }}/rt-lxml-original
+      - name: Verify sources and create exact private input cache
         shell: bash
-        run: >-
-          python -X utf8 -B -I -m unittest discover
-          -s tests/python -p test_private_runtime_ci_source.py
+        env:
+          RT_TARGET: ${{ matrix.target }}
+          SOURCE_VERIFICATION_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          set --
+          if [ "$RT_TARGET" = "win32-x64" ]; then
+            set -- --original-cache "$RUNNER_TEMP/rt-lxml-original/b"
+          fi
+          python -X utf8 -B -I scripts/cache-private-runtime-inputs-ci.py \
+            --target "$RT_TARGET" \
+            --derived-dir "$RUNNER_TEMP/rt-lxml-reuse/lxml-native-consumer-proof/derived" \
+            --work-root "$RUNNER_TEMP/rt-private-inputs" "$@"
       - name: Use private PBS for actual native resolve and materialize
         shell: bash
         env:
@@ -57,11 +96,14 @@ jobs:
           python scripts/run-private-runtime-prepare-ci.py
           --target "$RT_TARGET"
           --proof-dir "$RUNNER_TEMP/private-runtime-prepare-proof"
-      - name: Export candidate evidence only, never runtime payloads
+          --retain-payload
+          --cache-root "$RUNNER_TEMP/rt-private-inputs/private-cache"
+      - name: Preserve unapproved native inputs and evidence for checked assembly
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: private-runtime-prepare-${{ matrix.target }}
           path: ${{ runner.temp }}/private-runtime-prepare-proof
           if-no-files-found: error
-          retention-days: 7
+          compression-level: 0
+          retention-days: 30
