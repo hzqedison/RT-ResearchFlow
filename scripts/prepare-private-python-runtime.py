@@ -1099,7 +1099,8 @@ def materialize(policy, policy_sha, candidate_path, assets, work_root, operation
     safe_extract(python_asset, tree / "python", "python", product_python_member, allow_links=candidate["target"].startswith("darwin"))
     node_asset = verified_asset(local_assets, candidate["node"]["asset"])
     node_prefix = candidate["node"]["asset"]["filename"].removesuffix(".zip").removesuffix(".tar.gz")
-    safe_extract(node_asset, tree / "node", node_prefix, {"node.exe", "LICENSE"} if candidate["target"] == "win32-x64" else {"bin/node", "LICENSE"})
+    safe_extract(node_asset, tree / "node", node_prefix, {"node.exe", "LICENSE"} if candidate["target"] == "win32-x64" else {"bin/node", "LICENSE"},
+                 allow_links=candidate["target"].startswith("darwin"))
     (tree / "providers").mkdir()
     evidence, licenses, metadata_provenance = {}, [], []
     for provider, provider_lock in candidate["providers"].items():

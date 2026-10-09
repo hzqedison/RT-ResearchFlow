@@ -932,6 +932,25 @@ class PortableNativePreparationTests(unittest.TestCase):
             with self.subTest(target=target), self.assertRaises((prep.Invalid, prep.Pending)):
                 prep.link_plan(self.link_entries(target), "python", allow_links=True)
 
+    def test_mac_node_unselected_internal_links_are_checked_but_not_copied(self):
+        entries = [("node", "directory", 0, 0o755, None, None),
+                   ("node/bin", "directory", 0, 0o755, None, None),
+                   ("node/lib", "directory", 0, 0o755, None, None),
+                   ("node/bin/node", "file", 1, 0o755, None, None),
+                   ("node/LICENSE", "file", 1, 0o644, None, None),
+                   ("node/lib/npm.js", "file", 1, 0o644, None, None),
+                   ("node/bin/npm", "symlink", 0, 0o777, None, "../lib/npm.js")]
+        selected = {"bin/node", "LICENSE"}
+        with self.assertRaises(prep.Pending):
+            prep.link_plan(entries, "node", selected, allow_links=False)
+        planned = prep.link_plan(entries, "node", selected, allow_links=True)
+        self.assertEqual(set(planned), selected)
+        self.assertTrue(all(item[0] != "symlink" for item in planned.values()))
+        unsafe = [entry if entry[0] != "node/bin/node" else
+                  ("node/bin/node", "symlink", 0, 0o777, None, "../../outside") for entry in entries]
+        with self.assertRaises(prep.Invalid):
+            prep.link_plan(unsafe, "node", selected, allow_links=True)
+
     def test_link_cycle_and_write_below_link_rejected(self):
         for entries in (self.link_entries("alias", [("python/bin/alias", "symlink", 0, 0o777, None, "python")]),
                         self.link_entries(extra=[("python/bin/python/child", "file", 1, 0o644, None, None)])):
