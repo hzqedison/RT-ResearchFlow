@@ -40,7 +40,12 @@ function pythonCall(python, code, args, work, env) {
     cwd: work, env: stage.childEnvironment(env, work), shell: false,
     windowsHide: true, timeout: 600000, maxBuffer: 8192,
   })
-  if (result.error || result.signal || result.status !== 0) fail('MERGE_HOST_EXTRACT_FAILED')
+  if (result.error || result.signal || result.status !== 0) {
+    const diagnostic = String(result.stderr || result.error?.message || '').slice(0, 4096)
+    process.stderr.write(JSON.stringify({ stage: code === final.PREPARE_ZIP ? 'outer-zip' : 'retained-tree',
+      exitCode: result.status, signal: result.signal, diagnostic }) + '\n')
+    fail('MERGE_HOST_EXTRACT_FAILED')
+  }
 }
 async function run(args, env = process.env) {
   if (env.GITHUB_ACTIONS !== 'true' || env.RUNNER_ENVIRONMENT !== 'github-hosted' ||
