@@ -533,6 +533,41 @@ function validateLock(lock) {
   return lock
 }
 // Manual policy is a build-time authority, never an implicit runtime download or approval.
+function scopedLicenseRequirements(item, policy, target) {
+  const scoped = policy.licenseRequirements.some(row => record(row) &&
+    (Object.hasOwn(row, 'target') || Object.hasOwn(row, 'artifactSha256')))
+  const hashes = [item.asset.sha256, ...(item.licenseSources || []).map(source => source.sha256)]
+  if (scoped) for (const row of policy.licenseRequirements) {
+    if (!record(row) || !TARGETS.includes(row.target) || !text(row.component) || !text(row.version) ||
+        !sha(row.artifactSha256) || !sha(row.sha256) || !text(row.member) ||
+        !['license-text', 'original-notice', 'provenance'].includes(row.role)) fail('invalid scoped license requirement')
+    safeRelative(row.member)
+    if (row.role === 'license-text' && (!text(row.spdx) || !text(row.approvalId))) fail('unbound scoped license text')
+    if (row.role !== 'license-text' && !text(row.retainedPath)) fail('original notice retained path missing')
+  }
+  const rows = policy.licenseRequirements.filter(row =>
+    canonical(row.component) === canonical(item.component) && row.version === item.version &&
+    (!scoped || (row.target === target && hashes.includes(row.artifactSha256))))
+  if (scoped && item.component === 'python-build-standalone') {
+    const members = policy.nativeLicenseInputs?.[target]?.pythonFull?.members
+    const full = item.licenseSources
+    if (!Array.isArray(members) || !members.length || !Array.isArray(full) || full.length !== 1) fail('original Python notice pins missing')
+    const originals = rows.filter(row => row.role !== 'license-text')
+    if (originals.length !== members.length || members.some(pin => !originals.some(row =>
+      row.artifactSha256 === full[0].sha256 && row.member === pin.path && row.sha256 === pin.sha256 &&
+      row.retainedPath === 'licenses/python-full/' + pin.path &&
+      row.role === (pin.path === 'python/PYTHON.json' ? 'provenance' : 'original-notice')))) fail('original Python notice coverage incomplete')
+  } else if (scoped && item.component === 'node') {
+    const pin = policy.nativeLicenseInputs?.[target]?.node
+    const originals = rows.filter(row => row.role !== 'license-text')
+    if (!pin || originals.length !== 1 || originals[0].artifactSha256 !== item.asset.sha256 ||
+        originals[0].member !== pin.member || originals[0].sha256 !== pin.sha256 ||
+        originals[0].retainedPath !== 'node/LICENSE' || originals[0].role !== 'original-notice') fail('original Node notice coverage incomplete')
+  } else if (scoped && rows.some(row => row.role !== 'license-text')) {
+    fail('unexpected original notice scope')
+  }
+  return rows
+}
 function validatePreparationPolicy(manifest, policy, policySha256) {
   if (!sha(policySha256) || manifest.preparationPolicySha256 !== policySha256) fail('preparation policy hash mismatch')
   if (!record(policy) || policy.schemaVersion !== 1 || policy.kind !== 'rt-private-python-preparation-policy' ||
@@ -581,15 +616,17 @@ function validatePreparationPolicy(manifest, policy, policySha256) {
       if (applicable(approval) && (approval.decision !== 'approved' ||
           !item.licenses.some(license => license.approvalId === approval.id))) throw new Error('PRIVATE_RUNTIME_PENDING: license evidence incomplete')
     }
-    const requirements = policy.licenseRequirements.filter(requirement =>
-      canonical(requirement.component) === canonical(item.component) && requirement.version === item.version)
+    const requirements = scopedLicenseRequirements(item, policy, manifest.platform + '-' + manifest.arch)
     if (!requirements.length) throw new Error('PRIVATE_RUNTIME_PENDING: component license requirements missing')
     for (const requirement of requirements) {
       if (!sha(requirement.sha256)) throw new Error('PRIVATE_RUNTIME_PENDING: license member hash missing')
       safeRelative(requirement.member)
-      if (requirement.role === 'provenance') {
-        if (!manifest.files.some(file => file.kind === 'file' && file.sha256 === requirement.sha256)) throw new Error('PRIVATE_RUNTIME_PENDING: provenance missing')
-      } else if (!item.licenses.some(license => license.sha256 === requirement.sha256 && license.spdx === requirement.spdx)) {
+      if (requirement.role === 'provenance' || requirement.role === 'original-notice') {
+        const retainedPath = requirement.retainedPath && safeRelative(requirement.retainedPath)
+        if (!manifest.files.some(file => file.kind === 'file' && file.sha256 === requirement.sha256 &&
+            (!retainedPath || file.path === retainedPath))) throw new Error('PRIVATE_RUNTIME_PENDING: retained original bytes missing')
+      } else if (!item.licenses.some(license => license.sha256 === requirement.sha256 && license.spdx === requirement.spdx &&
+          (!requirement.approvalId || license.approvalId === requirement.approvalId))) {
         throw new Error('PRIVATE_RUNTIME_PENDING: required license text missing')
       }
     }
