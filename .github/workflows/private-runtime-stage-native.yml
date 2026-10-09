@@ -14,6 +14,14 @@ on:
         description: Exact artifact ID containing formal-lock.json; no raw input assets
         required: true
         type: string
+      prepare_run_id:
+        description: Completed successful fullprepare run, not the derived assets run
+        required: true
+        type: string
+      prepare_bindings:
+        description: JSON target map with exact artifactId and jobId for each native prepare
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -32,13 +40,10 @@ jobs:
         include:
           - target: win32-x64
             os: windows-latest
-            artifact: 11612294385
           - target: darwin-arm64
             os: macos-15
-            artifact: 11613335451
           - target: darwin-x64
             os: macos-15-intel
-            artifact: 11612966423
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     env:
@@ -50,6 +55,8 @@ jobs:
       NODE_PATH: ''
       FORMAL_INPUTS_RUN_ID: ${{ inputs.formal_inputs_run_id || vars.RT_RUNTIME_STAGE_FORMAL_INPUTS_RUN_ID }}
       FORMAL_INPUTS_ARTIFACT_ID: ${{ inputs.formal_inputs_artifact_id || vars.RT_RUNTIME_STAGE_FORMAL_INPUTS_ARTIFACT_ID }}
+      PREPARE_RUN_ID: ${{ inputs.prepare_run_id || vars.RT_RUNTIME_STAGE_PREPARE_RUN_ID }}
+      PREPARE_BINDINGS: ${{ inputs.prepare_bindings || vars.RT_RUNTIME_STAGE_PREPARE_BINDINGS }}
     steps:
       - name: Require the existing protected authorization pins
         uses: actions/github-script@v7
@@ -62,6 +69,24 @@ jobs:
                 !/^[a-f0-9]{64}$/.test(e.RT_RUNTIME_RELEASE_AUTHORIZATION_SHA256 || '') ||
                 !e.RT_RUNTIME_RELEASE_AUTHORIZATION_PATH) throw new Error('Existing protected authorization pins are missing');
             if (![e.FORMAL_INPUTS_RUN_ID,e.FORMAL_INPUTS_ARTIFACT_ID].every(v => /^[1-9][0-9]*$/.test(v) && Number.isSafeInteger(Number(v)))) throw new Error('Exact formal input identities required');
+            if (!/^[1-9][0-9]*$/.test(e.PREPARE_RUN_ID || '') || !Number.isSafeInteger(Number(e.PREPARE_RUN_ID))) throw new Error('Exact fullprepare run required');
+            const bindings = JSON.parse(e.PREPARE_BINDINGS || '{}');
+            const targets = ['win32-x64','darwin-arm64','darwin-x64'];
+            if (!bindings || Array.isArray(bindings) || Object.keys(bindings).sort().join(',') !== [...targets].sort().join(',')) throw new Error('Three exact prepare bindings required');
+            for (const target of targets) {
+              const binding = bindings[target];
+              if (!binding || Array.isArray(binding) || Object.keys(binding).sort().join(',') !== 'artifactId,jobId' ||
+                  ![binding.artifactId,binding.jobId].every(v => Number.isSafeInteger(v) && v > 0)) throw new Error('Invalid prepare binding');
+            }
+            const pinned = {
+              'win32-x64': {artifactId:11616690014,jobId:113819981301},
+              'darwin-arm64': {artifactId:11616007217,jobId:113819981587},
+              'darwin-x64': {artifactId:11615829391,jobId:113819981483},
+            };
+            if (Number(e.PREPARE_RUN_ID) !== 37930575544 ||
+                targets.some(t => bindings[t].artifactId !== pinned[t].artifactId || bindings[t].jobId !== pinned[t].jobId)) throw new Error('Final prepare pins mismatch');
+            if (new Set(targets.map(t => bindings[t].artifactId)).size !== 3 ||
+                new Set(targets.map(t => bindings[t].jobId)).size !== 3) throw new Error('Duplicate prepare identities');
             const run = (await github.rest.actions.getWorkflowRun({...context.repo,run_id:Number(e.FORMAL_INPUTS_RUN_ID)})).data;
             const artifact = (await github.rest.actions.getArtifact({...context.repo,artifact_id:Number(e.FORMAL_INPUTS_ARTIFACT_ID)})).data;
             if (run.status !== 'completed' || run.conclusion !== 'success' ||
@@ -86,8 +111,8 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-          run-id: 37922976424
-          artifact-ids: ${{ matrix.artifact }}
+          run-id: ${{ env.PREPARE_RUN_ID }}
+          artifact-ids: ${{ fromJSON(env.PREPARE_BINDINGS)[matrix.target].artifactId }}
           merge-multiple: true
           path: ${{ runner.temp }}/rt-stage-candidate
       - name: Download the approved formal lock metadata
@@ -104,7 +129,7 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-          run-id: 37917355513
+          run-id: 37927640327
           name: lxml-redistribution-${{ matrix.target }}
           path: ${{ runner.temp }}/rt-stage-derived
       - name: Construct existing stage inputs and run the formal native producer
@@ -113,6 +138,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           RT_TARGET: ${{ matrix.target }}
           STAGE_PYTHON: ${{ steps.python.outputs.python-path }}
+          PREPARE_ARTIFACT_ID: ${{ fromJSON(env.PREPARE_BINDINGS)[matrix.target].artifactId }}
+          PREPARE_JOB_ID: ${{ fromJSON(env.PREPARE_BINDINGS)[matrix.target].jobId }}
         run: |
           set -euo pipefail
           node scripts/run-private-runtime-stage-ci.cjs \
@@ -121,7 +148,10 @@ jobs:
             --formal-lock "$RUNNER_TEMP/rt-stage-formal-inputs/formal-lock.json" \
             --derived-cache "$RUNNER_TEMP/rt-stage-derived" \
             --work-root "$RUNNER_TEMP/rt-formal-stage-$RT_TARGET" \
-            --python "$STAGE_PYTHON"
+            --python "$STAGE_PYTHON" \
+            --prepare-run "$PREPARE_RUN_ID" \
+            --prepare-artifact "$PREPARE_ARTIFACT_ID" \
+            --prepare-job "$PREPARE_JOB_ID"
       - name: Preserve exact native report and stage input metadata
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

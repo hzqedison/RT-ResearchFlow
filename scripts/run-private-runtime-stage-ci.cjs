@@ -11,9 +11,16 @@ const ROOT = path.resolve(__dirname, '..')
 const ENTRY = 'scripts/run-private-runtime-stage-ci.cjs'
 const WORKFLOW = '.github/workflows/private-runtime-stage-native.yml'
 const TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64']
-const PREPARE_RUN = 37922976424
-const ARTIFACTS = { 'win32-x64': 11612294385, 'darwin-arm64': 11613335451, 'darwin-x64': 11612966423 }
-const PREPARE_JOBS = { 'win32-x64': 113795107303, 'darwin-arm64': 113795106818, 'darwin-x64': 113795107041 }
+const PREPARE_RUN = 37930575544
+const PREPARE_SOURCE = '516f89d7eb23ce240dcf318bd09f5cf725932c2e'
+const PREPARE_PINS = {
+  'win32-x64': { artifactId: 11616690014, jobId: 113819981301, size: 348982745,
+    digest: '9db3c7ed494d5850c8068c3cfc516fec687bfd51536c347cba3c06856d6a7868' },
+  'darwin-arm64': { artifactId: 11616007217, jobId: 113819981587, size: 258898059,
+    digest: '4c93a36ab2ba6299c94d2fee887da1c7c96f1a54f6c8de6827cfa287ee38bb69' },
+  'darwin-x64': { artifactId: 11615829391, jobId: 113819981483, size: 279015748,
+    digest: 'f0307a9147c2676244c7d94e4553eccd9d477dff374a9c856bf42a2226451fb4' },
+}
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
 function fail(code) { const error = new Error(code); error.code = code; throw error }
 function relative(name) {
@@ -44,13 +51,18 @@ function read(filename, cap = 8 * 1024 * 1024) {
 function writeJson(filename, value) { fs.writeFileSync(filename, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' }) }
 function options(argv) {
   const names = { '--target': 'target', '--candidate-proof': 'candidateProof', '--formal-lock': 'formalLock',
-    '--derived-cache': 'derivedCache', '--work-root': 'workRoot', '--python': 'python' }
+    '--derived-cache': 'derivedCache', '--work-root': 'workRoot', '--python': 'python',
+    '--prepare-run': 'prepareRun', '--prepare-artifact': 'prepareArtifact', '--prepare-job': 'prepareJob' }
   const args = {}
   for (let i = 0; i < argv.length; i += 2) {
     if (!names[argv[i]] || !argv[i + 1] || Object.hasOwn(args, names[argv[i]])) fail('STAGE_USAGE')
     args[names[argv[i]]] = argv[i + 1]
   }
-  if (Object.keys(args).length !== 6 || !TARGETS.includes(args.target)) fail('STAGE_USAGE')
+  if (Object.keys(args).length !== 9 || !TARGETS.includes(args.target)) fail('STAGE_USAGE')
+  for (const name of ['prepareRun', 'prepareArtifact', 'prepareJob']) {
+    if (!/^[1-9][0-9]*$/.test(args[name]) || !Number.isSafeInteger(Number(args[name]))) fail('STAGE_PREPARE_COORDINATES')
+    args[name] = Number(args[name])
+  }
   return args
 }
 async function sourceProof(authorization, authority, repositoryRoot = ROOT) {
@@ -85,18 +97,25 @@ async function sourceProof(authorization, authority, repositoryRoot = ROOT) {
     sourceCommit: trust.approvedSourceCommit, rootTreeOid: commit.tree.sha,
     policySha256: trust.approvedPolicySha256, sourceSnapshotSha256: trust.sourceSnapshotSha256, files }
 }
-async function verifyCandidateOrigin(authority, repository, target) {
+async function verifyCandidateOrigin(authority, repository, target, coordinates) {
+  if (!coordinates || !['prepareRun', 'prepareArtifact', 'prepareJob'].every(name =>
+    Number.isSafeInteger(coordinates[name]) && coordinates[name] > 0)) fail('STAGE_PREPARE_COORDINATES')
+  const pin = PREPARE_PINS[target]
+  if (!pin || coordinates.prepareRun !== PREPARE_RUN || coordinates.prepareArtifact !== pin.artifactId ||
+      coordinates.prepareJob !== pin.jobId) fail('STAGE_PREPARE_PIN_MISMATCH')
   const prefix = '/repos/' + repository
-  const run = await authority.readJson(prefix + '/actions/runs/' + PREPARE_RUN)
-  const artifact = await authority.readJson(prefix + '/actions/artifacts/' + ARTIFACTS[target])
-  if (run.id !== PREPARE_RUN || run.status !== 'completed' || run.conclusion !== 'success' ||
+  const run = await authority.readJson(prefix + '/actions/runs/' + coordinates.prepareRun)
+  const artifact = await authority.readJson(prefix + '/actions/artifacts/' + coordinates.prepareArtifact)
+  if (run.id !== coordinates.prepareRun || run.head_sha !== PREPARE_SOURCE || run.status !== 'completed' || run.conclusion !== 'success' ||
       run.path !== '.github/workflows/private-runtime-prepare-native.yml' ||
       run.repository?.full_name !== repository || run.head_repository?.full_name !== repository ||
-      artifact.id !== ARTIFACTS[target] || artifact.expired || artifact.name !== 'private-runtime-prepare-' + target ||
-      artifact.workflow_run?.id !== PREPARE_RUN || artifact.workflow_run?.head_sha !== run.head_sha ||
-      !/^sha256:[a-f0-9]{64}$/.test(artifact.digest || '')) fail('STAGE_CANDIDATE_ORIGIN')
-  const job = await authority.readJson(prefix + '/actions/jobs/' + PREPARE_JOBS[target])
-  if (job.id !== PREPARE_JOBS[target] || job.run_id !== run.id || job.run_attempt !== run.run_attempt ||
+      artifact.id !== coordinates.prepareArtifact || artifact.expired || artifact.name !== 'private-runtime-prepare-' + target ||
+      artifact.workflow_run?.id !== coordinates.prepareRun || artifact.workflow_run?.head_sha !== run.head_sha ||
+      artifact.size_in_bytes !== pin.size || artifact.digest !== 'sha256:' + pin.digest) fail('STAGE_CANDIDATE_ORIGIN')
+  const job = await authority.readJson(prefix + '/actions/jobs/' + coordinates.prepareJob)
+  const runner = { 'win32-x64': 'windows-latest', 'darwin-arm64': 'macos-15', 'darwin-x64': 'macos-15-intel' }[target]
+  if (job.id !== coordinates.prepareJob || job.run_id !== run.id || job.run_attempt !== run.run_attempt ||
+      job.name !== 'native-prepare (' + target + ', ' + runner + ')' ||
       job.status !== 'completed' || job.conclusion !== 'success' || job.head_sha !== run.head_sha) fail('STAGE_PREPARE_JOB')
   return { runId: run.id, runAttempt: run.run_attempt, sourceCommit: run.head_sha,
     artifactId: artifact.id, artifactArchiveSha256: artifact.digest.slice(7),
@@ -212,7 +231,7 @@ async function run(args, env = process.env) {
   const source = await seal.verifySourceAuthority(authorization.trustedContext, proof, ROOT, authority)
   const load = producer.verifiedLoader(ROOT, source.verified)
   const foundation = load('electron/shared/privatePythonRuntimeManifest.cjs')
-  const origin = await verifyCandidateOrigin(authority, pins.repository, args.target)
+  const origin = await verifyCandidateOrigin(authority, pins.repository, args.target, args)
   const summary = JSON.parse(read(path.join(proofDir, 'summary.json')))
   const archivePin = summary.unapprovedNativePayload
   const archive = owned(path.join(proofDir, 'native-preparation-candidate.tar.gz'), temporary)
