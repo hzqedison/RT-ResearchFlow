@@ -1,0 +1,59 @@
+{
+  "kind": "rt-version-matched-source-notice-inventory-v1",
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "status": "openssl-notice-inventory-verified-tk-source-unavailable",
+  "upstreamSourceCommit": "5e46737f6480fc315ebfea83866910cbfcc772f0",
+  "openssl": {
+    "downloadUrl": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz",
+    "size": 53279637,
+    "sha256": "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a",
+    "inventoryMethod": "Complete tar member listing via Windows tar, successful exit 0, no extraction or compilation",
+    "memberCount": 6078,
+    "noticeNamePattern": "Case-insensitive basename NOTICE, including dot/underscore extensions and descendant paths",
+    "noticeMembers": [],
+    "licenseMembers": [
+      "openssl-3.5.9/LICENSE.txt",
+      "openssl-3.5.9/external/perl/Text-Template-1.56/LICENSE"
+    ],
+    "assessment": "The exact selected OpenSSL source release has no NOTICE-named distribution file. This resolves the specific pending question about an included upstream NOTICE file for that source release, not every attribution, modification, source-composition or application-distribution obligation.",
+    "binaryObservationsReference": "resources/python-runtime/reviewed-materials/observed-crypto-runtime-scope-1.7-20261011.json",
+    "retention": "Both complete original OpenSSL license notices and acknowledgments remain required by the selected delivery plan."
+  },
+  "tk": {
+    "expectedDownload": {
+      "url": "https://prdownloads.sourceforge.net/tcl/tk9.0.4-src.tar.gz",
+      "size": 4613019,
+      "sha256": "d7a146d2917eb8b5cc95276dbf0e3d03c7464d2b19c1675357857c989301dbb4",
+      "version": "9.0.4",
+      "library_names": [
+        "tk9.0"
+      ],
+      "licenses": [
+        "TCL"
+      ],
+      "license_file": "LICENSE.tcl.txt"
+    },
+    "accepted": false,
+    "failedResponses": [
+      {
+        "name": "tk9.0.4-src.tar.gz",
+        "size": 147262,
+        "sha256": "d5863b95ade0a4eb89bd8e1e6afc9aae5590daf88d89cd9eb9815fe9729314af",
+        "accepted": false
+      },
+      {
+        "name": "tk9.0.4-src.mirror.tar.gz",
+        "size": 146326,
+        "sha256": "ffef3e7cb3b8fdf0cfc79fd251a50b190f68b75f3f2063da19aacdab8acecdad",
+        "accepted": false
+      }
+    ],
+    "assessment": "Responses do not match the exact selected source archive. They must not be used as source-composition or license evidence. X11/TekColor source/behavior mapping remains pending.",
+    "cleanupStatus": "Not completed: exact owned-file cleanup command was rejected by tool safety policy. No alternate deletion mechanism attempted."
+  },
+  "licenseApprovalGranted": false,
+  "finalSealAccepted": false,
+  "installerAccepted": false,
+  "releaseEligible": false
+}
