@@ -7,6 +7,8 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
+from importlib.machinery import BuiltinImporter
 
 REPO = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("rt_crypto_reporter_test", REPO / "scripts/report-private-runtime-native-bootstrap.py")
@@ -68,6 +70,28 @@ class CryptoScopeTests(unittest.TestCase):
                 self.module.OPENSSL_VERSION = value
                 with self.assertRaises(reporter.Invalid):
                     reporter.observe_crypto_scope(self.contract, self.module)
+
+    def test_builtin_ssl_binds_actual_interpreter_carrier(self):
+        carrier = self.root / "python/python"
+        raw = b"synthetic-interpreter-fixture"
+        carrier.write_bytes(raw)
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["python"] = {"executable": "python/python"}
+        manifest["files"].append({"path": "python/python", "kind": "file", "size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()})
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        del self.module.__file__
+        self.module.__name__ = "_ssl"
+        self.module.__spec__ = SimpleNamespace(name="_ssl", origin="built-in", loader=BuiltinImporter)
+        with patch.object(reporter.sys, "executable", str(carrier)), patch.object(reporter.sys, "builtin_module_names", ("_ssl",)):
+            value = reporter.observe_crypto_scope(self.contract, self.module)
+        self.assertEqual(value["modulePath"], "python/python")
+        self.assertEqual(value["loadingMode"], "builtin")
+        self.assertFalse(value["licenseApprovalGranted"])
+
+    def test_missing_file_without_builtin_identity_is_rejected(self):
+        del self.module.__file__
+        with self.assertRaises(reporter.Invalid):
+            reporter.observe_crypto_scope(self.contract, self.module)
 
     def test_boolean_version_component_rejected(self):
         self.module.OPENSSL_VERSION_INFO = (True, 5, 4, 0, 0)

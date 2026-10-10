@@ -565,7 +565,19 @@ def observe_crypto_scope(contract, module=None):
         import _ssl as module
     root = absolute(contract.get("runtimeRoot"))
     manifest = parse(read(absolute(contract.get("manifestPath"))))
-    filename = absolute(str(module.__file__))
+    filename_value = getattr(module, "__file__", None)
+    loading_mode = "extension-file"
+    if filename_value is None:
+        from importlib.machinery import BuiltinImporter
+        specification = getattr(module, "__spec__", None)
+        require(getattr(module, "__name__", None) == "_ssl"
+                and "_ssl" in sys.builtin_module_names
+                and specification is not None and specification.name == "_ssl"
+                and specification.origin == "built-in" and specification.loader is BuiltinImporter)
+        filename_value = sys.executable
+        loading_mode = "builtin"
+        require(filename_value == str(root / relative(manifest["python"]["executable"])))
+    filename = absolute(str(filename_value))
     require(filename.is_relative_to(root / "python"))
     name = relative(filename.relative_to(root).as_posix())
     rows = manifest.get("files")
@@ -585,7 +597,9 @@ def observe_crypto_scope(contract, module=None):
     return {"kind": "rt-loaded-crypto-runtime-scope-v1", "modulePath": name,
             "moduleSha256": pin["sha256"], "moduleSize": pin["size"],
             "libraryVersion": version, "libraryVersionInfo": list(info),
-            "observation": "loaded-module-with-manifest-byte-binding",
+            "loadingMode": loading_mode,
+            "observation": ("loaded-builtin-with-python-executable-byte-binding" if loading_mode == "builtin"
+                            else "loaded-module-with-manifest-byte-binding"),
             "licenseApprovalGranted": False, "releaseEligible": False}
 
 
