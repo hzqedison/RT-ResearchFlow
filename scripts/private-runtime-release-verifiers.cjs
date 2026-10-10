@@ -178,6 +178,8 @@ function createReleaseVerifiers({ repositoryRoot, sourceMembers, trustedContext,
   }
   if (new Set(policy.reviewRecords.map(record => record.path)).size !== policy.reviewRecords.length) reject('DUPLICATE_APPROVED_REVIEW_RECORD')
   const records = new Map()
+  const { createDistributionEvidenceReader } = require('./private-runtime-recipient-materials.cjs')
+  const readEvidence = createDistributionEvidenceReader({ repositoryRoot, sourceMembers: members, trustedContext: context })
   for (const pin of policy.reviewRecords) {
     if (!pin || !/^[a-f0-9]{64}$/.test(pin.sha256 || '') || members.get(pin.path) !== pin.sha256) reject('REVIEW_RECORD_SOURCE_NOT_VERIFIED')
     const bytes = safeBytes(repositoryRoot, pin.path)
@@ -201,13 +203,14 @@ function createReleaseVerifiers({ repositoryRoot, sourceMembers, trustedContext,
         evidence.format !== format || !TARGETS.includes(target) || !manifest || manifest.platform + '-' + manifest.arch !== target) reject('OBLIGATION_REVIEW_AUTHORITY_MISMATCH')
     const expected = { target, id: obligation.id, component: asset.component, version: asset.version,
       artifactSha256: asset.artifactSha256, licenseSha256: obligation.scope.licenseSha256, decision: review.decision,
-      format, evidencePath: evidence.path, evidenceSha256: evidence.sha256, payloadFiles: obligation.payloadFiles }
+      format, evidencePath: evidence.path, evidenceSha256: evidence.sha256, payloadFiles: obligation.payloadFiles,
+      ...(evidence.location === undefined ? {} : { evidenceLocation: evidence.location }) }
     const matches = authorized.record.evidenceAcceptances.filter(item => canonical(item.binding) === canonical(expected))
     if (!matches.length) return { status: 'pending', reason: 'EXACT_EVIDENCE_REVIEW_MISSING' }
     if (matches.length !== 1 || matches[0].decision !== 'approved' || matches[0].basis !== 'independent-review' ||
         !['satisfied', 'not-applicable'].includes(review.decision) ||
         (review.decision === 'not-applicable' && format !== 'target-absence-evidence' && !obligation.requiredEvidence.includes('target-absence-evidence'))) reject('OBLIGATION_EVIDENCE_NOT_APPROVED')
-    const bytes = safeBytes(path.join(preparedRoot, target), evidence.path)
+    const bytes = readEvidence({ target, manifest, file: evidence, role: 'evidence', preparedRoot })
     if (hash(bytes) !== evidence.sha256) reject('OBLIGATION_REVIEWED_BYTES_CHANGED')
     // The semantic decision is an independently reviewed source-authorized
     // record for these exact bytes, not an "accepted" field in payload JSON.

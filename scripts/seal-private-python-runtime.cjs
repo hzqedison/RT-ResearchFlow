@@ -8,6 +8,7 @@ const https = require('node:https')
 const crypto = require('node:crypto')
 const Module = require('node:module')
 const zlib = require('node:zlib')
+const { createDistributionEvidenceReader } = require('./private-runtime-recipient-materials.cjs')
 const TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64']
 const POLICY = 'resources/python-runtime/preparation.policy.json'
 const RULES = 'resources/python-runtime/distribution-obligations.policy.json'
@@ -31,7 +32,7 @@ const PREPARATION_SOURCE = [
   'scripts/private-node-js-runtime/rt_private_node_js_runtime/worker.cjs',
   'scripts/rebuild-lxml-native.py',
 ].sort()
-const REQUIRED_SOURCE = [IMPLEMENTATION, POLICY,
+const REQUIRED_SOURCE = [IMPLEMENTATION, POLICY, 'scripts/private-runtime-recipient-materials.cjs',
   'scripts/bundle-private-python-runtime.cjs', 'scripts/validate-private-python-runtime.cjs',
   'scripts/private-python-runtime-builder.cjs', ...PREPARATION_SOURCE]
 const FORMATS = new Set(['original-notice-bytes', 'readable-notice-index', 'source-asset-pin',
@@ -417,8 +418,9 @@ function verifyDistributionPending(fragments, targets, assembled = false) {
     new Set(assembled ? [] : ['assembly']))
 }
 
-async function verifyObligationCoverage({ trust, proof, rules, manifests, preparedRoot, sourceMembers, authority }) {
+async function verifyObligationCoverage({ trust, proof, rules, manifests, preparedRoot, sourceMembers, authority, repositoryRoot }) {
   const targets = distributionTargets(trust)
+  const readEvidence = createDistributionEvidenceReader({ repositoryRoot, sourceMembers, trustedContext: trust })
   if (!rules) pending('OBLIGATION_RULES_MISSING')
   if (rules.schemaVersion !== 1 || rules.kind !== 'rt-runtime-distribution-obligation-policy-v1' ||
       rules.preparationPolicySha256 !== trust.approvedPolicySha256 || !Array.isArray(rules.assets)) invalid('OBLIGATION_RULES_INVALID')
@@ -460,19 +462,19 @@ async function verifyObligationCoverage({ trust, proof, rules, manifests, prepar
         if (review.decision === 'not-applicable' && !obligation.requiredEvidence.includes('target-absence-evidence')) invalid('OBLIGATION_ABSENCE_UNPROVED', obligation.id)
         if (canonical(review.payloadFiles) !== canonical(obligation.payloadFiles)) invalid('OBLIGATION_PAYLOAD_MISMATCH', obligation.id)
         for (const file of obligation.payloadFiles) {
-          if (!manifest.files.some(item => item.kind === 'file' && item.path === file.path && item.sha256 === file.sha256) ||
-              hash(bytesBelow(path.join(preparedRoot, target), file.path)) !== file.sha256) invalid('OBLIGATION_PAYLOAD_BYTES', obligation.id)
+          readEvidence({ target, manifest, file, role: 'payload', preparedRoot })
         }
         if (!Array.isArray(review.evidence) || new Set(review.evidence.map(item => item.format)).size !== review.evidence.length ||
             canonical(review.evidence.map(item => item.format).sort()) !== canonical([...obligation.requiredEvidence].sort())) invalid('OBLIGATION_EVIDENCE_COVERAGE', obligation.id)
         for (const evidence of review.evidence) {
           sha(evidence.sha256); relative(evidence.path)
-          if (hash(bytesBelow(path.join(preparedRoot, target), evidence.path)) !== evidence.sha256) invalid('OBLIGATION_EVIDENCE_BYTES', obligation.id)
+          const evidenceBytes = readEvidence({ target, manifest, file: evidence, role: 'evidence', preparedRoot })
           if (evidence.format === 'original-notice-bytes') {
-            if (!obligation.payloadFiles.some(file => file.path === evidence.path && file.sha256 === evidence.sha256)) invalid('NOTICE_NOT_IN_PAYLOAD', obligation.id)
+            if (!obligation.payloadFiles.some(file => file.path === evidence.path && file.sha256 === evidence.sha256 &&
+                (file.location || 'runtime') === (evidence.location || 'runtime'))) invalid('NOTICE_NOT_IN_PAYLOAD', obligation.id)
           } else if (evidence.format === 'readable-notice-index') {
             let text
-            try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytesBelow(path.join(preparedRoot, target), evidence.path)) }
+            try { text = new TextDecoder('utf-8', { fatal: true }).decode(evidenceBytes) }
             catch { invalid('NOTICE_INDEX_ENCODING', obligation.id) }
             if (!obligation.payloadFiles.length || obligation.payloadFiles.some(file => !text.includes(file.path))) invalid('NOTICE_INDEX_MISSING_ENTRY', obligation.id)
           } else {
@@ -529,7 +531,7 @@ async function sealPrivateRuntime(input, authority = githubAuthority()) {
           evidence.bindingSha256 !== digest(bindings[target].binding)) invalid('NATIVE_BOOTSTRAP_VERIFICATION_FAILED', target)
     }
     await verifyObligationCoverage({ trust, proof: obligationsProof, rules: jsonBytes(bytesBelow(repositoryRoot, RULES)),
-      manifests: lock.platforms, preparedRoot, sourceMembers: source.verified, authority })
+      manifests: lock.platforms, preparedRoot, sourceMembers: source.verified, authority, repositoryRoot })
     // Distribution scope is protected source-authorized context, never caller discharge lists.
     verifyDistributionPending(fragmentObjects, deliveryTargets)
     const { assemble } = load('scripts/bundle-private-python-runtime.cjs')
