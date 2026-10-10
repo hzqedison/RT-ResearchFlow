@@ -559,9 +559,40 @@ known group after reporter exit, without depending on a live root PID.
             "outerFinalGroupEmptyConfirmationRequired": True}
 
 
+def observe_crypto_scope(contract, module=None):
+    """Observed loaded-library identity; never a license compatibility decision."""
+    if module is None:
+        import _ssl as module
+    root = absolute(contract.get("runtimeRoot"))
+    manifest = parse(read(absolute(contract.get("manifestPath"))))
+    filename = absolute(str(module.__file__))
+    require(filename.is_relative_to(root / "python"))
+    name = relative(filename.relative_to(root).as_posix())
+    rows = manifest.get("files")
+    require(isinstance(rows, list))
+    matches = [row for row in rows if isinstance(row, dict) and row.get("path") == name]
+    require(len(matches) == 1 and matches[0].get("kind") == "file")
+    pin = matches[0]
+    digest_valid(pin.get("sha256"))
+    raw = read(filename, 128 * 1024 * 1024)
+    require(type(pin.get("size")) is int and len(raw) == pin["size"] and sha(raw) == pin["sha256"])
+    version = module.OPENSSL_VERSION
+    info = module.OPENSSL_VERSION_INFO
+    require(isinstance(version, str) and 0 < len(version) <= 128
+            and re.fullmatch(r"(?:OpenSSL|LibreSSL) [0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9 .()-]*", version) is not None
+            and isinstance(info, tuple) and len(info) == 5
+            and all(type(value) is int and 0 <= value <= 4294967295 for value in info))
+    return {"kind": "rt-loaded-crypto-runtime-scope-v1", "modulePath": name,
+            "moduleSha256": pin["sha256"], "moduleSize": pin["size"],
+            "libraryVersion": version, "libraryVersionInfo": list(info),
+            "observation": "loaded-module-with-manifest-byte-binding",
+            "licenseApprovalGranted": False, "releaseEligible": False}
+
+
 def report(contract, pins, pre_seal_owned_posix_root=None):
     preflight = ownership_preflight(pre_seal_owned_posix_root)
     owned_root = preflight.get("ownedPosixRoot")
+    crypto_scope = observe_crypto_scope(contract)
     results = []
     for invocation in contract["invocations"]:
         for filename, expected in pins:
@@ -584,7 +615,7 @@ def report(contract, pins, pre_seal_owned_posix_root=None):
             "reporter": contract["reporter"], "nativePlatform": native_platform, "nativeArch": native_arch,
             "validatorPassed": len(results) == 3, "executableModeChecked": True, "invocationFlags": FLAGS,
             "observationMethod": "owned-process-exit-v1", "results": results,
-            "ownershipPreflight": preflight,
+            "ownershipPreflight": preflight, "cryptoRuntimeScope": crypto_scope,
             "ownershipCoverage": {"worker": "kernel-job-active-count" if owned_root is None else "direct-child-reap-and-group-quiescence",
                                   "tokenNode": "worker-job-and-Popen-exit" if owned_root is None else "actual-Popen-exit-and-inherited-group-observation",
                                   "dependencyAuditNode": "no individual PID observation; pinned-bootstrap-reap-and-owned-group-check",
