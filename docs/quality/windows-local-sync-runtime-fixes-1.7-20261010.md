@@ -24,3 +24,18 @@ Date: 2026-10-10. Scope: isolated local engineering checks, not final release ac
 - Cleanup of disposable profiles was rejected by the environment safety policy. It was not executed or retried through an alternative deletion mechanism; temporary material remains under D:/RT-ResearchFlow-BuildCache.
 
 The release version remains 1.7.0 within this unreleased iteration. This record must not be used as a final acceptance certificate.
+
+
+## Full live current-concept sync: 2026-10-10
+
+- Scope: isolated Windows Electron/SQLite, read-only public sources, not the installed profile.
+- Result: NOT accepted as a complete sync. Attempted 153 of 175 boards; saved 149; failed 4; retained 8,280 current memberships. The service stopped after consecutive failures.
+- The run began with 83 previously cached boards. Cache totals are not proof that this run completed all boards.
+- Live source trace reproduced three count/list discrepancies with the production adapter:
+  - SINA:gn_sgqgg: reported count 52, first page 53 rows.
+  - SINA:gn_jrcg: reported count 250, pages 100 + 100 + 51 rows.
+  - SINA:gn_sbzc: reported count 99, first page 100 rows.
+- All traced rows passed the observed A-share symbol-shape check. The adapter rejected the page/count mismatch with FACT_INVALID; this is not evidence of a Tushare key configuration failure.
+- Existing count checks have NOT been relaxed. A source-pagination/count-discrepancy handling decision is awaiting the user's choice.
+- Local diagnostic results were captured under the existing D-drive acceptance directory. They contain public observations only and are not protected release authorization or native release evidence.
+- No broker account was connected, no order submitted, and no installed app/profile overwritten.
