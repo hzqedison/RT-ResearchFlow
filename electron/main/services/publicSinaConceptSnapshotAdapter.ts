@@ -12,6 +12,19 @@ const MAX_MEMBERS = 6000
 const MAX_BYTES = 1024 * 1024
 const CODE = /^SINA:(gn_[A-Za-z0-9_]{1,60})$/
 
+export class PublicConceptCountMismatchError extends Error {
+  readonly code = 'SOURCE_COUNT_MISMATCH'
+  constructor(
+    readonly reportedTotal: number,
+    readonly expectedPageRows: number,
+    readonly receivedPageRows: number,
+    readonly page: number,
+  ) {
+    super('FACT_INVALID')
+    this.name = 'PublicConceptCountMismatchError'
+  }
+}
+
 function snapshot<T>(rows: T[]): PublicConceptSnapshot<T> {
   return { source: 'sina_public', dateBasis: 'current-observation',
     observedAt: Date.now(), historicalCoverage: false,
@@ -92,7 +105,11 @@ export async function fetchSinaConceptMembers(code: string, options: PublicConce
     const url = new URL('/quotes_service/api/json_v2.php/Market_Center.getHQNodeData', HOST)
     url.search = new URLSearchParams({ node, page: String(page), num: String(PAGE_SIZE), sort: 'symbol', asc: '1' }).toString()
     const values = parse(await body(url, options, signal))
-    if (!Array.isArray(values) || values.length !== Math.min(PAGE_SIZE, total - rows.length)) throw new Error('FACT_INVALID')
+    if (!Array.isArray(values) || values.length > PAGE_SIZE) throw new Error('FACT_INVALID')
+    const expectedPageRows = Math.min(PAGE_SIZE, total - rows.length)
+    if (values.length !== expectedPageRows) {
+      throw new PublicConceptCountMismatchError(total, expectedPageRows, values.length, page)
+    }
     for (const value of values) {
       if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('FACT_INVALID')
       const { symbol, code: stockCode, name } = value as Record<string, unknown>

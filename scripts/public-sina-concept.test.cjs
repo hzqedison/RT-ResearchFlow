@@ -37,6 +37,31 @@ test('incomplete, duplicate, or inconsistent members are rejected', async () => 
     await assert.rejects(adapter.fetchSinaConceptMembers('SINA:gn_test', { fetcher: async url => response(String(url).includes('StockCount') ? '"2"' : values) }), /FACT_INVALID/)
   }
 })
+
+test('count mismatch keeps rejection and exposes only numerical diagnostics', async () => {
+  await assert.rejects(adapter.fetchSinaConceptMembers('SINA:gn_test', {
+    fetcher: async url => response(String(url).includes('StockCount') ? '"2"' : [member]),
+  }), error => {
+    assert.ok(error instanceof adapter.PublicConceptCountMismatchError)
+    assert.equal(error.message, 'FACT_INVALID')
+    assert.equal(error.code, 'SOURCE_COUNT_MISMATCH')
+    assert.equal(error.reportedTotal, 2)
+    assert.equal(error.expectedPageRows, 2)
+    assert.equal(error.receivedPageRows, 1)
+    assert.equal(error.page, 1)
+    return true
+  })
+})
+
+test('overfull pages remain invalid instead of receiving count-mismatch diagnostics', async () => {
+  await assert.rejects(adapter.fetchSinaConceptMembers('SINA:gn_test', {
+    fetcher: async url => response(String(url).includes('StockCount') ? '"101"' : Array(101).fill(member)),
+  }), error => {
+    assert.equal(error.message, 'FACT_INVALID')
+    assert.equal(error instanceof adapter.PublicConceptCountMismatchError, false)
+    return true
+  })
+})
 test('empty boards are not reported as available and invalid codes do not fetch', async () => {
   const result = await adapter.fetchSinaConceptMembers('SINA:gn_test', { fetcher: async () => response('"0"') })
   assert.equal(result.state, 'empty')

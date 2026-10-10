@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import type { PublicConceptSyncStatus } from '../../../electron/shared/publicConceptSnapshots'
+import type { PublicConceptSyncFailure, PublicConceptSyncStatus } from '../../../electron/shared/publicConceptSnapshots'
 
 const LABELS: Record<PublicConceptSyncStatus['state'], string> = {
   idle: '尚未开始本轮同步', running: '正在同步', completed: '本轮索引中的板块已同步',
   partial: '部分成功，请检查失败项后重试', failed: '未取得可保存的数据', cancelled: '已取消或达到时间上限',
+}
+
+const FAILURE_LABELS: Record<PublicConceptSyncFailure['reason'], string> = {
+  SOURCE_COUNT_MISMATCH: '源站数量接口与实际名单不一致，数据未入库',
+  UPSTREAM_EMPTY: '源站未返回可保存的当前成分',
+  UPSTREAM_FAILED: '源站请求失败，请稍后重试',
+  FACT_INVALID: '源站数据格式或完整性校验未通过',
+  BOARD_REQUEST_OR_WRITE_FAILED: '请求或本地保存失败，请稍后重试',
 }
 
 export function PublicConceptSyncPanel({ open }: { open: boolean }): JSX.Element {
@@ -64,6 +72,16 @@ export function PublicConceptSyncPanel({ open }: { open: boolean }): JSX.Element
         </>}
         {error && <p className="text-amber-800 dark:text-amber-300">{error}</p>}
       </div>
+      {!!status?.failures?.length && <div aria-label="题材同步失败详情" className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+        <p className="font-semibold">本轮失败详情（最多显示 8 项）</p>
+        <ul className="mt-1 space-y-2">
+          {status.failures.map((failure, index) => <li key={`${failure.conceptCode}:${index}`}>
+            <p>{failure.conceptName}（{failure.conceptCode}）：{FAILURE_LABELS[failure.reason]}</p>
+            {failure.countMismatch && <p>数量接口报 {failure.countMismatch.reportedTotal} 条；第 {failure.countMismatch.page} 页预期 {failure.countMismatch.expectedPageRows} 条，实际返回 {failure.countMismatch.receivedPageRows} 条。这是源站数据不一致，无需重新填写 Tushare Token。</p>}
+          </li>)}
+        </ul>
+        <p className="mt-2">失败题材的旧缓存不会被清除；有缓存不代表本轮同步成功。</p>
+      </div>}
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" disabled={busy} onClick={() => void act()} className="min-h-10 rounded-md bg-cyan-700 px-3 text-xs font-semibold text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50">{busy ? '同步处理中' : '同步全部当前题材'}</button>
         {status?.state === 'running' && <button type="button" disabled={starting} onClick={() => void act(true)} className="min-h-10 rounded-md border border-slate-300 px-3 text-xs disabled:opacity-50">取消同步</button>}

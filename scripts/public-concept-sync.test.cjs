@@ -9,6 +9,7 @@ require.extensions['.ts'] = (module, filename) => {
   module._compile(output, filename)
 }
 const { syncPublicConceptSnapshots, getPublicConceptSyncStatus, cancelPublicConceptSync } = require('../electron/main/services/publicConceptSnapshotSyncService.ts')
+const { PublicConceptCountMismatchError } = require('../electron/main/services/publicSinaConceptSnapshotAdapter.ts')
 function database() {
   const rows = new Map()
   return {
@@ -43,6 +44,8 @@ test('empty and failed member requests preserve old cache', async () => {
     assert.equal(result.failedBoards, 1)
     assert.equal(db.rows.get('BK0655').payload, 'old')
     assert.equal(JSON.stringify(result).includes('secret'), false)
+    assert.equal(result.failures.length, 1)
+    assert.equal(JSON.stringify(result.failures).includes('secret'), false)
   }
 })
 test('cancelled task does not save returned data', async () => {
@@ -63,4 +66,45 @@ test('three consecutive failures stop requests without pretending all boards wer
   assert.equal(result.state, 'failed')
   assert.equal(result.attemptedBoards, 3)
   assert.equal(result.totalBoards, 5)
+})
+
+test('count discrepancies identify the board without writing data or altering strict acceptance', async () => {
+  const db = database()
+  db.rows.set('BK0655', { time: 1, count: 2, payload: 'old' })
+  const result = await syncPublicConceptSnapshots(db, {
+    index: async () => snapshot(definitions),
+    members: async () => { throw new PublicConceptCountMismatchError(52, 52, 53, 1) },
+  })
+  assert.equal(result.state, 'failed')
+  assert.equal(result.reason, 'SOURCE_COUNT_MISMATCH')
+  assert.equal(result.savedBoards, 0)
+  assert.equal(db.rows.get('BK0655').payload, 'old')
+  assert.deepEqual(result.failures, [{ conceptCode: 'BK0655', conceptName: 'Concept', reason: 'SOURCE_COUNT_MISMATCH',
+    countMismatch: { reportedTotal: 52, expectedPageRows: 52, receivedPageRows: 53, page: 1 } }])
+  result.failures[0].countMismatch.reportedTotal = 999
+  assert.equal(getPublicConceptSyncStatus(db).failures[0].countMismatch.reportedTotal, 52)
+})
+
+test('a new sync clears obsolete failure details', async () => {
+  const db = database()
+  await syncPublicConceptSnapshots(db, { index: async () => snapshot(definitions), members: async () => { throw new Error('UPSTREAM_FAILED') } })
+  assert.equal(getPublicConceptSyncStatus(db).failures.length, 1)
+  const task = syncPublicConceptSnapshots(db, { index: async () => snapshot(definitions), members: async () => snapshot(members) })
+  assert.deepEqual(getPublicConceptSyncStatus(db).failures, [])
+  assert.equal((await task).state, 'completed')
+})
+
+test('diagnostic list is bounded while aggregate failures stay accurate', async () => {
+  const db = database()
+  const boards = Array.from({ length: 19 }, (_, i) => ({ code: `BK${2000 + i}`, name: 'Concept' }))
+  let calls = 0
+  const result = await syncPublicConceptSnapshots(db, {
+    index: async () => snapshot(boards),
+    members: async () => { if (calls++ % 2 === 0) throw new Error('private request details'); return snapshot(members) },
+  })
+  assert.equal(result.state, 'partial')
+  assert.equal(result.attemptedBoards, 19)
+  assert.equal(result.failedBoards, 10)
+  assert.equal(result.failures.length, 8)
+  assert.equal(JSON.stringify(result).includes('private'), false)
 })

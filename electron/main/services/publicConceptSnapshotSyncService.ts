@@ -1,10 +1,27 @@
 import type Database from 'better-sqlite3'
-import type { PublicConceptSyncStatus } from '../../shared/publicConceptSnapshots'
-import { fetchPublicConceptIndexWithFallback, fetchPublicConceptMembersWithFallback } from './publicSinaConceptSnapshotAdapter'
+import type { PublicConceptSyncFailure, PublicConceptSyncStatus } from '../../shared/publicConceptSnapshots'
+import { fetchPublicConceptIndexWithFallback, fetchPublicConceptMembersWithFallback, PublicConceptCountMismatchError } from './publicSinaConceptSnapshotAdapter'
 
 const statuses = new WeakMap<object, PublicConceptSyncStatus>()
 const flights = new WeakMap<object, Promise<PublicConceptSyncStatus>>()
 const controllers = new WeakMap<object, AbortController>()
+
+function failureDetails(board: { code: string; name: string }, error: unknown): PublicConceptSyncFailure {
+  const failure: PublicConceptSyncFailure = {
+    conceptCode: board.code, conceptName: board.name, reason: 'BOARD_REQUEST_OR_WRITE_FAILED',
+  }
+  if (error instanceof PublicConceptCountMismatchError) {
+    failure.reason = 'SOURCE_COUNT_MISMATCH'
+    failure.countMismatch = {
+      reportedTotal: error.reportedTotal, expectedPageRows: error.expectedPageRows,
+      receivedPageRows: error.receivedPageRows, page: error.page,
+    }
+  } else if (error instanceof Error &&
+    (error.message === 'UPSTREAM_EMPTY' || error.message === 'UPSTREAM_FAILED' || error.message === 'FACT_INVALID')) {
+    failure.reason = error.message
+  }
+  return failure
+}
 
 function ensureCache(db: Database.Database): void {
   db.exec(`CREATE TABLE IF NOT EXISTS public_concept_snapshots (
@@ -23,6 +40,9 @@ export function getPublicConceptSyncStatus(db: Database.Database): PublicConcept
     state: 'idle', attemptedBoards: 0, totalBoards: 0, savedBoards: 0, failedBoards: 0,
     reason: null,
     historicalCoverage: false, ...statuses.get(db),
+    failures: (statuses.get(db)?.failures ?? []).map(failure => ({
+      ...failure, ...(failure.countMismatch ? { countMismatch: { ...failure.countMismatch } } : {}),
+    })),
     cachedBoards: cache.boards, cachedMembers: cache.members, latestObservedAt: cache.latestObservedAt,
   }
 }
@@ -41,7 +61,7 @@ export function syncPublicConceptSnapshots(db: Database.Database, dependencies =
   const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15 * 60_000)])
   const status: PublicConceptSyncStatus = {
     ...getPublicConceptSyncStatus(db), state: 'running', attemptedBoards: 0,
-    totalBoards: 0, savedBoards: 0, failedBoards: 0, reason: null,
+    totalBoards: 0, savedBoards: 0, failedBoards: 0, reason: null, failures: [],
   }
   statuses.set(db, status)
   controllers.set(db, controller)
@@ -68,7 +88,10 @@ export function syncPublicConceptSnapshots(db: Database.Database, dependencies =
           if (signal.aborted) throw error
           status.failedBoards++
           consecutiveFailures++
-          status.reason = 'BOARD_REQUEST_OR_WRITE_FAILED'
+          const failure = failureDetails(board, error)
+          status.reason = failure.reason
+          const failures = status.failures ?? (status.failures = [])
+          if (failures.length < 8) failures.push(failure)
         }
         status.attemptedBoards++
         if (consecutiveFailures >= 3) break
