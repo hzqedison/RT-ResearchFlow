@@ -30,6 +30,49 @@ function fileHash(filename) {
   try { let n; while ((n = fs.readSync(fd, buffer)) > 0) digest.update(buffer.subarray(0, n)) } finally { fs.closeSync(fd) }
   return digest.digest('hex')
 }
+async function readObligationsProof(inputs, temporary, authorization, pins, authority) {
+  const filename = path.join(inputs, 'obligations-proof.json')
+  const pin = authorization.obligationsProof
+  // Preserve the existing transported input contract. Missing metadata cannot
+  // be inferred from structural receipts, license text or a GitHub login.
+  if (pin === undefined) {
+    if (!fs.existsSync(filename)) fail('FINAL_OBLIGATIONS_PROOF_MISSING')
+    return JSON.parse(read(stage.owned(filename, temporary)))
+  }
+  // An optional, independently authorized Git object transports real proof.
+  // Its commit can follow approvedSourceCommit: reviews refer to that source,
+  // so requiring proof to live in that same source commit could self-reference.
+  if (!pin || Array.isArray(pin) || !/^[a-f0-9]{40}$/.test(pin.commit || '') ||
+      !/^[a-f0-9]{64}$/.test(pin.sha256 || '') || typeof pin.path !== 'string' ||
+      pin.path.split('/').some(part => !part || part === '.' || part === '..' || /[\\:\x00-\x1f]/.test(part))) fail('FINAL_OBLIGATIONS_PROOF_PIN')
+  const prefix = '/repos/' + pins.repository
+  const commit = await authority.readJson(prefix + '/git/commits/' + pin.commit)
+  if (commit.sha !== pin.commit || !/^[a-f0-9]{40}$/.test(commit.tree?.sha || '')) fail('FINAL_OBLIGATIONS_PROOF_COMMIT')
+  const parts = pin.path.split('/'); let tree = commit.tree.sha, member
+  for (let index = 0; index < parts.length; index++) {
+    const response = await authority.readJson(prefix + '/git/trees/' + tree)
+    if (response.sha !== tree || response.truncated === true || !Array.isArray(response.tree)) fail('FINAL_OBLIGATIONS_PROOF_TREE')
+    const matches = response.tree.filter(item => item.path === parts[index])
+    if (matches.length !== 1) fail('FINAL_OBLIGATIONS_PROOF_MEMBER')
+    member = matches[0]
+    if (!/^[a-f0-9]{40}$/.test(member.sha || '')) fail('FINAL_OBLIGATIONS_PROOF_MEMBER')
+    if (index < parts.length - 1) {
+      if (member.type !== 'tree' || member.mode !== '040000') fail('FINAL_OBLIGATIONS_PROOF_MEMBER')
+      tree = member.sha
+    }
+  }
+  if (member.type !== 'blob' || !['100644', '100755'].includes(member.mode)) fail('FINAL_OBLIGATIONS_PROOF_MEMBER')
+  const blob = await authority.readJson(prefix + '/git/blobs/' + member.sha)
+  const encoded = typeof blob.content === 'string' ? blob.content.replace(/[\r\n]/g, '') : ''
+  if (blob.sha !== member.sha || blob.encoding !== 'base64' || !encoded || encoded.length > 8 * 1024 * 1024 ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) fail('FINAL_OBLIGATIONS_PROOF_BLOB')
+  const bytes = Buffer.from(encoded, 'base64')
+  const oid = crypto.createHash('sha1').update(Buffer.from('blob ' + bytes.length + '\0')).update(bytes).digest('hex')
+  if (blob.size !== bytes.length || oid !== member.sha || hash(bytes) !== pin.sha256) fail('FINAL_OBLIGATIONS_PROOF_BYTES')
+  // A conflicting downloaded copy must not silently fall back to Git bytes.
+  if (fs.existsSync(filename) && !read(stage.owned(filename, temporary)).equals(bytes)) fail('FINAL_OBLIGATIONS_PROOF_CONFLICT')
+  return JSON.parse(bytes)
+}
 function options(argv) {
   const keys = { '--target': 'target', '--formal-inputs': 'formalInputs', '--derived-cache': 'derivedCache',
     '--work-root': 'workRoot', '--python': 'python' }, args = {}
@@ -167,7 +210,7 @@ async function run(args, env = process.env) {
     if (hash(lockBytes) !== authorization.stagingInputs?.[target]?.formalLockSha256) fail('FINAL_FORMAL_LOCK_PIN')
     foundation.validatePreparationPolicy(lock.platforms[target], JSON.parse(policyBytes), hash(policyBytes))
   }
-  const obligationsProof = JSON.parse(read(stage.owned(path.join(inputs, 'obligations-proof.json'), temporary)))
+  const obligationsProof = await readObligationsProof(inputs, temporary, authorization, pins, authority)
   if (!Array.isArray(trust.producers) || trust.producers.length !== 3 || new Set(trust.producers.map(row => row.target)).size !== 3 ||
       trust.producers.some(row => !TARGETS.includes(row.target))) fail('FINAL_THREE_STAGE_PRODUCERS_REQUIRED')
   fs.mkdirSync(work)
@@ -244,4 +287,4 @@ if (require.main === module) {
     process.stderr.write(JSON.stringify({ status: 'pending', releaseEligible: false, code }) + '\n'); process.exitCode = 1
   })
 }
-module.exports = { options, stageOrigin, prepareOrigin, sealAndArchive, PREPARE_ZIP, PACK, run }
+module.exports = { options, stageOrigin, prepareOrigin, readObligationsProof, sealAndArchive, PREPARE_ZIP, PACK, run }
