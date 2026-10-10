@@ -68,34 +68,63 @@ function protectedPins(env) {
       !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA || '')) fail('RELEASE_RUN_IDENTITY_REQUIRED', 'pending')
   return pins
 }
+const immutableGithubObjects = new Map()
+let immutableGithubBytes = 0
+const IMMUTABLE_CACHE_CAP = 48 * 1024 * 1024
 function githubReader(token) {
   if (token !== undefined && (typeof token !== 'string' || /[\r\n]/.test(token))) fail('AUTHORITY_TOKEN_INVALID')
-  return {
-    readJson(apiPath) {
-      if (!/^\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/|$)/.test(apiPath) || /[\\#\s]/.test(apiPath)) fail('AUTHORITY_ENDPOINT_INVALID')
-      return new Promise((resolve, reject) => {
-        const chunks = []; let size = 0, response, finished = false
-        const timer = setTimeout(() => stop('AUTHORITY_DEADLINE'), 15000)
-        const request = https.request({ hostname: 'api.github.com', port: 443, path: apiPath, method: 'GET', rejectUnauthorized: true,
-          headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'RT-ResearchFlow-release-seal',
-            'X-GitHub-Api-Version': '2022-11-28', ...(token ? { Authorization: 'Bearer ' + token } : {}) } }, res => {
-          response = res
-          if (res.statusCode !== 200) return stop('AUTHORITY_UNAVAILABLE')
-          res.on('error', () => stop('AUTHORITY_UNAVAILABLE'))
-          res.on('data', chunk => { size += chunk.length; if (size > 8 * 1024 * 1024) stop('AUTHORITY_RESPONSE_CAP'); else chunks.push(chunk) })
-          res.on('end', () => {
-            if (finished) return
-            finished = true; clearTimeout(timer)
-            try { resolve(parse(Buffer.concat(chunks))) } catch (error) { reject(error) }
-          })
-        })
-        function stop(code) {
+  const identity = hash(Buffer.from(token || 'anonymous'))
+  function requestJson(apiPath) {
+    return new Promise((resolve, reject) => {
+      const chunks = []; let size = 0, response, finished = false
+      const timer = setTimeout(() => stop('AUTHORITY_DEADLINE'), 15000)
+      const request = https.request({ hostname: 'api.github.com', port: 443, path: apiPath, method: 'GET', rejectUnauthorized: true,
+        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'RT-ResearchFlow-release-seal',
+          'X-GitHub-Api-Version': '2022-11-28', ...(token ? { Authorization: 'Bearer ' + token } : {}) } }, res => {
+        response = res
+        if (res.statusCode !== 200) return stop('AUTHORITY_HTTP_' + (Number.isInteger(res.statusCode) ? res.statusCode : 'UNKNOWN'))
+        res.on('error', () => stop('AUTHORITY_UNAVAILABLE'))
+        res.on('data', chunk => { size += chunk.length; if (size > 8 * 1024 * 1024) stop('AUTHORITY_RESPONSE_CAP'); else chunks.push(chunk) })
+        res.on('end', () => {
           if (finished) return
-          finished = true; clearTimeout(timer); response?.destroy(); request.destroy()
-          const error = new Error(code); error.code = code; error.sealStatus = 'pending'; reject(error)
-        }
-        request.on('error', () => stop('AUTHORITY_UNAVAILABLE')); request.end()
+          finished = true; clearTimeout(timer)
+          try { resolve(parse(Buffer.concat(chunks))) } catch (error) { reject(error) }
+        })
       })
+      function stop(code) {
+        if (finished) return
+        finished = true; clearTimeout(timer); response?.destroy(); request.destroy()
+        const error = new Error(code); error.code = code; error.sealStatus = 'pending'; reject(error)
+      }
+      request.on('error', () => stop('AUTHORITY_UNAVAILABLE')); request.end()
+    })
+  }
+  return {
+    async readJson(apiPath) {
+      if (!/^\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/|$)/.test(apiPath) || /[\\#\s]/.test(apiPath)) fail('AUTHORITY_ENDPOINT_INVALID')
+      const immutable = /\/git\/(?:commits|trees|blobs)\/[a-f0-9]{40}$/.test(apiPath)
+      const key = identity + ':' + apiPath
+      if (immutable && immutableGithubObjects.has(key)) return JSON.parse(immutableGithubObjects.get(key).text)
+      let value
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { value = await requestJson(apiPath); break }
+        catch (error) {
+          if (attempt === 2 || !['AUTHORITY_UNAVAILABLE', 'AUTHORITY_DEADLINE', 'AUTHORITY_HTTP_429',
+            'AUTHORITY_HTTP_500', 'AUTHORITY_HTTP_502', 'AUTHORITY_HTTP_503', 'AUTHORITY_HTTP_504'].includes(error.code)) throw error
+          await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)))
+        }
+      }
+      if (immutable) {
+        const text = JSON.stringify(value), size = Buffer.byteLength(text)
+        if (size <= IMMUTABLE_CACHE_CAP) {
+          while (immutableGithubBytes + size > IMMUTABLE_CACHE_CAP) {
+            const oldest = immutableGithubObjects.keys().next().value
+            immutableGithubBytes -= immutableGithubObjects.get(oldest).size; immutableGithubObjects.delete(oldest)
+          }
+          immutableGithubObjects.set(key, { text, size }); immutableGithubBytes += size
+        }
+      }
+      return value
     },
   }
 }
@@ -266,7 +295,7 @@ async function runProducer(inputPath, env = process.env, staging = false) {
     const producer = trust.producers[0]
     const load = verifiedLoader(ROOT, source.verified)
     const foundation = load('electron/shared/privatePythonRuntimeManifest.cjs')
-    const { assemble } = load('scripts/bundle-private-python-runtime.cjs')
+    const { assembleNativeTest } = load('scripts/bundle-private-python-runtime.cjs')
     const lockBytes = readFormalLock(temporaryRoot, input.lockPath), lock = foundation.validateLock(parse(lockBytes))
     const preparation = input.preparations[target]
     const fragmentBytes = readFile(temporaryRoot, preparation.fragmentPath)
@@ -294,11 +323,13 @@ async function runProducer(inputPath, env = process.env, staging = false) {
     const supervisor = load(supervisorPin.path)
     if (typeof supervisor.runOwnedPrivatePython !== 'function') fail('STAGING_SUPERVISOR_IMPLEMENTATION_REQUIRED', 'pending')
     const stagingRoot = fs.mkdtempSync(path.join(temporaryRoot, 'rt-preseal-\u8fd0\u884c-'))
-    // The ordinary assembler keeps ALL real policy/license checks. This path
-    // removes the final-seal dependency, not the approval dependency. No flag or
-    // license status is rewritten, and nothing is copied to release bundles.
-    const assembly = assemble({ lockPath: input.lockPath, preparedRoot: input.preparedRoot,
-      assetsRoot: input.assetsRoot, outputRoot: stagingRoot, target })
+    // Native-only authorization permits isolated execution, not public delivery.
+    // Keep all original bytes and source/dependency checks; distribution review
+    // remains mandatory in the ordinary assembler and independent final seal.
+    const assembly = assembleNativeTest({ lockPath: input.lockPath, preparedRoot: input.preparedRoot,
+      assetsRoot: input.assetsRoot, outputRoot: stagingRoot, target }, {
+      temporaryRoot, expectedFormalLockSha256: authorization.stagingInputs[target].formalLockSha256,
+      expectedPolicySha256: trust.approvedPolicySha256 })
     const runtimeRoot = path.join(stagingRoot, target)
     const manifestPath = path.join(runtimeRoot, 'manifest.json'), manifestBytes = readFile(stagingRoot, manifestPath)
     const manifest = parse(manifestBytes)

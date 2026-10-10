@@ -51,8 +51,45 @@ function verifySourceInputs(manifest, assetsRoot, repositoryRoot, policy) {
   }
 }
 
-function assemble({ lockPath, preparedRoot, assetsRoot, outputRoot, target }) {
+const NATIVE_TEST = Symbol('native-test-only')
+function nativeTestContext(inputs, context) {
+  const invalid = () => { throw new Error('NATIVE_TEST_CONTEXT_INVALID') }
+  if (!context || inputs.target !== process.platform + '-' + process.arch ||
+      !/^[a-f0-9]{64}$/.test(context.expectedFormalLockSha256 || '') ||
+      !/^[a-f0-9]{64}$/.test(context.expectedPolicySha256 || '') ||
+      typeof context.temporaryRoot !== 'string' || !path.isAbsolute(inputs.outputRoot)) invalid()
+  const temporary = fs.realpathSync(context.temporaryRoot), output = path.resolve(inputs.outputRoot)
+  const stat = fs.lstatSync(output)
+  if (path.dirname(output) !== temporary || !path.basename(output).startsWith('rt-preseal-') ||
+      stat.isSymbolicLink() || !stat.isDirectory() || fs.realpathSync(output) !== output || fs.readdirSync(output).length) invalid()
+  return context
+}
+function assemblyPolicy(lock, policy, policySha256, nativeContext) {
+  if (!nativeContext) {
+    for (const value of Object.values(lock.platforms)) validatePreparationPolicy(value, policy, policySha256)
+    return
+  }
+  // Native execution is not a redistribution approval. The producer separately
+  // binds the raw formal lock and policy to protected source authorization.
+  if (policySha256 !== nativeContext.expectedPolicySha256 || policy.schemaVersion !== 1 ||
+      policy.kind !== 'rt-private-python-preparation-policy' || !Array.isArray(policy.recipePins) ||
+      !Array.isArray(policy.licenseApprovals) || !Array.isArray(policy.licenseRequirements) ||
+      Object.values(lock.platforms).some(value => value.preparationPolicySha256 !== policySha256)) {
+    throw new Error('NATIVE_TEST_POLICY_BINDING_INVALID')
+  }
+  // Do not rewrite pending/rejected decisions, remove notices or manufacture
+  // approvals. Runtime bytes, dependency audits, original assets and recipes are
+  // still validated below; the ordinary assemble path retains all release gates.
+}
+function assemble(inputs) { return assembleInternal(inputs) }
+function assembleNativeTest(inputs, context) {
+  nativeTestContext(inputs, context)
+  return assembleInternal(inputs, NATIVE_TEST, context)
+}
+
+function assembleInternal({ lockPath, preparedRoot, assetsRoot, outputRoot, target }, purpose, nativeContext) {
   const lockBytes = fs.readFileSync(lockPath)
+  if (purpose === NATIVE_TEST && hash(lockBytes) !== nativeContext.expectedFormalLockSha256) throw new Error('NATIVE_TEST_LOCK_BINDING_INVALID')
   const lock = validateLock(JSON.parse(lockBytes.toString('utf8')))
   if (!Object.hasOwn(lock.platforms, target)) throw new Error('PRIVATE_RUNTIME_INVALID: unsupported target')
   const source = path.resolve(preparedRoot, target)
@@ -71,7 +108,7 @@ function assemble({ lockPath, preparedRoot, assetsRoot, outputRoot, target }) {
   const policyBytes = fs.readFileSync(policyPath)
   const policy = JSON.parse(policyBytes.toString('utf8'))
   // All targets are sealed against exactly the same manual policy, not just this host.
-  for (const value of Object.values(lock.platforms)) validatePreparationPolicy(value, policy, hash(policyBytes))
+  assemblyPolicy(lock, policy, hash(policyBytes), purpose === NATIVE_TEST ? nativeContext : undefined)
   const generatorSha256 = hash(fs.readFileSync(path.join(repositoryRoot, 'scripts/prepare-private-python-runtime.py')))
   const projected = require('../electron/shared/privatePythonRuntimeManifest.cjs').projectDependencyGraphs(source, manifest, generatorSha256)
   for (const provider of ['akshare', 'mootdx', 'pywencai']) manifest.providers[provider].wheels = projected.providers[provider].wheels
@@ -106,7 +143,12 @@ function assemble({ lockPath, preparedRoot, assetsRoot, outputRoot, target }) {
   }
   validateRuntimeTree(destination, manifest, target)
   fs.writeFileSync(path.join(destination, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' })
-  return { target, manifestSha256: hash(fs.readFileSync(path.join(destination, 'manifest.json'))), files: manifest.files.length }
+  if (purpose === NATIVE_TEST) fs.writeFileSync(path.join(outputRoot, 'native-test-only.json'),
+    JSON.stringify({ kind: 'rt-native-test-only', target, releaseEligible: false,
+      finalReleaseAuthorized: false, licenseApprovalGranted: false,
+      formalLockSha256: hash(lockBytes), policySha256: hash(policyBytes) }) + '\n', { flag: 'wx' })
+  return { target, manifestSha256: hash(fs.readFileSync(path.join(destination, 'manifest.json'))), files: manifest.files.length,
+    ...(purpose === NATIVE_TEST ? { purpose: 'native-test-only', releaseEligible: false, licenseApprovalGranted: false } : {}) }
 }
 
 function options(args) {
@@ -123,4 +165,4 @@ if (require.main === module) {
   try { console.log(JSON.stringify(assemble(options(process.argv.slice(2))))) }
   catch (error) { console.error(error.message.startsWith('PRIVATE_RUNTIME_') ? error.message : 'PRIVATE_RUNTIME_INVALID'); process.exitCode = 1 }
 }
-module.exports = { assemble, options, verifySourceInputs }
+module.exports = { assemble, assembleNativeTest, assemblyPolicy, nativeTestContext, options, verifySourceInputs }
