@@ -19,7 +19,8 @@ check_staging_group()
 
 
 def offline(event, _args):
-    if event.startswith("socket.") or event in ("subprocess.Popen", "os.system", "os.posix_spawn"):
+    # platform.uname() reads the local hostname; this does not open a socket.
+    if (event.startswith("socket.") and event != "socket.gethostname") or event in ("subprocess.Popen", "os.system", "os.posix_spawn"):
         raise RuntimeError("OFFLINE_SMOKE_ONLY")
 
 

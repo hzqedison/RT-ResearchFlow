@@ -1,5 +1,7 @@
 import { RightDrawer } from '../shared/RightDrawer'
 import { SHORT_TERM_WORKBENCH_ACTION_CLASS } from './ShortTermDecisionControls'
+import { syncProgressPresentation } from './syncProgressPresentation'
+import { PublicConceptSyncPanel } from './PublicConceptSyncPanel'
 
 export type ConceptDataSource = 'kpl' | 'ths' | 'dc'
 
@@ -103,9 +105,12 @@ export function ShortTermDataToolsDrawer({
 }: ShortTermDataToolsDrawerProps): JSX.Element {
   const sourceMeta = SOURCE_META[source]
   const busy = syncingBaseData || syncingAllConcepts || syncingMembers || changingSource
-  const sourceProgressPercent = sourceSyncProgress && sourceSyncProgress.total > 0
-    ? Math.round(sourceSyncProgress.current / sourceSyncProgress.total * 100)
-    : 5
+  const sourceProgress = sourceSyncProgress
+    ? syncProgressPresentation(sourceSyncProgress.current, sourceSyncProgress.total)
+    : null
+  const fullProgress = fullSyncProgress
+    ? syncProgressPresentation(fullSyncProgress.done, fullSyncProgress.total)
+    : null
 
   return (
     <RightDrawer
@@ -120,6 +125,7 @@ export function ShortTermDataToolsDrawer({
       bodyClassName="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 dark:bg-slate-950"
     >
       <div data-testid="short-term-data-tools-content" className="space-y-4">
+        <PublicConceptSyncPanel open={open} />
         <section className="rounded-md border border-cyan-200 bg-cyan-50/70 p-4 dark:border-cyan-900/70 dark:bg-cyan-950/25">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
@@ -177,17 +183,25 @@ export function ShortTermDataToolsDrawer({
               <div className="mt-2" aria-live="polite">
                 <div className="mb-1 flex items-center justify-between gap-2 text-[11px]">
                   <span className="truncate">{sourceSyncProgress.message || '题材同步中'}</span>
-                  <span className="font-mono">{sourceSyncProgress.total > 0 ? `${sourceSyncProgress.current}/${sourceSyncProgress.total}` : '同步中'}</span>
+                  <span className="shrink-0 font-mono">{sourceProgress?.total !== null && sourceProgress ? `${sourceProgress.current}/${sourceProgress.total}` : '总量待确认'}</span>
                 </div>
-                <span className="block h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-                  <span className="block h-full rounded-full bg-cyan-600 transition-[width] duration-200 motion-reduce:transition-none" style={{ width: `${sourceProgressPercent}%` }} />
+                <span
+                  role="progressbar"
+                  aria-label="题材采集进度"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={sourceProgress?.percent ?? undefined}
+                  aria-valuetext={sourceProgress?.percent == null ? '正在采集，总量待确认' : `已采集 ${sourceProgress.percent}%，写入结果等待回执`}
+                  className="block h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+                >
+                  <span className={`block h-full rounded-full bg-cyan-600 transition-[width] duration-200 motion-reduce:transition-none ${sourceProgress?.percent == null ? 'w-1/3 animate-pulse motion-reduce:animate-none' : ''}`} style={sourceProgress?.percent == null ? undefined : { width: `${sourceProgress.percent}%` }} />
                 </span>
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">进度仅表示采集，写入结果以返回回执为准。</p>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{sourceProgress?.percent === 100 ? '采集计数已达总量，正在等待写入回执；尚不能视为同步成功。' : '进度仅表示采集，写入结果以返回回执为准；总量未知时不显示百分比。'}</p>
               </div>
             )}
             {syncingAllConcepts && (
               <div className="mt-2 text-[11px] text-cyan-700 dark:text-cyan-300" aria-live="polite">
-                全量题材同步 {fullSyncProgress ? `${fullSyncProgress.done}/${fullSyncProgress.total}` : '准备中'}
+                全量题材同步 {fullProgress ? fullProgress.total === null ? `已采集 ${fullProgress.current} 项，总量待确认` : `${fullProgress.current}/${fullProgress.total}，写入结果以回执为准` : '准备中'}
               </div>
             )}
           </div>
@@ -227,6 +241,17 @@ export function ShortTermDataToolsDrawer({
           </button>
         </section>
 
+        <section aria-label="短线数据同步指引" className="rounded-md border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">第一次同步怎么做</h3>
+          <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-xs leading-5 text-slate-600 dark:text-slate-300">
+            <li>在「配置中心 → 数据源」启用 Tushare、保存 Token，再点击下方「刷新配置状态」。配置已保存不代表已获得所有接口权限。</li>
+            <li>选择题材来源，点击对应题材同步按钮；开盘啦使用「同步全量股票题材」。切换来源不会自动补齐本地数据。</li>
+            <li>需要涨停、龙虎榜等盘后数据时，另外点击「同步盘后基础数据」。等待结果回执，而不是仅看进度是否达到 100%。</li>
+            <li>到「配置中心 → 诊断」查看缺失项。题材、日线与集合竞价是独立数据，题材同步不能代替竞价历史补齐。</li>
+            <li>回到策略页面，选择已有数据的交易日，再刷新策略。周末、节假日不会自动生成当日竞价候选。</li>
+          </ol>
+        </section>
+
         {message && (
           <div className="whitespace-pre-line rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-800 dark:border-blue-800 dark:bg-blue-950/35 dark:text-blue-200" role="status">
             {message}
@@ -245,4 +270,4 @@ export function ShortTermDataToolsDrawer({
       </div>
     </RightDrawer>
   )
-}
+}
