@@ -219,7 +219,265 @@ function findDerived(root, asset) {
   if (matches.length > 1) fail('STAGE_DERIVED_DUPLICATE')
   return matches[0]
 }
+const SAFE_RUNTIME_REASONS = new Set([
+  "AKShare Node derivative identity mismatch",
+  "AKShare pin changed",
+  "Mac executable architecture mismatch",
+  "Mac minimum OS must match the declared 12.0 support",
+  "MiniRacer adapter does not match application source",
+  "MiniRacer adapter version mismatch",
+  "PBS executable evidence missing",
+  "PBS full-archive provenance missing",
+  "SBOM component missing",
+  "SBOM missing",
+  "Windows executable architecture mismatch",
+  "active dependency absent/URL dependency forbidden",
+  "actual installed distribution set mismatch",
+  "all providers required",
+  "approved download sources missing",
+  "asset URL missing",
+  "asset URL/name mismatch",
+  "asset is not pinned",
+  "bootstrap does not match application source",
+  "component license requirements missing",
+  "conflicting asset filename",
+  "dependency audit distribution set mismatch",
+  "dependency audit fields missing",
+  "dependency audit identity/generator mismatch",
+  "dependency audit missing",
+  "dependency audit projection SHA mismatch",
+  "dependency audit projection bytes invalid",
+  "dependency audit projection missing",
+  "dependency audit projection reference invalid",
+  "dependency audit reference missing",
+  "dependency audit validator does not match application source",
+  "dependency audit wheel/original metadata mismatch",
+  "dependency evaluation index missing",
+  "dependency evidence byte mismatch",
+  "dependency evidence inventory mismatch",
+  "dependency graph/extras fixed-point mismatch",
+  "dependency marker environment mismatch",
+  "dependency projection input is neither original constraints nor verified graph",
+  "dependency projection name invalid",
+  "dependency projection requires original constraints",
+  "dependency projection wheel invalid",
+  "dependency root missing",
+  "dependency toolchain identity mismatch",
+  "derived asset must not have a URL",
+  "derived input hash mismatch",
+  "derived wheel identity missing",
+  "download source not approved by policy",
+  "download wheel must not have derived identity",
+  "duplicate audit inventory path",
+  "duplicate dependency evaluation index",
+  "duplicate inventory path",
+  "duplicate pinned license source",
+  "duplicate wheel distribution",
+  "duplicate/invalid audit wheel",
+  "duplicate/invalid installed audit distribution",
+  "escaping symlink",
+  "executable missing",
+  "executable mode missing",
+  "file hash/size missing",
+  "file inventory missing",
+  "incomplete manifest or wrong target",
+  "installed METADATA/original constraints mismatch",
+  "installed WHEEL tags mismatch",
+  "installed closure bytes/facts disagree",
+  "installed closure metadata path invalid",
+  "installed closure reference missing",
+  "invalid SPDX document",
+  "invalid Windows executable",
+  "invalid dependency audit context",
+  "invalid dependency evaluation",
+  "invalid executable",
+  "invalid installed distribution directory",
+  "invalid installed metadata header",
+  "invalid inventory entry",
+  "invalid license approval",
+  "invalid license source list",
+  "invalid manifest file",
+  "invalid official source",
+  "invalid pinned license sources",
+  "invalid preparation policy",
+  "invalid preparation policy file",
+  "invalid recipe approval",
+  "invalid scoped license requirement",
+  "invalid wheel filename",
+  "inventory file absent",
+  "license absent from inventory",
+  "license approval unavailable",
+  "license evidence incomplete",
+  "license evidence missing",
+  "license member hash missing",
+  "license not reviewed",
+  "modern MiniRacer compatibility unresolved",
+  "mootdx Node derivative identity mismatch",
+  "mootdx derived wheel pending",
+  "non-runtime directory",
+  "non-runtime file in inventory",
+  "only locked wheels accepted",
+  "original Node notice coverage incomplete",
+  "original Python notice coverage incomplete",
+  "original Python notice pins missing",
+  "original notice retained path missing",
+  "original wheel metadata missing",
+  "original wheel/dependency graph missing",
+  "output must be a new, separate owned directory",
+  "platform preparation policy mismatch",
+  "preparation policy hash mismatch",
+  "preparation policy missing",
+  "primary provider/version missing",
+  "private Node backend identity unresolved",
+  "provider lock missing",
+  "provider site empty",
+  "pywencai adapter differs from current source",
+  "pywencai pin changed",
+  "recipe not approved by policy",
+  "required license text missing",
+  "resolved edges differ from evaluations",
+  "retained original bytes missing",
+  "runtime file mismatch",
+  "runtime identity mismatch",
+  "runtime root is not an owned directory",
+  "source asset/recipe mismatch",
+  "symlink mismatch/escape",
+  "target runtime asset/license-source pin mismatch",
+  "target runtime pin missing",
+  "target runtime pins missing",
+  "trusted MiniRacer adapter missing",
+  "trusted bootstrap missing",
+  "trusted dependency audit validator missing",
+  "unbound scoped license text",
+  "unexpected original notice scope",
+  "unlisted runtime file",
+  "unreachable installed distribution",
+  "unregistered asset input",
+  "unregistered derived input",
+  "unsafe relative path",
+  "unsafe symlink",
+  "unsupported file kind",
+  "unsupported target",
+  "wheel Python ABI mismatch",
+  "wheel dependency closure incomplete",
+  "wheel identity missing",
+  "wheel platform mismatch"
+])
+const SAFE_SEAL_CODES = new Set([
+  "ARTIFACT_ARCHIVE_INVALID",
+  "ARTIFACT_ARCHIVE_READER_MISSING",
+  "ARTIFACT_MEMBER_BYTES_INVALID",
+  "ARTIFACT_MEMBER_DUPLICATE",
+  "ARTIFACT_MEMBER_INVALID",
+  "ARTIFACT_MEMBER_MISSING",
+  "ARTIFACT_ZIP64_UNSUPPORTED",
+  "ASSEMBLY_BLUEPRINT_CHANGED",
+  "ASSEMBLY_MANIFEST_CHANGED",
+  "ASSEMBLY_NATIVE_TARGET_MISMATCH",
+  "DUPLICATE_OBLIGATION_REVIEW",
+  "DUPLICATE_PRODUCER_TARGET",
+  "EXECUTED_MODULE_CHANGED",
+  "EXECUTED_MODULE_ESCAPE",
+  "EXECUTED_MODULE_NOT_VERIFIED",
+  "EXECUTION_SOURCE_ROOT_MISMATCH",
+  "FILE_ESCAPES_ROOT",
+  "FOREIGN_TREE_BYTES",
+  "FOREIGN_TREE_INVENTORY",
+  "FOREIGN_TREE_SYMLINK",
+  "INCOMPLETE_SOURCE_ALLOWLIST",
+  "INVALID_GITHUB_ENDPOINT",
+  "INVALID_JSON",
+  "INVALID_PROTECTED_CONTEXT",
+  "INVALID_RELATIVE_PATH",
+  "INVALID_SHA256",
+  "INVALID_SOURCE_FILE",
+  "NATIVE_BOOTSTRAP_REPORT_BINDING",
+  "NATIVE_BOOTSTRAP_REPORT_MISSING",
+  "NATIVE_BOOTSTRAP_VERIFICATION_FAILED",
+  "NATIVE_BOOTSTRAP_VERIFICATION_PENDING",
+  "NATIVE_BOOTSTRAP_VERIFIER_MISSING",
+  "NOTICE_INDEX_ENCODING",
+  "NOTICE_INDEX_MISSING_ENTRY",
+  "NOTICE_NOT_IN_PAYLOAD",
+  "OBLIGATIONS_PROOF_INVALID",
+  "OBLIGATIONS_PROOF_MISSING",
+  "OBLIGATION_ABSENCE_UNPROVED",
+  "OBLIGATION_ASSET_CONFLICT",
+  "OBLIGATION_ASSET_NOT_CLASSIFIED",
+  "OBLIGATION_CLASSIFICATION",
+  "OBLIGATION_EVIDENCE_BYTES",
+  "OBLIGATION_EVIDENCE_COVERAGE",
+  "OBLIGATION_EVIDENCE_PENDING",
+  "OBLIGATION_EVIDENCE_REJECTED",
+  "OBLIGATION_PAYLOAD_BINDING",
+  "OBLIGATION_PAYLOAD_BYTES",
+  "OBLIGATION_PAYLOAD_MISMATCH",
+  "OBLIGATION_POLICY_PIN_MISMATCH",
+  "OBLIGATION_REVIEW_MISMATCH",
+  "OBLIGATION_REVIEW_MISSING",
+  "OBLIGATION_REVIEW_SOURCE",
+  "OBLIGATION_RULES_INVALID",
+  "OBLIGATION_RULES_MISSING",
+  "OBLIGATION_RULE_INVALID",
+  "OBLIGATION_TARGET_MISSING",
+  "OBLIGATION_VERIFIER_MISSING",
+  "PREPARATION_AUDIT_BINDING",
+  "PREPARATION_EXECUTION_ASSET",
+  "PREPARATION_GRAPH_PROJECTION",
+  "PREPARATION_HANDOFF_BINDING",
+  "PREPARATION_INPUTS_MISSING",
+  "PREPARATION_LOCK_BINDING",
+  "PREPARATION_NOT_COMPLETE",
+  "PREPARATION_PENDING_REMAINS",
+  "PREPARATION_PENDING_TYPE",
+  "PREPARATION_PROVIDER_PROJECTION",
+  "PREPARATION_SOURCE_SNAPSHOT",
+  "PREPARATION_TREE_PROJECTION",
+  "PREPARATION_WHEEL_PROJECTION",
+  "PRODUCER_ARTIFACT_BYTES_MISMATCH",
+  "PRODUCER_ARTIFACT_MISMATCH",
+  "PRODUCER_IDENTITY_MISMATCH",
+  "PRODUCER_JOB_MISMATCH",
+  "PRODUCER_MEMBER_BINDING_MISSING",
+  "PRODUCER_MEMBER_BYTES_MISMATCH",
+  "PRODUCER_NOT_SUCCESSFUL",
+  "PRODUCER_PIN_MISMATCH",
+  "PRODUCER_TARGET_MISSING",
+  "PROTECTED_CONTEXT_REQUIRED",
+  "REPOSITORY_IDENTITY_MISMATCH",
+  "SOURCE_AUTHORIZATION_PIN_MISMATCH",
+  "SOURCE_BLOB_ENCODING",
+  "SOURCE_BYTES_MISMATCH",
+  "SOURCE_IDENTITY_MISMATCH",
+  "SOURCE_MEMBERSHIP_COVERAGE",
+  "SOURCE_MEMBER_MISSING",
+  "SOURCE_MEMBER_TYPE",
+  "SOURCE_PROOF_MISSING",
+  "SOURCE_SYMLINK",
+  "SOURCE_TREE_INCOMPLETE",
+  "SOURCE_TREE_MISMATCH",
+  "THREE_PRODUCERS_REQUIRED",
+  "UNEXPECTED_OBLIGATION_ASSET",
+  "UNEXPECTED_OBLIGATION_REVIEW",
+  "UNVERIFIED_MODULE_DEPENDENCY",
+  "WORKFLOW_SOURCE_NOT_BOUND"
+])
+const SAFE_STAGE_PHASES = new Set(['authorization', 'source-verification', 'candidate-origin', 'candidate-extraction',
+  'dependency-projection', 'asset-preparation', 'native-producer', 'evidence-copy'])
+function stageFailure(error) {
+  const message = typeof error?.message === 'string' ? error.message : ''
+  const runtime = /^(PRIVATE_RUNTIME_(INVALID|PENDING)): (.+)$/.exec(message)
+  const code = /^[A-Z][A-Z0-9_]+$/.test(error?.code || '') ? error.code
+    : SAFE_SEAL_CODES.has(message) ? message
+      : runtime ? 'STAGE_RUNTIME_' + runtime[2] : 'STAGE_INTEGRATION_FAILED'
+  const status = error?.sealStatus === 'invalid' || runtime?.[2] === 'INVALID' ? 'invalid' : 'pending'
+  return { status, releaseEligible: false, code,
+    ...(SAFE_STAGE_PHASES.has(error?.stagePhase) ? { phase: error.stagePhase } : {}),
+    ...(runtime && SAFE_RUNTIME_REASONS.has(runtime[3]) ? { reason: runtime[3] } : {}) }
+}
 async function run(args, env = process.env) {
+  let phase = 'authorization'
+  try {
   const pins = producer.protectedPins(env)
   if (args.target !== process.platform + '-' + process.arch) fail('STAGE_NATIVE_TARGET')
   const temporary = fs.realpathSync(env.RUNNER_TEMP)
@@ -234,11 +492,13 @@ async function run(args, env = process.env) {
   const sealName = 'scripts/seal-private-python-runtime.cjs'
   if (hash(read(path.join(ROOT, sealName))) !== authorization.entrypoints?.[sealName] ||
       hash(read(path.join(ROOT, 'scripts/seal-private-python-runtime-producer.cjs'))) !== authorization.entrypoints?.['scripts/seal-private-python-runtime-producer.cjs']) fail('STAGE_BOOTSTRAP_SOURCE')
+  phase = 'source-verification'
   const proof = await sourceProof(authorization, authority)
   const seal = producer.verifiedLoader(ROOT, new Map([[sealName, authorization.entrypoints[sealName]]]))(sealName)
   const source = await seal.verifySourceAuthority(authorization.trustedContext, proof, ROOT, authority)
   const load = producer.verifiedLoader(ROOT, source.verified)
   const foundation = load('electron/shared/privatePythonRuntimeManifest.cjs')
+  phase = 'candidate-origin'
   const origin = await verifyCandidateOrigin(authority, pins.repository, args.target, args)
   const summary = JSON.parse(read(path.join(proofDir, 'summary.json')))
   const archivePin = summary.unapprovedNativePayload
@@ -251,6 +511,7 @@ async function run(args, env = process.env) {
   if (archiveHash.digest('hex') !== archivePin.sha256 || archivePin.size > 2 * 1024 ** 3) fail('STAGE_CANDIDATE_ARCHIVE_HASH')
   fs.mkdirSync(work)
   const retained = path.join(work, 'retained'); fs.mkdirSync(retained)
+  phase = 'candidate-extraction'
   pythonCall(args.python, EXTRACT, [archive, retained], work, env, 180000)
   const preparation = { candidateLockPath: path.join(retained, 'prepare/candidate-lock.json'),
     fragmentPath: path.join(retained, 'prepare/candidate-fragment.json'), handoffPath: path.join(retained, 'handoff.json') }
@@ -266,6 +527,7 @@ async function run(args, env = process.env) {
   const preparedRoot = path.join(work, 'prepared'); fs.mkdirSync(preparedRoot)
   fs.renameSync(path.join(retained, 'prepare/materialize/tree'), path.join(preparedRoot, args.target))
   const manifest = structuredClone(lock.platforms[args.target])
+  phase = 'dependency-projection'
   const projected = foundation.projectDependencyGraphs(path.join(preparedRoot, args.target), manifest,
     source.verified.get('scripts/prepare-private-python-runtime.py'))
   for (const provider of ['akshare', 'mootdx', 'pywencai']) manifest.providers[provider].wheels = projected.providers[provider].wheels
@@ -286,12 +548,15 @@ async function run(args, env = process.env) {
     fs.copyFileSync(path.join(ROOT, recipe.path), output, fs.constants.COPYFILE_EXCL)
   }
   const planPath = path.join(work, 'asset-plan.json'); writeJson(planPath, plan)
+  phase = 'asset-preparation'
   pythonCall(args.python, CACHE, [ROOT, planPath, assetsRoot, work], work, env, 1200000)
   const input = { sourceProof: proof, lockPath, preparedRoot, assetsRoot, preparations: { [args.target]: preparation } }
   const inputPath = path.join(work, 'stage-input.json'); writeJson(inputPath, input)
+  phase = 'native-producer'
   const result = await producer.runProducer(inputPath, env, true)
   if (result.status !== 'staged' || result.reporterExitCode !== 0 || result.reporterExitObserved !== true ||
       result.supervisorOwnedTreeEmpty !== true) fail('STAGE_NATIVE_NOT_ACCEPTED')
+  phase = 'evidence-copy'
   const evidence = path.join(work, 'evidence'); fs.mkdirSync(evidence)
   for (const [name, filename] of [['candidate-lock.json', preparation.candidateLockPath],
     ['candidate-fragment.json', preparation.fragmentPath], ['handoff.json', preparation.handoffPath],
@@ -305,11 +570,14 @@ async function run(args, env = process.env) {
     rawInputAssets: false, finalSealAccepted: false, releaseEligible: false,
     files: fs.readdirSync(evidence).sort().map(name => ({ path: name, sha256: hash(name === 'formal-lock.json' ? readFormalLock(path.join(evidence, name)) : read(path.join(evidence, name))), size: fs.statSync(path.join(evidence, name)).size })) })
   return result
+  } catch (error) {
+    if (error && typeof error === 'object') error.stagePhase = phase
+    throw error
+  }
 }
 if (require.main === module) {
   run(options(process.argv.slice(2))).then(result => process.stdout.write(JSON.stringify(result) + '\n')).catch(error => {
-    const code = /^[A-Z][A-Z0-9_]+$/.test(error.code || '') ? error.code : 'STAGE_INTEGRATION_FAILED'
-    process.stderr.write(JSON.stringify({ status: 'pending', releaseEligible: false, code }) + '\n'); process.exitCode = 1
+    process.stderr.write(JSON.stringify(stageFailure(error)) + '\n'); process.exitCode = 1
   })
 }
-module.exports = { options, sourceProof, verifyCandidateOrigin, assetPlan, owned, childEnvironment, EXTRACT, CACHE, readFormalLock, FORMAL_LOCK_BYTE_CAP, run }
+module.exports = { options, sourceProof, verifyCandidateOrigin, assetPlan, owned, childEnvironment, EXTRACT, CACHE, readFormalLock, FORMAL_LOCK_BYTE_CAP, stageFailure, run }
