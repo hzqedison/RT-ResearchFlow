@@ -257,7 +257,8 @@ async function runProducer(inputPath, env = process.env, staging = false) {
     trust.producers = [await resolveStageProducer({ policy: consumer, target, trustedContext: trust, run,
       runId: Number(env.GITHUB_RUN_ID), attempt: Number(env.GITHUB_RUN_ATTEMPT), authority })]
   }
-  const callbacks = verifiers.createReleaseVerifiers({ repositoryRoot: ROOT, sourceMembers: source.verified,
+  const createCallbacks = staging ? verifiers.createNativeBootstrapVerifier : verifiers.createReleaseVerifiers
+  const callbacks = createCallbacks({ repositoryRoot: ROOT, sourceMembers: source.verified,
     trustedContext: trust, verifierPolicy: authorization.verifierPolicy })
   if (staging) {
     const producer = trust.producers[0]
