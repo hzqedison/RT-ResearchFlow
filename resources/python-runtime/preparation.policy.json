@@ -3098,11 +3098,11 @@
     {
       "artifactSha256": "d8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933",
       "component": "python-build-standalone",
-      "decision": "pending",
+      "decision": "approved",
       "id": "astra-mac-notice-d8975d7df4f0-e93716da6b9c",
       "licenseSha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
-      "reviewReference": "resources/python-runtime/reviewed-materials/mac-runtime-independent-notice-review.md#sha256=2870f94e0d9b5d4044c300218a405c900bd45ec9afb3c29d4a4560718603c33d",
-      "reviewedBy": "Astra independent engineering notice review, 2026-10-10",
+      "reviewReference": "resources/python-runtime/reviewed-materials/mac-preparation-notice-review-1.7-20261011.json#sha256=a6ca85fb193f7f65094485995f8d3dbb23d8c1b307048e959a3b156ab5aad4fc",
+      "reviewedBy": "gpt-6.1-sol independent engineering review, 2026-10-11; notice identification and preparation only",
       "spdx": "MPL-2.0",
       "version": "3.13.16"
     },
@@ -3296,11 +3296,11 @@
     {
       "artifactSha256": "d8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933",
       "component": "python-build-standalone",
-      "decision": "pending",
+      "decision": "approved",
       "id": "astra-mac-notice-d8975d7df4f0-3bdff06e6999",
       "licenseSha256": "3bdff06e69991c94664f2ef5c5f8096f60b7dbec071756ea6cc26b445e06ec5b",
-      "reviewReference": "resources/python-runtime/reviewed-materials/mac-runtime-independent-notice-review.md#sha256=2870f94e0d9b5d4044c300218a405c900bd45ec9afb3c29d4a4560718603c33d",
-      "reviewedBy": "Astra independent engineering notice review, 2026-10-10",
+      "reviewReference": "resources/python-runtime/reviewed-materials/mac-preparation-notice-review-1.7-20261011.json#sha256=a6ca85fb193f7f65094485995f8d3dbb23d8c1b307048e959a3b156ab5aad4fc",
+      "reviewedBy": "gpt-6.1-sol independent engineering review, 2026-10-11; notice identification and preparation only",
       "spdx": "Sleepycat AND BSD-3-Clause",
       "version": "3.13.16"
     },
@@ -3384,11 +3384,11 @@
     {
       "artifactSha256": "d8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933",
       "component": "python-build-standalone",
-      "decision": "pending",
+      "decision": "approved",
       "id": "astra-mac-notice-d8975d7df4f0-2daec087a88e",
       "licenseSha256": "2daec087a88e7c9b8082557cdeebad5bbb8155a4137472f0b22e269cd99d0c1e",
-      "reviewReference": "resources/python-runtime/reviewed-materials/mac-runtime-independent-notice-review.md#sha256=2870f94e0d9b5d4044c300218a405c900bd45ec9afb3c29d4a4560718603c33d",
-      "reviewedBy": "Astra independent engineering notice review, 2026-10-10",
+      "reviewReference": "resources/python-runtime/reviewed-materials/mac-preparation-notice-review-1.7-20261011.json#sha256=a6ca85fb193f7f65094485995f8d3dbb23d8c1b307048e959a3b156ab5aad4fc",
+      "reviewedBy": "gpt-6.1-sol independent engineering review, 2026-10-11; notice identification and preparation only",
       "spdx": "LicenseRef-libX11-Composite-Notice",
       "version": "3.13.16"
     },
@@ -3439,11 +3439,11 @@
     {
       "artifactSha256": "d8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933",
       "component": "python-build-standalone",
-      "decision": "pending",
+      "decision": "approved",
       "id": "astra-mac-notice-d8975d7df4f0-9c04cce50c49",
       "licenseSha256": "9c04cce50c4989d5601dd8b07f6ab922c40388b66ac736c9007cb1ed9d9dd560",
-      "reviewReference": "resources/python-runtime/reviewed-materials/mac-runtime-independent-notice-review.md#sha256=2870f94e0d9b5d4044c300218a405c900bd45ec9afb3c29d4a4560718603c33d",
-      "reviewedBy": "Astra independent engineering notice review, 2026-10-10",
+      "reviewReference": "resources/python-runtime/reviewed-materials/mac-preparation-notice-review-1.7-20261011.json#sha256=a6ca85fb193f7f65094485995f8d3dbb23d8c1b307048e959a3b156ab5aad4fc",
+      "reviewedBy": "gpt-6.1-sol independent engineering review, 2026-10-11; notice identification and preparation only",
       "spdx": "OpenSSL",
       "version": "3.13.16"
     },
@@ -3483,11 +3483,11 @@
     {
       "artifactSha256": "d8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933",
       "component": "python-build-standalone",
-      "decision": "pending",
+      "decision": "approved",
       "id": "astra-mac-notice-d8975d7df4f0-3ac5cdd0bef6",
       "licenseSha256": "3ac5cdd0bef6c43ce34c6a7ced452081d9e5a0bf94082b9f9147d23ec9e214f5",
-      "reviewReference": "resources/python-runtime/reviewed-materials/mac-runtime-independent-notice-review.md#sha256=2870f94e0d9b5d4044c300218a405c900bd45ec9afb3c29d4a4560718603c33d",
-      "reviewedBy": "Astra independent engineering notice review, 2026-10-10",
+      "reviewReference": "resources/python-runtime/reviewed-materials/mac-preparation-notice-review-1.7-20261011.json#sha256=a6ca85fb193f7f65094485995f8d3dbb23d8c1b307048e959a3b156ab5aad4fc",
+      "reviewedBy": "gpt-6.1-sol independent engineering review, 2026-10-11; notice identification and preparation only",
       "spdx": "LicenseRef-Tix-Composite-Notice",
       "version": "3.13.16"
     },
@@ -3560,11 +3560,11 @@
     {
       "artifactSha256": "8e9cb087305bfb8969f68a905f79f41469d4aa5220c1aa71ada7fc9953bdba0f",
       "component": "python-build-standalone",
-      "decision": "pending",
+      "decision": "approved",
       "id": "astra-mac-notice-8e9cb087305b-e93716da6b9c",
       "licenseSha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
-      "reviewReference": "resources/python-runtime/reviewed-materials/mac-runtime-independent-notice-review.md#sha256=2870f94e0d9b5d4044c300218a405c900bd45ec9afb3c29d4a4560718603c33d",
-      "reviewedBy": "Astra independent engineering notice review, 2026-10-10",
+      "reviewReference": "resources/python-runtime/reviewed-materials/mac-preparation-notice-review-1.7-20261011.json#sha256=a6ca85fb193f7f65094485995f8d3dbb23d8c1b307048e959a3b156ab5aad4fc",
+      "reviewedBy": "gpt-6.1-sol independent engineering review, 2026-10-11; notice identification and preparation only",
       "spdx": "MPL-2.0",
       "version": "3.13.16"
     },
@@ -3758,11 +3758,11 @@
     {
       "artifactSha256": "8e9cb087305bfb8969f68a905f79f41469d4aa5220c1aa71ada7fc9953bdba0f",
       "component": "python-build-standalone",
-      "decision": "pending",
+      "decision": "approved",
       "id": "astra-mac-notice-8e9cb087305b-3bdff06e6999",
       "licenseSha256": "3bdff06e69991c94664f2ef5c5f8096f60b7dbec071756ea6cc26b445e06ec5b",
-      "reviewReference": "resources/python-runtime/reviewed-materials/mac-runtime-independent-notice-review.md#sha256=2870f94e0d9b5d4044c300218a405c900bd45ec9afb3c29d4a4560718603c33d",
-      "reviewedBy": "Astra independent engineering notice review, 2026-10-10",
+      "reviewReference": "resources/python-runtime/reviewed-materials/mac-preparation-notice-review-1.7-20261011.json#sha256=a6ca85fb193f7f65094485995f8d3dbb23d8c1b307048e959a3b156ab5aad4fc",
+      "reviewedBy": "gpt-6.1-sol independent engineering review, 2026-10-11; notice identification and preparation only",
       "spdx": "Sleepycat AND BSD-3-Clause",
       "version": "3.13.16"
     },
@@ -3846,11 +3846,11 @@
     {
       "artifactSha256": "8e9cb087305bfb8969f68a905f79f41469d4aa5220c1aa71ada7fc9953bdba0f",
       "component": "python-build-standalone",
-      "decision": "pending",
+      "decision": "approved",
       "id": "astra-mac-notice-8e9cb087305b-2daec087a88e",
       "licenseSha256": "2daec087a88e7c9b8082557cdeebad5bbb8155a4137472f0b22e269cd99d0c1e",
-      "reviewReference": "resources/python-runtime/reviewed-materials/mac-runtime-independent-notice-review.md#sha256=2870f94e0d9b5d4044c300218a405c900bd45ec9afb3c29d4a4560718603c33d",
-      "reviewedBy": "Astra independent engineering notice review, 2026-10-10",
+      "reviewReference": "resources/python-runtime/reviewed-materials/mac-preparation-notice-review-1.7-20261011.json#sha256=a6ca85fb193f7f65094485995f8d3dbb23d8c1b307048e959a3b156ab5aad4fc",
+      "reviewedBy": "gpt-6.1-sol independent engineering review, 2026-10-11; notice identification and preparation only",
       "spdx": "LicenseRef-libX11-Composite-Notice",
       "version": "3.13.16"
     },
@@ -3901,11 +3901,11 @@
     {
       "artifactSha256": "8e9cb087305bfb8969f68a905f79f41469d4aa5220c1aa71ada7fc9953bdba0f",
       "component": "python-build-standalone",
-      "decision": "pending",
+      "decision": "approved",
       "id": "astra-mac-notice-8e9cb087305b-9c04cce50c49",
       "licenseSha256": "9c04cce50c4989d5601dd8b07f6ab922c40388b66ac736c9007cb1ed9d9dd560",
-      "reviewReference": "resources/python-runtime/reviewed-materials/mac-runtime-independent-notice-review.md#sha256=2870f94e0d9b5d4044c300218a405c900bd45ec9afb3c29d4a4560718603c33d",
-      "reviewedBy": "Astra independent engineering notice review, 2026-10-10",
+      "reviewReference": "resources/python-runtime/reviewed-materials/mac-preparation-notice-review-1.7-20261011.json#sha256=a6ca85fb193f7f65094485995f8d3dbb23d8c1b307048e959a3b156ab5aad4fc",
+      "reviewedBy": "gpt-6.1-sol independent engineering review, 2026-10-11; notice identification and preparation only",
       "spdx": "OpenSSL",
       "version": "3.13.16"
     },
@@ -3945,11 +3945,11 @@
     {
       "artifactSha256": "8e9cb087305bfb8969f68a905f79f41469d4aa5220c1aa71ada7fc9953bdba0f",
       "component": "python-build-standalone",
-      "decision": "pending",
+      "decision": "approved",
       "id": "astra-mac-notice-8e9cb087305b-3ac5cdd0bef6",
       "licenseSha256": "3ac5cdd0bef6c43ce34c6a7ced452081d9e5a0bf94082b9f9147d23ec9e214f5",
-      "reviewReference": "resources/python-runtime/reviewed-materials/mac-runtime-independent-notice-review.md#sha256=2870f94e0d9b5d4044c300218a405c900bd45ec9afb3c29d4a4560718603c33d",
-      "reviewedBy": "Astra independent engineering notice review, 2026-10-10",
+      "reviewReference": "resources/python-runtime/reviewed-materials/mac-preparation-notice-review-1.7-20261011.json#sha256=a6ca85fb193f7f65094485995f8d3dbb23d8c1b307048e959a3b156ab5aad4fc",
+      "reviewedBy": "gpt-6.1-sol independent engineering review, 2026-10-11; notice identification and preparation only",
       "spdx": "LicenseRef-Tix-Composite-Notice",
       "version": "3.13.16"
     },

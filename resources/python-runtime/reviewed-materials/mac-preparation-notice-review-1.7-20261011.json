@@ -1,0 +1,186 @@
+{
+  "kind": "rt-private-runtime-preparation-notice-review-v1",
+  "schemaVersion": 1,
+  "scope": "notice-identification-and-preparation-only",
+  "reviewedBy": "gpt-6.1-sol independent engineering review",
+  "licenseApprovalGranted": false,
+  "finalReleaseAuthorized": false,
+  "installerAccepted": false,
+  "releaseEligible": false,
+  "decision": "approved",
+  "reviewDate": "2026-10-11",
+  "authorityBoundary": "This is a limited independent engineering record for notice identification and preparation of original inputs only. An approved row grants no license approval, public distribution authorization, transaction authorization, installer acceptance or release eligibility and is not human legal approval. All five categories of additional delivery and applicability obligations remain unresolved in the final distribution review. No policy changes, builds or pushes are authorized by this record.",
+  "evidenceBoundary": "Each of the five specified input files was read exactly once and hashed from that same byte buffer. All five hashes match the supplied values. Complete original-input byte identity is supported relative to those supplied hashes; provenance against independently retrieved upstream originals was not established. The initial libX11 tool display was truncated; the complete text subsequently supplied by the user as the same-SHA original was reviewed to resolve that text-visibility failure without rereading the source file. The supplied message was not independently byte-hashed or checked for exact whitespace equivalence; byte identity evidence remains the initial disk-read hash, while complete textual review uses the supplied full text. All ten rows are approved only for notice identification and preparation of unchanged original inputs. Artifact SHA256 values are user-supplied identities, not independently rehashed package evidence. Final-package existence was not rechecked. No source-delivery, per-file applicability, behavioral, advertising, naming or final distribution obligation is discharged by this limited approval.",
+  "materialRoot": "mac-final-obligations-1.7-20261011",
+  "sourceMaterials": [
+    {
+      "path": "source/pip-vendored-certifi-2026.6.17/pip/_vendor/certifi/LICENSE",
+      "licenseSha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+      "hashMatchesSupplied": true,
+      "readCount": 1,
+      "completeTextVisible": true,
+      "spdx": "MPL-2.0"
+    },
+    {
+      "path": "notices/LICENSE.bdb.txt",
+      "licenseSha256": "3bdff06e69991c94664f2ef5c5f8096f60b7dbec071756ea6cc26b445e06ec5b",
+      "hashMatchesSupplied": true,
+      "readCount": 1,
+      "completeTextVisible": true,
+      "spdx": "Sleepycat AND BSD-3-Clause"
+    },
+    {
+      "path": "notices/LICENSE.libX11.txt",
+      "licenseSha256": "2daec087a88e7c9b8082557cdeebad5bbb8155a4137472f0b22e269cd99d0c1e",
+      "hashMatchesSupplied": true,
+      "readCount": 1,
+      "completeTextVisible": true,
+      "spdx": "LicenseRef-libX11-Composite-Notice"
+    },
+    {
+      "path": "notices/LICENSE.openssl-1.1.txt",
+      "licenseSha256": "9c04cce50c4989d5601dd8b07f6ab922c40388b66ac736c9007cb1ed9d9dd560",
+      "hashMatchesSupplied": true,
+      "readCount": 1,
+      "completeTextVisible": true,
+      "spdx": "OpenSSL"
+    },
+    {
+      "path": "notices/LICENSE.tix.txt",
+      "licenseSha256": "3ac5cdd0bef6c43ce34c6a7ced452081d9e5a0bf94082b9f9147d23ec9e214f5",
+      "hashMatchesSupplied": true,
+      "readCount": 1,
+      "completeTextVisible": true,
+      "spdx": "LicenseRef-Tix-Composite-Notice"
+    }
+  ],
+  "finalDistributionReviewObligations": [
+    {
+      "category": "MPL-2.0 corresponding source",
+      "status": "reserved-for-final-distribution-review",
+      "obligation": "Determine covered CA-bundle files and modifications; satisfy applicable corresponding Source Code Form availability and recipient information, license and notice requirements. The retained certifi notice references MPL-2.0 and is not itself its full text."
+    },
+    {
+      "category": "Berkeley DB source and accompanying software",
+      "status": "reserved-for-final-distribution-review",
+      "obligation": "Assess the Sleepycat complete-source condition for DB and accompanying software using DB, executable modules, OS exclusions, obtaining-source information, permitted costs and free redistributability; retain all applicable BSD notices and non-endorsement terms."
+    },
+    {
+      "category": "libX11 composite applicability and behavior",
+      "status": "reserved-for-final-distribution-review",
+      "obligation": "The complete composite notice has been identified for preparation only. Final distribution review must determine the licenses applicable to individual source files and directories; retain the complete original input and deliver all applicable copyrights, permissions, conditions and disclaimers in copies, modifications, substantial portions and supporting documentation as specified by each clause. Preserve all holder-specific name-use, advertising, publicity, promotion and prior-written-authorization restrictions, the X Window System and TekColor trademark notices and the stated TekHVC patent context without inferring current patent status or clearance. Assess TekHVC coordinate identification in every displaying interface and associated documentation, and exclusive association of the term TekHVC with the specified mathematical derivations and equivalent pathways regardless of digital representation. Preserve the FUJITSU CDE/Motif Joint Development Agreement attribution and Troy D. Hanson source-redistribution copyright, conditions and disclaimer requirement without inventing a blanket binary-notice condition for that clause. Do not substitute a generic MIT, X11 or Tcl text. Applicability and satisfaction of all these conditions remain unresolved here."
+    },
+    {
+      "category": "Legacy OpenSSL and original SSLeay cumulative conditions",
+      "status": "reserved-for-final-distribution-review",
+      "obligation": "Satisfy both old licenses together, including notice delivery, redistribution and advertising acknowledgments, Eric Young attribution, conditional Tim Hudson acknowledgment, naming and endorsement restrictions and unchanged SSLeay distribution terms."
+    },
+    {
+      "category": "Tix subordinate licenses and file-specific terms",
+      "status": "reserved-for-final-distribution-review",
+      "obligation": "Obtain and assess docs/license.tcltk and docs/license.html_lib, individual-file exceptions and modification terms; deliver required original notices verbatim, retain copyrights and assess government-use applicability. Generic Tcl text is not a replacement."
+    }
+  ],
+  "rows": [
+    {
+      "id": "astra-mac-notice-d8975d7df4f0-e93716da6b9c",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "d8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933",
+      "licenseSha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+      "spdx": "MPL-2.0",
+      "decision": "approved",
+      "reason": "The complete retained certifi LICENSE file matches the supplied SHA256 and identifies the modified Mozilla CA bundle as MPL-2.0. This is the original package notice with a reference to MPL-2.0, not a claim that the full MPL text or corresponding source has been delivered. Only preparation of this original input is approved; final distribution review must determine covered files and modifications, provide corresponding Source Code Form and recipient access information, preserve notices, and address applicable MPL distribution requirements."
+    },
+    {
+      "id": "astra-mac-notice-d8975d7df4f0-3bdff06e6999",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "d8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933",
+      "licenseSha256": "3bdff06e69991c94664f2ef5c5f8096f60b7dbec071756ea6cc26b445e06ec5b",
+      "spdx": "Sleepycat AND BSD-3-Clause",
+      "decision": "approved",
+      "reason": "The complete retained Berkeley DB notice matches the supplied SHA256 and includes the Oracle Sleepycat conditions together with Berkeley, Harvard and ASM BSD-3-Clause notices and disclaimers. Only preparation of the unchanged composite input is approved. Final distribution review must address information for obtaining complete DB source and accompanying software using DB, the stated availability, fee and redistributability conditions, executable-module scope and OS exclusions, notice reproduction and non-endorsement requirements; retaining this text does not discharge those conditions."
+    },
+    {
+      "id": "astra-mac-notice-d8975d7df4f0-2daec087a88e",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "d8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933",
+      "licenseSha256": "2daec087a88e7c9b8082557cdeebad5bbb8155a4137472f0b22e269cd99d0c1e",
+      "spdx": "LicenseRef-libX11-Composite-Notice",
+      "decision": "approved",
+      "reason": "The initial single-read byte hash matches the supplied original-input SHA256; the complete same-SHA text supplied by the user resolves the truncated display and supports LicenseRef-libX11-Composite-Notice. Reviewed sections include the canonical MIT-like notice; legacy Open Group, X Consortium/XFree86, Digital/Tektronix, FSF, FUJITSU, Oki/Fuji Xerox, Wexelblat, OMRON/NTT, Chris Lee, Sony, Open Software Foundation, Silicon Graphics, Fujitsu Open Systems Solutions, SunSoft/Haible, TOSHIBA, Wyse, Triplett, Marineau/Veit, Packard, Hanson and IBM notices and combinations. Preserve the complete unchanged text, all copyright, permission and disclaimer requirements, holder-specific name-use and advertising/publicity restrictions, trademark and stated patent context, FUJITSU CDE/Motif attribution, TekHVC display/documentation identification and exclusive mathematical-name-use conditions, and Hanson source-redistribution conditions. Only notice identification and preparation are approved; individual-source-file and directory applicability, notice delivery, behavioral compliance and every other applicable condition remain for final distribution review. This composite is not replaced by generic MIT, X11 or Tcl text and grants no final license approval or public distribution authorization."
+    },
+    {
+      "id": "astra-mac-notice-d8975d7df4f0-9c04cce50c49",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "d8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933",
+      "licenseSha256": "9c04cce50c4989d5601dd8b07f6ab922c40388b66ac736c9007cb1ed9d9dd560",
+      "spdx": "OpenSSL",
+      "decision": "approved",
+      "reason": "The complete retained legacy OpenSSL notice matches the supplied SHA256 and contains both the OpenSSL License and original SSLeay License, whose conditions both apply, not an alternative-license choice or Apache-2.0 replacement. Only preparation of this unchanged input is approved. Final distribution review must address both sets of source and binary notices and disclaimers, OpenSSL redistribution and advertising acknowledgments, Eric Young attribution and advertising acknowledgment, conditional Tim Hudson Windows-app-code acknowledgment, naming and endorsement restrictions, and the original SSLeay prohibition on changing distribution terms."
+    },
+    {
+      "id": "astra-mac-notice-d8975d7df4f0-3ac5cdd0bef6",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "d8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933",
+      "licenseSha256": "3ac5cdd0bef6c43ce34c6a7ced452081d9e5a0bf94082b9f9147d23ec9e214f5",
+      "spdx": "LicenseRef-Tix-Composite-Notice",
+      "decision": "approved",
+      "reason": "The complete retained Tix notice matches the supplied SHA256, preserves its copyright holders, verbatim-distribution requirement, individual-file exceptions, modification-term marking and government-use text, and explicitly refers to docs/license.tcltk and docs/license.html_lib. Only preparation of this unchanged composite input is approved; a generic Tcl license cannot replace it. Final distribution review must obtain and evaluate both referenced subordinate license files, individual-file exceptions and modifications, determine applicability, and deliver all required notices verbatim. Those subordinate files were not reviewed in this limited task."
+    },
+    {
+      "id": "astra-mac-notice-8e9cb087305b-e93716da6b9c",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "8e9cb087305bfb8969f68a905f79f41469d4aa5220c1aa71ada7fc9953bdba0f",
+      "licenseSha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+      "spdx": "MPL-2.0",
+      "decision": "approved",
+      "reason": "The complete retained certifi LICENSE file matches the supplied SHA256 and identifies the modified Mozilla CA bundle as MPL-2.0. This is the original package notice with a reference to MPL-2.0, not a claim that the full MPL text or corresponding source has been delivered. Only preparation of this original input is approved; final distribution review must determine covered files and modifications, provide corresponding Source Code Form and recipient access information, preserve notices, and address applicable MPL distribution requirements."
+    },
+    {
+      "id": "astra-mac-notice-8e9cb087305b-3bdff06e6999",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "8e9cb087305bfb8969f68a905f79f41469d4aa5220c1aa71ada7fc9953bdba0f",
+      "licenseSha256": "3bdff06e69991c94664f2ef5c5f8096f60b7dbec071756ea6cc26b445e06ec5b",
+      "spdx": "Sleepycat AND BSD-3-Clause",
+      "decision": "approved",
+      "reason": "The complete retained Berkeley DB notice matches the supplied SHA256 and includes the Oracle Sleepycat conditions together with Berkeley, Harvard and ASM BSD-3-Clause notices and disclaimers. Only preparation of the unchanged composite input is approved. Final distribution review must address information for obtaining complete DB source and accompanying software using DB, the stated availability, fee and redistributability conditions, executable-module scope and OS exclusions, notice reproduction and non-endorsement requirements; retaining this text does not discharge those conditions."
+    },
+    {
+      "id": "astra-mac-notice-8e9cb087305b-2daec087a88e",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "8e9cb087305bfb8969f68a905f79f41469d4aa5220c1aa71ada7fc9953bdba0f",
+      "licenseSha256": "2daec087a88e7c9b8082557cdeebad5bbb8155a4137472f0b22e269cd99d0c1e",
+      "spdx": "LicenseRef-libX11-Composite-Notice",
+      "decision": "approved",
+      "reason": "The initial single-read byte hash matches the supplied original-input SHA256; the complete same-SHA text supplied by the user resolves the truncated display and supports LicenseRef-libX11-Composite-Notice. Reviewed sections include the canonical MIT-like notice; legacy Open Group, X Consortium/XFree86, Digital/Tektronix, FSF, FUJITSU, Oki/Fuji Xerox, Wexelblat, OMRON/NTT, Chris Lee, Sony, Open Software Foundation, Silicon Graphics, Fujitsu Open Systems Solutions, SunSoft/Haible, TOSHIBA, Wyse, Triplett, Marineau/Veit, Packard, Hanson and IBM notices and combinations. Preserve the complete unchanged text, all copyright, permission and disclaimer requirements, holder-specific name-use and advertising/publicity restrictions, trademark and stated patent context, FUJITSU CDE/Motif attribution, TekHVC display/documentation identification and exclusive mathematical-name-use conditions, and Hanson source-redistribution conditions. Only notice identification and preparation are approved; individual-source-file and directory applicability, notice delivery, behavioral compliance and every other applicable condition remain for final distribution review. This composite is not replaced by generic MIT, X11 or Tcl text and grants no final license approval or public distribution authorization."
+    },
+    {
+      "id": "astra-mac-notice-8e9cb087305b-9c04cce50c49",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "8e9cb087305bfb8969f68a905f79f41469d4aa5220c1aa71ada7fc9953bdba0f",
+      "licenseSha256": "9c04cce50c4989d5601dd8b07f6ab922c40388b66ac736c9007cb1ed9d9dd560",
+      "spdx": "OpenSSL",
+      "decision": "approved",
+      "reason": "The complete retained legacy OpenSSL notice matches the supplied SHA256 and contains both the OpenSSL License and original SSLeay License, whose conditions both apply, not an alternative-license choice or Apache-2.0 replacement. Only preparation of this unchanged input is approved. Final distribution review must address both sets of source and binary notices and disclaimers, OpenSSL redistribution and advertising acknowledgments, Eric Young attribution and advertising acknowledgment, conditional Tim Hudson Windows-app-code acknowledgment, naming and endorsement restrictions, and the original SSLeay prohibition on changing distribution terms."
+    },
+    {
+      "id": "astra-mac-notice-8e9cb087305b-3ac5cdd0bef6",
+      "component": "python-build-standalone",
+      "version": "3.13.16",
+      "artifactSha256": "8e9cb087305bfb8969f68a905f79f41469d4aa5220c1aa71ada7fc9953bdba0f",
+      "licenseSha256": "3ac5cdd0bef6c43ce34c6a7ced452081d9e5a0bf94082b9f9147d23ec9e214f5",
+      "spdx": "LicenseRef-Tix-Composite-Notice",
+      "decision": "approved",
+      "reason": "The complete retained Tix notice matches the supplied SHA256, preserves its copyright holders, verbatim-distribution requirement, individual-file exceptions, modification-term marking and government-use text, and explicitly refers to docs/license.tcltk and docs/license.html_lib. Only preparation of this unchanged composite input is approved; a generic Tcl license cannot replace it. Final distribution review must obtain and evaluate both referenced subordinate license files, individual-file exceptions and modifications, determine applicability, and deliver all required notices verbatim. Those subordinate files were not reviewed in this limited task."
+    }
+  ]
+}
