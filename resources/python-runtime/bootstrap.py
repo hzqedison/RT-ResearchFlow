@@ -136,7 +136,9 @@ process.stdin.on('end',()=>{try{
  const input=JSON.parse(Buffer.concat(chunks).toString('utf8'));
  if(process.versions.node!==input.manifest.node.version)throw Error();
  const core=require(path.join(input.root,'private_runtime_manifest.cjs'));
- const reports=core.validateDependencyAudits(input.root,input.manifest,input.generatorSha256);
+ // Python serializes an omitted optional pin as null; keep explicit pins strict.
+ const expectedGenerator=input.generatorSha256===null?undefined:input.generatorSha256;
+ const reports=core.validateDependencyAudits(input.root,input.manifest,expectedGenerator);
  process.stdout.write(JSON.stringify({reports}));
 }catch(_){process.stderr.write('PRIVATE_RUNTIME_INVALID\\n');process.exitCode=70}});
 '''

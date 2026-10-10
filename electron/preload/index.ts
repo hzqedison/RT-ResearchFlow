@@ -2705,6 +2705,12 @@ const api = {
       ipcRenderer.invoke('shortTerm:setConceptSource', { source }) as Promise<
         { ok: true } | { ok: false; error: string }
       >,
+    getPublicConceptSyncStatus: () =>
+      ipcRenderer.invoke('shortTerm:getPublicConceptSyncStatus') as Promise<import('../shared/publicConceptSnapshots').PublicConceptSyncReply>,
+    syncPublicConceptSnapshots: () =>
+      ipcRenderer.invoke('shortTerm:syncPublicConceptSnapshots') as Promise<import('../shared/publicConceptSnapshots').PublicConceptSyncReply>,
+    cancelPublicConceptSync: () =>
+      ipcRenderer.invoke('shortTerm:cancelPublicConceptSync') as Promise<import('../shared/publicConceptSnapshots').PublicConceptSyncReply>,
     syncConceptMembers: (source: string) =>
       ipcRenderer.invoke('shortTerm:syncConceptMembers', { source }) as Promise<
         { ok: true } | { ok: false; error: string }

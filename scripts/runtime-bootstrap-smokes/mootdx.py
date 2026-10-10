@@ -19,7 +19,8 @@ check_staging_group()
 
 
 def offline(event, _args):
-    if event.startswith("socket.") or event in ("subprocess.Popen", "os.system", "os.posix_spawn"):
+    # platform.uname() reads the local hostname; this does not open a socket.
+    if (event.startswith("socket.") and event != "socket.gethostname") or event in ("subprocess.Popen", "os.system", "os.posix_spawn"):
         raise RuntimeError("OFFLINE_SMOKE_ONLY")
 
 
@@ -27,7 +28,7 @@ sys.addaudithook(offline)
 import mootdx
 from mootdx.quotes import Quotes
 from mootdx.reader import Reader
-from pytdx.hq import TdxHq_API
+from tdxpy.hq import TdxHq_API
 import pandas as pd
 
 frame = pd.DataFrame({"code": ["600000", "000001"], "close": [10.0, 12.0]})

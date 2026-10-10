@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../database/db'
+import { cancelPublicConceptSync, getPublicConceptSyncStatus, syncPublicConceptSnapshots } from '../services/publicConceptSnapshotSyncService'
 import {
   getShortTermActiveSubTab,
   setShortTermActiveSubTab,
@@ -701,6 +702,22 @@ export function registerShortTermHandlers(): void {
     setConceptSource(payload.source as 'kpl' | 'ths' | 'dc')
     clearConceptHeatCache()
     return { ok: true as const }
+  })
+
+  ipcMain.handle('shortTerm:getPublicConceptSyncStatus', () => {
+    try { return { ok: true, status: getPublicConceptSyncStatus(getDb()) } }
+    catch { return { ok: false, error: 'PUBLIC_CONCEPT_CACHE_UNAVAILABLE' } }
+  })
+  ipcMain.handle('shortTerm:syncPublicConceptSnapshots', () => {
+    try {
+      const db = getDb()
+      void syncPublicConceptSnapshots(db).catch(() => undefined)
+      return { ok: true, status: getPublicConceptSyncStatus(db) }
+    } catch { return { ok: false, error: 'PUBLIC_CONCEPT_SYNC_UNAVAILABLE' } }
+  })
+  ipcMain.handle('shortTerm:cancelPublicConceptSync', () => {
+    try { return { ok: true, status: cancelPublicConceptSync(getDb()) } }
+    catch { return { ok: false, error: 'PUBLIC_CONCEPT_CANCEL_FAILED' } }
   })
 
   ipcMain.handle('shortTerm:syncConceptMembers', async (_e, payload: { source: string }) => {
