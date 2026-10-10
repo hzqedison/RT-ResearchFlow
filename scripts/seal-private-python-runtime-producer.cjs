@@ -102,6 +102,8 @@ function githubReader(token) {
 
 // Exported for isolated transport fixtures. runProducer always constructs the
 // fixed official HTTPS reader itself; candidate JSON cannot supply a transport.
+const FORMAL_LOCK_BYTE_CAP = 32 * 1024 * 1024
+function readFormalLock(root, filename) { return readFile(root, filename, FORMAL_LOCK_BYTE_CAP) }
 async function readAuthorization(pins, authority) {
   const prefix = '/repos/' + pins.repository
   const repository = await authority.readJson(prefix)
@@ -265,7 +267,7 @@ async function runProducer(inputPath, env = process.env, staging = false) {
     const load = verifiedLoader(ROOT, source.verified)
     const foundation = load('electron/shared/privatePythonRuntimeManifest.cjs')
     const { assemble } = load('scripts/bundle-private-python-runtime.cjs')
-    const lockBytes = readFile(temporaryRoot, input.lockPath), lock = foundation.validateLock(parse(lockBytes))
+    const lockBytes = readFormalLock(temporaryRoot, input.lockPath), lock = foundation.validateLock(parse(lockBytes))
     const preparation = input.preparations[target]
     const fragmentBytes = readFile(temporaryRoot, preparation.fragmentPath)
     const candidateLockBytes = readFile(temporaryRoot, preparation.candidateLockPath)
@@ -379,4 +381,4 @@ if (require.main === module) {
     process.exitCode = status === 'pending' ? 2 : 1
   })
 }
-module.exports = { runProducer, readAuthorization, protectedPins, githubReader, verifiedLoader, archiveReader, verifyStagingInputPins, verifiedNativeHostSource, resolveStageProducer, options }
+module.exports = { runProducer, readFormalLock, FORMAL_LOCK_BYTE_CAP, readAuthorization, protectedPins, githubReader, verifiedLoader, archiveReader, verifyStagingInputPins, verifiedNativeHostSource, resolveStageProducer, options }
