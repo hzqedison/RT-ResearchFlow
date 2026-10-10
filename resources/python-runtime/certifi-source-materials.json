@@ -1,0 +1,136 @@
+{
+  "kind": "rt-certifi-source-materials-v1",
+  "schemaVersion": 1,
+  "releaseEligible": false,
+  "status": "materials-collected-not-final-approval",
+  "version": "2026.7.22",
+  "wheel": {
+    "filename": "certifi-2026.7.22-py3-none-any.whl",
+    "size": 136983,
+    "sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
+    "identitySource": "https://pypi.org/pypi/certifi/2026.7.22/json"
+  },
+  "source": {
+    "path": "resources/python-runtime/certifi-2026.7.22-source.tar.gz",
+    "size": 138112,
+    "sha256": "741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55",
+    "url": "https://files.pythonhosted.org/packages/a3/c2/24167ea9858356b47a87a50d39908bfdb72ceeefe0041586e704e5376b3a/certifi-2026.7.22.tar.gz"
+  },
+  "completeLicense": {
+    "path": "resources/python-runtime/MPL-2.0.txt",
+    "size": 16726,
+    "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+    "url": "https://www.mozilla.org/media/MPL/2.0/index.txt"
+  },
+  "sourceMembers": [
+    {
+      "path": "certifi-2026.7.22/LICENSE",
+      "size": 989,
+      "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+    },
+    {
+      "path": "certifi-2026.7.22/certifi/cacert.pem",
+      "size": 240216,
+      "sha256": "9cc2a774b5198dcff14d9be1e66091f538975d867ce029a96bce15a55dfd730f"
+    },
+    {
+      "path": "certifi-2026.7.22/certifi/core.py",
+      "size": 3394,
+      "sha256": "5c55f2727746e697f7edac9e17c377d8752e0da7ecca191531b3b80403d61dad"
+    },
+    {
+      "path": "certifi-2026.7.22/certifi/__init__.py",
+      "size": 94,
+      "sha256": "7a52e5f4205f9b3d12a31898ceaa7e3f6837d19cc230700bcae1a9d91d1486c1"
+    }
+  ],
+  "certificateCount": 121,
+  "observedWindowsCache": [
+    {
+      "provider": "akshare",
+      "target": "win32-x64",
+      "cacheScope": "older-prepared-cache-not-final-runtime",
+      "entries": [
+        {
+          "path": "certifi/cacert.pem",
+          "size": 240216,
+          "sha256": "9cc2a774b5198dcff14d9be1e66091f538975d867ce029a96bce15a55dfd730f",
+          "matchesSourceArchive": true
+        },
+        {
+          "path": "certifi/core.py",
+          "size": 3394,
+          "sha256": "5c55f2727746e697f7edac9e17c377d8752e0da7ecca191531b3b80403d61dad",
+          "matchesSourceArchive": true
+        },
+        {
+          "path": "certifi/__init__.py",
+          "size": 94,
+          "sha256": "7a52e5f4205f9b3d12a31898ceaa7e3f6837d19cc230700bcae1a9d91d1486c1",
+          "matchesSourceArchive": true
+        }
+      ],
+      "noticeSha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+    },
+    {
+      "provider": "mootdx",
+      "target": "win32-x64",
+      "cacheScope": "older-prepared-cache-not-final-runtime",
+      "entries": [
+        {
+          "path": "certifi/cacert.pem",
+          "size": 240216,
+          "sha256": "9cc2a774b5198dcff14d9be1e66091f538975d867ce029a96bce15a55dfd730f",
+          "matchesSourceArchive": true
+        },
+        {
+          "path": "certifi/core.py",
+          "size": 3394,
+          "sha256": "5c55f2727746e697f7edac9e17c377d8752e0da7ecca191531b3b80403d61dad",
+          "matchesSourceArchive": true
+        },
+        {
+          "path": "certifi/__init__.py",
+          "size": 94,
+          "sha256": "7a52e5f4205f9b3d12a31898ceaa7e3f6837d19cc230700bcae1a9d91d1486c1",
+          "matchesSourceArchive": true
+        }
+      ],
+      "noticeSha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+    },
+    {
+      "provider": "pywencai",
+      "target": "win32-x64",
+      "cacheScope": "older-prepared-cache-not-final-runtime",
+      "entries": [
+        {
+          "path": "certifi/cacert.pem",
+          "size": 240216,
+          "sha256": "9cc2a774b5198dcff14d9be1e66091f538975d867ce029a96bce15a55dfd730f",
+          "matchesSourceArchive": true
+        },
+        {
+          "path": "certifi/core.py",
+          "size": 3394,
+          "sha256": "5c55f2727746e697f7edac9e17c377d8752e0da7ecca191531b3b80403d61dad",
+          "matchesSourceArchive": true
+        },
+        {
+          "path": "certifi/__init__.py",
+          "size": 94,
+          "sha256": "7a52e5f4205f9b3d12a31898ceaa7e3f6837d19cc230700bcae1a9d91d1486c1",
+          "matchesSourceArchive": true
+        }
+      ],
+      "noticeSha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+    }
+  ],
+  "macRuntimeByteVerification": false,
+  "pipVendoredSourceVerification": false,
+  "pending": [
+    "actual-final-runtime-and-pip-vendor-byte-binding",
+    "recipient-readable-delivery-and-source-entrypoint",
+    "remaining-runtime-license-applicability",
+    "real-protected-authorization-and-native-seal"
+  ]
+}
