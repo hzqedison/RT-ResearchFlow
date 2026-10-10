@@ -1,0 +1,217 @@
+{
+  "kind": "rt-private-runtime-release-authorization-v1",
+  "schemaVersion": 1,
+  "decision": "approved",
+  "authorizationScope": "native-staging-only",
+  "finalReleaseAuthorized": false,
+  "licenseApprovalGranted": false,
+  "review": {
+    "performedBy": "Codex gpt-6.1-sol",
+    "basis": "Human-authorized isolated testing and build-source changes; bounded automated staging-source review",
+    "checked": [
+      "Current preparation snapshot has no hash conflicts across its 17 source inputs",
+      "Native-only verifier scope and final rejection gates: 18 offline tests passed",
+      "Authorization, native verifier rejection and exact artifact origin: 93 offline tests passed"
+    ],
+    "notClaimed": [
+      "Human license approval",
+      "Successful native runtime execution",
+      "Final seal",
+      "Installer acceptance",
+      "Permission to execute broker orders"
+    ]
+  },
+  "assemblyTargets": [
+    "win32-x64",
+    "darwin-arm64",
+    "darwin-x64"
+  ],
+  "trustedContext": {
+    "repositoryId": 1408465497,
+    "repositoryFullName": "hzqedison/RT-ResearchFlow",
+    "approvedSourceCommit": "a38a781f291d1f81b4166efdaee30cae723856f2",
+    "approvedPolicySha256": "d7cb20a0894c245ce2f942c5932cc550128003a8d2eab61dd8e9e477ac42b264",
+    "approvedSealImplementationSha256": "5456c6744419bcb698b2e693c24d3c8de4f0187bf8d754b660111677d715800e",
+    "sourceSnapshotSha256": "6b8bad51b91bd8bd811e8e4b6701fe3b3438e530fba5c6f2b345619d5441be5f",
+    "requiredSourceFiles": [
+      ".github/workflows/private-runtime-stage-native.yml",
+      "LICENSE",
+      "electron/shared/privatePythonRuntimeManifest.cjs",
+      "resources/private-runtime-owned-job-host.cs",
+      "resources/python-runtime/bootstrap.py",
+      "resources/python-runtime/miniracer_unicode_adapter.py",
+      "resources/python-runtime/preparation.policy.json",
+      "resources/python-runtime/pywencai_adapter.py",
+      "resources/python-runtime/reviewed-materials/fetch-runtime-license-materials-ci.py",
+      "resources/python-runtime/reviewed-materials/runtime-license-materials.json",
+      "scripts/build-akshare-node-wheel.py",
+      "scripts/build-lxml-matched-public-source.py",
+      "scripts/build-lxml-redistribution-wheel.py",
+      "scripts/build-mootdx-compat-wheel.py",
+      "scripts/build-private-node-js-runtime-wheel.py",
+      "scripts/build-provider-source-wheels.py",
+      "scripts/bundle-private-python-runtime.cjs",
+      "scripts/prepare-private-python-runtime.py",
+      "scripts/private-node-js-runtime/rt_private_node_js_runtime/__init__.py",
+      "scripts/private-node-js-runtime/rt_private_node_js_runtime/worker.cjs",
+      "scripts/private-python-runtime-builder.cjs",
+      "scripts/private-runtime-owned-supervisor.cjs",
+      "scripts/private-runtime-release-verifiers.cjs",
+      "scripts/rebuild-lxml-native.py",
+      "scripts/report-private-runtime-native-bootstrap.py",
+      "scripts/run-private-runtime-stage-ci.cjs",
+      "scripts/runtime-bootstrap-smokes/akshare.py",
+      "scripts/runtime-bootstrap-smokes/mootdx.py",
+      "scripts/runtime-bootstrap-smokes/pywencai.py",
+      "scripts/seal-private-python-runtime-producer.cjs",
+      "scripts/seal-private-python-runtime.cjs",
+      "scripts/validate-private-python-runtime.cjs"
+    ],
+    "producers": []
+  },
+  "entrypoints": {
+    "scripts/seal-private-python-runtime.cjs": "5456c6744419bcb698b2e693c24d3c8de4f0187bf8d754b660111677d715800e",
+    "scripts/seal-private-python-runtime-producer.cjs": "b896bd703770f9aa03be7f384da313fa78bc52bbdf5da93488d057b19922255d",
+    "scripts/private-runtime-release-verifiers.cjs": "afafc8cbc79dddbfc4f46857789ff1e72a631697690356a4669cf47ba19f4c51"
+  },
+  "stagingInputs": {
+    "darwin-arm64": {
+      "candidateLockSha256": "b0aa361919e73c1e2531d76c32f2a1f9771c418492be6c4a38199597d492d0cd",
+      "formalLockSha256": "c20a1a327b91d4022746d2fc18b4a8045c31767134b14fdfae866ba2f06cd6ea",
+      "fragmentSha256": "6693b501c70f0a6f2a5a0b2c0315656a8346568f1fe339d94e9637750c246ffe",
+      "handoffSha256": "9fa4aa3f251137c3b671e093e8f7b5c46070cb41e47f920783574f2beb9ce13b"
+    },
+    "darwin-x64": {
+      "candidateLockSha256": "57206a2e21bd7a2c306cc2213efbb89d12b4b3e3e36fce4e4a146c01cdad7a83",
+      "formalLockSha256": "c20a1a327b91d4022746d2fc18b4a8045c31767134b14fdfae866ba2f06cd6ea",
+      "fragmentSha256": "de106aefa305f9c9ebb048a4880eaa967064a10e576177399d0b9a9e224189bc",
+      "handoffSha256": "341db917fa4979e041f4170cc27dcf9c9df6ebb9b44241aeaa61375ecb9ecb82"
+    },
+    "win32-x64": {
+      "candidateLockSha256": "5fdd20fbc999e5708fa969f90551a44c348d1f6e0e86d3ba427b5a7e7a896293",
+      "formalLockSha256": "c20a1a327b91d4022746d2fc18b4a8045c31767134b14fdfae866ba2f06cd6ea",
+      "fragmentSha256": "6279cfc153523dab724b4d781cd65c31ea0130d01a699a9e35f701b442ca6359",
+      "handoffSha256": "ccee45e24387298c76793c2d362f04867defe3432e891308fa795a2d518d31f2"
+    }
+  },
+  "stageProducerPolicies": {
+    "win32-x64": {
+      "target": "win32-x64",
+      "workflowPath": ".github/workflows/private-runtime-stage-native.yml",
+      "jobName": "formal-native-stage-win32-x64",
+      "allowedEvents": [
+        "push",
+        "workflow_dispatch"
+      ]
+    },
+    "darwin-arm64": {
+      "target": "darwin-arm64",
+      "workflowPath": ".github/workflows/private-runtime-stage-native.yml",
+      "jobName": "formal-native-stage-darwin-arm64",
+      "allowedEvents": [
+        "push",
+        "workflow_dispatch"
+      ]
+    },
+    "darwin-x64": {
+      "target": "darwin-x64",
+      "workflowPath": ".github/workflows/private-runtime-stage-native.yml",
+      "jobName": "formal-native-stage-darwin-x64",
+      "allowedEvents": [
+        "push",
+        "workflow_dispatch"
+      ]
+    }
+  },
+  "consumer": {
+    "workflowPath": ".github/workflows/private-runtime-stage-native.yml",
+    "allowedEvents": [
+      "push",
+      "workflow_dispatch"
+    ]
+  },
+  "verifierPolicy": {
+    "schemaVersion": 1,
+    "kind": "rt-private-runtime-release-verifier-policy-v1",
+    "preparationPolicySha256": "d7cb20a0894c245ce2f942c5932cc550128003a8d2eab61dd8e9e477ac42b264",
+    "nativeReporters": {
+      "win32-x64": {
+        "path": "scripts/report-private-runtime-native-bootstrap.py",
+        "sha256": "c416ea88125895e5f8c7e561492eb419af8f51e52e7ca96d3e4e6c0af69738e8"
+      },
+      "darwin-arm64": {
+        "path": "scripts/report-private-runtime-native-bootstrap.py",
+        "sha256": "c416ea88125895e5f8c7e561492eb419af8f51e52e7ca96d3e4e6c0af69738e8"
+      },
+      "darwin-x64": {
+        "path": "scripts/report-private-runtime-native-bootstrap.py",
+        "sha256": "c416ea88125895e5f8c7e561492eb419af8f51e52e7ca96d3e4e6c0af69738e8"
+      }
+    },
+    "bootstrapSmokes": {
+      "win32-x64": {
+        "akshare": {
+          "path": "scripts/runtime-bootstrap-smokes/akshare.py",
+          "sha256": "766cf33e24c658f0fbd730205695fbd96431b02a0628240a21be16b8cf56fbdb"
+        },
+        "mootdx": {
+          "path": "scripts/runtime-bootstrap-smokes/mootdx.py",
+          "sha256": "0ce11fd2d84ac444e103bea5f30c380f20c8dbe37596463fdc6fab810adc02f9"
+        },
+        "pywencai": {
+          "path": "scripts/runtime-bootstrap-smokes/pywencai.py",
+          "sha256": "c5fa02c3dc618e5cb51046813c3e7b17845059230ee4cbdb112fa4578e962fc4"
+        }
+      },
+      "darwin-arm64": {
+        "akshare": {
+          "path": "scripts/runtime-bootstrap-smokes/akshare.py",
+          "sha256": "766cf33e24c658f0fbd730205695fbd96431b02a0628240a21be16b8cf56fbdb"
+        },
+        "mootdx": {
+          "path": "scripts/runtime-bootstrap-smokes/mootdx.py",
+          "sha256": "0ce11fd2d84ac444e103bea5f30c380f20c8dbe37596463fdc6fab810adc02f9"
+        },
+        "pywencai": {
+          "path": "scripts/runtime-bootstrap-smokes/pywencai.py",
+          "sha256": "c5fa02c3dc618e5cb51046813c3e7b17845059230ee4cbdb112fa4578e962fc4"
+        }
+      },
+      "darwin-x64": {
+        "akshare": {
+          "path": "scripts/runtime-bootstrap-smokes/akshare.py",
+          "sha256": "766cf33e24c658f0fbd730205695fbd96431b02a0628240a21be16b8cf56fbdb"
+        },
+        "mootdx": {
+          "path": "scripts/runtime-bootstrap-smokes/mootdx.py",
+          "sha256": "0ce11fd2d84ac444e103bea5f30c380f20c8dbe37596463fdc6fab810adc02f9"
+        },
+        "pywencai": {
+          "path": "scripts/runtime-bootstrap-smokes/pywencai.py",
+          "sha256": "c5fa02c3dc618e5cb51046813c3e7b17845059230ee4cbdb112fa4578e962fc4"
+        }
+      }
+    },
+    "stagingSupervisors": {
+      "win32-x64": {
+        "path": "scripts/private-runtime-owned-supervisor.cjs",
+        "sha256": "d45ae5e4f25f5dd8c5a5611208d332091ac7f025f9f7b25e2fbad7ee2ba84422",
+        "ownershipMode": "windows-job",
+        "nativeHostSource": {
+          "path": "resources/private-runtime-owned-job-host.cs",
+          "sha256": "4fc52a65f3f55e12efe8e890a559baddf7e82083dcc6cd3d3dfd31c56dcaa71f"
+        }
+      },
+      "darwin-arm64": {
+        "path": "scripts/private-runtime-owned-supervisor.cjs",
+        "sha256": "d45ae5e4f25f5dd8c5a5611208d332091ac7f025f9f7b25e2fbad7ee2ba84422",
+        "ownershipMode": "posix-owned-session"
+      },
+      "darwin-x64": {
+        "path": "scripts/private-runtime-owned-supervisor.cjs",
+        "sha256": "d45ae5e4f25f5dd8c5a5611208d332091ac7f025f9f7b25e2fbad7ee2ba84422",
+        "ownershipMode": "posix-owned-session"
+      }
+    }
+  }
+}
