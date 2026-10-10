@@ -49,3 +49,6 @@ module.exports = config
 module.exports = require("./scripts/private-python-runtime-builder.cjs").withPrivatePythonPostPackValidation(
   require("./scripts/private-python-runtime-builder.cjs").withPrivatePythonRuntime(module.exports),
 )
+
+// Deliver complete Mac notice/source materials and verify the actual copied bytes.
+module.exports = require('./scripts/mac-distribution-materials.cjs').withMacDistributionMaterials(module.exports)
