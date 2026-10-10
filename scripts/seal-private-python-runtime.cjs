@@ -398,7 +398,27 @@ function unresolvedPending(fragments, completed, deferred = new Set()) {
     }
   }
 }
+function distributionTargets(trust) {
+  if (trust.distributionScope === undefined) return [...TARGETS]
+  if (trust.distributionScope !== 'assembly-target' || !TARGETS.includes(trust.assemblyTarget)) invalid('DISTRIBUTION_SCOPE_INVALID')
+  return [trust.assemblyTarget]
+}
+function verifyDistributionPolicies({ trust, manifests, policy, policySha256, foundation }) {
+  const targets = distributionTargets(trust)
+  for (const target of targets) foundation.validatePreparationPolicy(manifests[target], policy, policySha256)
+  return targets
+}
+function verifyDistributionPending(fragments, targets, assembled = false) {
+  // Every producer must still pass source/native and reject unknown pending codes.
+  // Only the selected delivery targets can discharge licenses and assembly.
+  unresolvedPending(fragments, new Set(['source', 'native']), new Set(['licenses', 'assembly']))
+  const selected = Object.fromEntries(targets.map(target => [target, fragments[target]]))
+  unresolvedPending(selected, new Set(['source', 'native', 'licenses', ...(assembled ? ['assembly'] : [])]),
+    new Set(assembled ? [] : ['assembly']))
+}
+
 async function verifyObligationCoverage({ trust, proof, rules, manifests, preparedRoot, sourceMembers, authority }) {
+  const targets = distributionTargets(trust)
   if (!rules) pending('OBLIGATION_RULES_MISSING')
   if (rules.schemaVersion !== 1 || rules.kind !== 'rt-runtime-distribution-obligation-policy-v1' ||
       rules.preparationPolicySha256 !== trust.approvedPolicySha256 || !Array.isArray(rules.assets)) invalid('OBLIGATION_RULES_INVALID')
@@ -406,8 +426,9 @@ async function verifyObligationCoverage({ trust, proof, rules, manifests, prepar
   if (proof.kind !== 'runtime-distribution-obligations-v1' || proof.policySha256 !== trust.approvedPolicySha256 ||
       proof.sourceSnapshotSha256 !== trust.sourceSnapshotSha256 || !Array.isArray(proof.targets) ||
       proof.targets.length !== 3 || new Set(proof.targets.map(row => row.target)).size !== 3) invalid('OBLIGATIONS_PROOF_INVALID')
+  if (rules.assets.some(rule => !TARGETS.includes(rule.target))) invalid('UNEXPECTED_OBLIGATION_ASSET')
   const used = new Set()
-  for (const target of TARGETS) {
+  for (const target of targets) {
     const manifest = manifests[target], row = proof.targets.find(item => item.target === target), assets = executionAssets(manifest)
     if (!row) pending('OBLIGATION_TARGET_MISSING', target)
     if (row.artifactSetSha256 !== digest(assets) || row.inventorySha256 !== digest(manifest.files) ||
@@ -466,7 +487,7 @@ async function verifyObligationCoverage({ trust, proof, rules, manifests, prepar
     }
     if (row.reviews.some(review => !expectedIds.has(review.id))) invalid('UNEXPECTED_OBLIGATION_REVIEW', target)
   }
-  if (used.size !== rules.assets.length) invalid('UNEXPECTED_OBLIGATION_ASSET')
+  if (used.size !== rules.assets.filter(rule => targets.includes(rule.target)).length) invalid('UNEXPECTED_OBLIGATION_ASSET')
 }
 
 async function sealPrivateRuntime(input, authority = githubAuthority()) {
@@ -482,7 +503,8 @@ async function sealPrivateRuntime(input, authority = githubAuthority()) {
     const foundation = load('electron/shared/privatePythonRuntimeManifest.cjs')
     const lockBytes = fs.readFileSync(lockPath), lock = foundation.validateLock(jsonBytes(lockBytes))
     const policyBytes = bytesBelow(repositoryRoot, POLICY), policy = jsonBytes(policyBytes)
-    for (const target of TARGETS) foundation.validatePreparationPolicy(lock.platforms[target], policy, hash(policyBytes))
+    const deliveryTargets = verifyDistributionPolicies({ trust, manifests: lock.platforms, policy,
+      policySha256: hash(policyBytes), foundation })
     const bindings = { sourceMembers: source.verified }, fragmentObjects = {}
     for (const target of TARGETS) {
       const preparation = preparations?.[target]
@@ -508,8 +530,8 @@ async function sealPrivateRuntime(input, authority = githubAuthority()) {
     }
     await verifyObligationCoverage({ trust, proof: obligationsProof, rules: jsonBytes(bytesBelow(repositoryRoot, RULES)),
       manifests: lock.platforms, preparedRoot, sourceMembers: source.verified, authority })
-    // Assembly is the sole deferred check; caller lists cannot discharge anything.
-    unresolvedPending(fragmentObjects, new Set(['source', 'native', 'licenses']), new Set(['assembly']))
+    // Distribution scope is protected source-authorized context, never caller discharge lists.
+    verifyDistributionPending(fragmentObjects, deliveryTargets)
     const { assemble } = load('scripts/bundle-private-python-runtime.cjs')
     const { validate } = load('scripts/validate-private-python-runtime.cjs')
     const outputs = []
@@ -520,8 +542,9 @@ async function sealPrivateRuntime(input, authority = githubAuthority()) {
       if (digest(jsonBytes(fs.readFileSync(path.join(outputRoot, target, 'manifest.json')))) !== bindings[target].binding.formalManifestIdentitySha256) invalid('ASSEMBLY_BLUEPRINT_CHANGED', target)
       outputs.push(result)
     }
-    unresolvedPending(fragmentObjects, new Set(['source', 'native', 'licenses', ...(outputs.length === 1 ? ['assembly'] : [])]))
+    verifyDistributionPending(fragmentObjects, deliveryTargets, outputs.length === 1)
     return { status: 'accepted', stage: 'pre-sign-native-assembly', assemblyTarget: trust.assemblyTarget, verifiedProducerTargets: TARGETS,
+      verifiedDistributionTargets: deliveryTargets,
       releaseEligible: false, outputs, reasons: [] }
   } catch (error) {
     const status = error.sealStatus || (String(error.message).startsWith('PRIVATE_RUNTIME_PENDING') ? 'pending' : 'invalid')
@@ -536,4 +559,4 @@ if (require.main === module) {
 }
 module.exports = { sealPrivateRuntime, verifySourceAuthority, verifyProducers, verifyObligationCoverage,
   githubAuthority, executionAssets, digest, REQUIRED_SOURCE, PREPARATION_SOURCE, TARGETS, preparationBytes, verifyPreparationBinding,
-  executionOrigin, artifactMember, crc32, unresolvedPending }
+  executionOrigin, artifactMember, crc32, unresolvedPending, distributionTargets, verifyDistributionPolicies, verifyDistributionPending }
