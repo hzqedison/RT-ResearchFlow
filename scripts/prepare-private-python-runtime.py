@@ -320,6 +320,7 @@ def load_policy(path):
         official(pin["asset"], policy)
     for target in policy.get("targets", {}):
         derived_wheels(policy, target)
+    reviewed_resolution_versions(policy)
     return policy, digest(raw)
 
 
@@ -2052,6 +2053,38 @@ def native_tools(config, policy, target, assets, work):
                     "location": "separate toolchain; excluded from product tree"}
 
 
+def reviewed_resolution_versions(policy, target=None):
+    """Version constraints only; never license approval or fresh runtime evidence."""
+    if target is not None and target not in TARGETS:
+        raise Invalid("Unknown reviewed resolution target")
+    if "reviewedResolutionVersions" not in policy:
+        return {}
+    lock = policy["reviewedResolutionVersions"]
+    fields = {"kind", "schemaVersion", "sourceFormalLockSha256", "sourcePreparationRunId", "targets"}
+    if (not isinstance(lock, dict) or set(lock) != fields
+            or lock["kind"] != "rt-reviewed-resolver-version-lock-v1"
+            or type(lock["schemaVersion"]) is not int or lock["schemaVersion"] != 1
+            or not isinstance(lock["sourceFormalLockSha256"], str)
+            or not SHA.fullmatch(lock["sourceFormalLockSha256"])
+            or type(lock["sourcePreparationRunId"]) is not int or lock["sourcePreparationRunId"] <= 0
+            or not isinstance(lock["targets"], dict) or set(lock["targets"]) != set(TARGETS)):
+        raise Invalid("Invalid reviewed resolution version-lock provenance")
+    for selected in TARGETS:
+        versions = lock["targets"][selected]
+        if not isinstance(versions, dict) or not 1 <= len(versions) <= 200:
+            raise Invalid("Invalid reviewed resolution version set")
+        for name, version in versions.items():
+            if (not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name)
+                    or not isinstance(version, str)
+                    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.!+-]*", version)):
+                raise Invalid("Unsafe reviewed resolution requirement")
+        for provider in policy.get("resolverCompatibilityPins", {}).get(selected, {}).values():
+            for name, pin in provider.items():
+                if name not in versions or versions[name] != pin["version"]:
+                    raise Invalid("Reviewed resolution conflicts with exact compatibility pin")
+    return lock["targets"] if target is None else lock["targets"][target]
+
+
 def resolution_constraints(policy, provider, assets, work, target="win32-x64", operations=None):
     versions, seed = {}, None
     seed_path = (operations or {}).get("seedReports", {}).get(provider)
@@ -2065,6 +2098,7 @@ def resolution_constraints(policy, provider, assets, work, target="win32-x64", o
                 raise Invalid("Unsafe seed requirement")
             versions[name] = metadata["version"]
         seed = {"sha256": digest(raw), "purpose": "version constraints only; NOT a final lock or resolver evidence"}
+    versions.update(reviewed_resolution_versions(policy, target))
     # Stale seed engine entries are constraints only, never retained provider roots.
     versions.pop("mini-racer", None)
     versions.pop("py-mini-racer", None)
@@ -2082,6 +2116,16 @@ def resolution_constraints(policy, provider, assets, work, target="win32-x64", o
 
 
 def validate_resolver_pins(policy, target, provider, wheels):
+    versions = reviewed_resolution_versions(policy, target)
+    if versions:
+        if not wheels:
+            raise Invalid("Reviewed resolution produced no wheels")
+        seen = set()
+        for wheel in wheels:
+            name = re.sub(r"[-_.]+", "-", wheel["distribution"]).lower()
+            if name in seen or name not in versions or wheel["version"] != versions[name]:
+                raise Invalid("Resolver selected an unreviewed dependency version")
+            seen.add(name)
     for selected in derived_wheels(policy, target):
         matches = [wheel for wheel in wheels if re.sub(r"[-_.]+", "-", wheel["distribution"]).lower()
                    == re.sub(r"[-_.]+", "-", selected["distribution"]).lower()]
