@@ -11,7 +11,8 @@
     "checked": [
       "Current preparation snapshot has no hash conflicts across its 17 source inputs",
       "Native-only verifier scope and final rejection gates: 18 offline tests passed",
-      "Authorization, native verifier rejection and exact artifact origin: 93 offline tests passed"
+      "Authorization, native verifier rejection and exact artifact origin: 93 offline tests passed",
+      "Formal lock 32 MiB bounded reader and exact origin: 12 offline tests passed; original 38078641159 common failure was 8 MiB reader cap"
     ],
     "notClaimed": [
       "Human license approval",
@@ -29,7 +30,7 @@
   "trustedContext": {
     "repositoryId": 1408465497,
     "repositoryFullName": "hzqedison/RT-ResearchFlow",
-    "approvedSourceCommit": "a38a781f291d1f81b4166efdaee30cae723856f2",
+    "approvedSourceCommit": "400a84725356270e3729ecba6740d6b89de6a59c",
     "approvedPolicySha256": "d7cb20a0894c245ce2f942c5932cc550128003a8d2eab61dd8e9e477ac42b264",
     "approvedSealImplementationSha256": "5456c6744419bcb698b2e693c24d3c8de4f0187bf8d754b660111677d715800e",
     "sourceSnapshotSha256": "6b8bad51b91bd8bd811e8e4b6701fe3b3438e530fba5c6f2b345619d5441be5f",

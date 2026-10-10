@@ -1,0 +1,197 @@
+{
+  "kind": "mac-final-obligations-engineering-review-v1",
+  "release": "1.7.0-unreleased",
+  "reviewDate": "2026-10-11",
+  "status": "materials-completed-or-scoped-conditional-not-release-approval",
+  "reviewType": "Automated local original-byte engineering review; not human or legal approval.",
+  "approvalGranted": false,
+  "releaseEligible": false,
+  "productionInstallModified": false,
+  "userDatabaseModified": false,
+  "brokerConnected": false,
+  "ordersSubmitted": false,
+  "newDownloadCount": 0,
+  "runtimeCompilationExecuted": false,
+  "macRuntimeExecuted": false,
+  "subagentsUsed": false,
+  "currentFormalLock": {
+    "path": "D:/RT-ResearchFlow-BuildCache/windows-1.7-formal-inputs-current/formal-lock.json",
+    "sha256": "c20a1a327b91d4022746d2fc18b4a8045c31767134b14fdfae866ba2f06cd6ea",
+    "status": "locked",
+    "releaseEligible": false,
+    "structuralOnly": true
+  },
+  "currentPrepareRun": 38031520327,
+  "currentSourceSnapshotSha256": "6b8bad51b91bd8bd811e8e4b6701fe3b3438e530fba5c6f2b345619d5441be5f",
+  "sourceVerified": false,
+  "nativeBootstrapVerified": false,
+  "oldNoticeReviewRun": 37960129695,
+  "originalLinkEvidencePath": "resources/python-runtime/reviewed-materials/mac-python-original-link-evidence-1.7.json",
+  "materialRoot": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011",
+  "obligations": [
+    {
+      "component": "pip/vendor certifi",
+      "materialsStatus": "completed-for-bound-input",
+      "finding": "Pip 26.2.1 / certifi 2026.6.17 (init 2026.06.17), retained ensurepip wheel 71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e. All six source members agree across architectures and installed original copy. 2026.7.22 is different and insufficient as a substitute.",
+      "delivered": [
+        "Six exact source files",
+        "Complete MPL-2.0",
+        "Pip license/authors/metadata/vendor list",
+        "Recipient README"
+      ],
+      "minimumRemaining": [
+        "Include the source directory, full MPL and README in the actual recipient-visible delivery; bind its delivered manifest."
+      ]
+    },
+    {
+      "component": "BDB",
+      "materialsStatus": "notice-completed-system-ndbm-scope-evidenced",
+      "finding": "Both USE_NDBM configurations have no external dbm link. Both actual _dbm Mach-O files have only libSystem dependency and nine dbm imports with ordinal 1 mapping to libSystem. No Oracle DB path or db_create/db_env_create/__db_ candidate was observed. This supports system-NDBM routing, not a blanket final-product absence approval.",
+      "delivered": [
+        "Verbatim 7293-byte BDB composite notice",
+        "Both dbm import-ordinal maps and native hashes",
+        "Current-lock member binding"
+      ],
+      "minimumRemaining": [
+        "Final delivery must preserve the bound system-NDBM route; only if bundled Oracle DB is actually introduced, supply exact DB plus accompanying software source/access information required by the retained text."
+      ]
+    },
+    {
+      "component": "X11",
+      "materialsStatus": "complete-conservative-notice-delivery-prepared",
+      "finding": "No external libX11/Xext/xcb load was observed, but each Tk library contains 158 X-style defined symbol-table entries. Symbol naming does not identify ownership or exclude incorporated code. All 47018 bytes of libX11 composite notice, Xau and xcb notices are retained rather than making an absence claim.",
+      "delivered": [
+        "Complete libX11 composite notice without shortening to MIT",
+        "Original Xau and xcb notices",
+        "Tk native dependencies and symbol candidates"
+      ],
+      "minimumRemaining": [
+        "Deliver full notices with supporting materials, retain name-use restrictions, and check any newly added final-product components; no additional missing X11 notice identified in the retained archive set."
+      ]
+    },
+    {
+      "component": "OpenSSL legacy",
+      "materialsStatus": "complete-dual-notice-and-acknowledgment-delivery-prepared",
+      "finding": "Both _ssl and _hashlib metadata explicitly list OpenSSL legacy and Apache-2.0 notice paths. Keep both full texts; version naming is not grounds to discard legacy.",
+      "delivered": [
+        "Original LICENSE.openssl-1.1.txt including SSLeay",
+        "Original LICENSE.openssl-3.txt",
+        "Both OpenSSL acknowledgment wordings plus Eric Young and Tim Hudson attribution"
+      ],
+      "minimumRemaining": [
+        "Include both complete licenses and acknowledgment in actual recipient materials; use the relevant acknowledgment on advertising mentioning features/use, and check product-name/endorsement restrictions."
+      ]
+    },
+    {
+      "component": "Tix",
+      "materialsStatus": "primary-notice-completed-bounded-negative-component-evidence",
+      "finding": "Both originals have no Tix path, native Tix symbol, pkgIndex registration or tix text hits among .tcl/.py/.h source members under the stated bounds. The full archives contain only LICENSE.tix.txt matching the Tix path predicate. Its two referenced subordinate notices are not present. Original Tcl notice is preserved but is not claimed byte-identical to docs/license.tcltk.",
+      "delivered": [
+        "Original 2826-byte Tix composite notice",
+        "Original Tcl notice",
+        "Full inventory, all ten Mach-O scans per target and five pkgIndex texts per target"
+      ],
+      "minimumRemaining": [
+        "If final delivery includes Tix code, obtain exact docs/license.tcltk and docs/license.html_lib or a source-level non-applicability record. If final component inventory confirms the observed no-Tix scope, record that scoped applicability decision instead of fetching unrelated Tix notices."
+      ]
+    }
+  ],
+  "checksPerformed": {
+    "originalArchives": [
+      {
+        "target": "darwin-arm64",
+        "role": "python",
+        "sha256": "d8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933",
+        "size": 25365830,
+        "members": 1655
+      },
+      {
+        "target": "darwin-arm64",
+        "role": "full",
+        "sha256": "ca3eb5bf8110eaed1c3e516be4bd4d52bcf636f8e888359353f274288406bae7",
+        "size": 59224664,
+        "members": 3691
+      },
+      {
+        "target": "darwin-x64",
+        "role": "python",
+        "sha256": "8e9cb087305bfb8969f68a905f79f41469d4aa5220c1aa71ada7fc9953bdba0f",
+        "size": 25067280,
+        "members": 1652
+      },
+      {
+        "target": "darwin-x64",
+        "role": "full",
+        "sha256": "57030cb11a1e823903b13ada440f64e7a06fcaeaabe1051559ef8c34890c277a",
+        "size": 58427280,
+        "members": 3688
+      }
+    ],
+    "lockReceiptDigestMatches": true,
+    "runMatchesOrigin": true,
+    "targets": {
+      "darwin-arm64": {
+        "dbmImportCount": 9,
+        "tixSymbolCount": 0,
+        "externalXDependencies": [],
+        "oracleDBSignals": [],
+        "tkDefinedX": 158,
+        "allMachOBound": true
+      },
+      "darwin-x64": {
+        "dbmImportCount": 9,
+        "tixSymbolCount": 0,
+        "externalXDependencies": [],
+        "oracleDBSignals": [],
+        "tkDefinedX": 158,
+        "allMachOBound": true
+      }
+    },
+    "wheelSourceMembersAcrossTargetsAndOriginalInstalledCopyAgree": true,
+    "noticeTargetsAgree": true,
+    "allEightNoticeDigestsAndSizesMatchCurrentLock": true
+  },
+  "sharedMinimumRemaining": [
+    "Ship the prepared notices/source/README, and record recipient-visible access plus actual final artifact/member hashes. Current structural lock is not a native/final seal.",
+    "Obtain the real scoped review/release authorization without changing policy approvals in this task."
+  ],
+  "notClaimed": [
+    "Actual Mac installation or runtime testing",
+    "Whole-product source/third-party applicability closure",
+    "Human approval",
+    "Protected authorization",
+    "Final release sealing"
+  ],
+  "changedFiles": [
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.bdb.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.libX11.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.libXau.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.libxcb.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.openssl-1.1.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.openssl-3.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.tix.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.tcl.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-vendored-certifi-2026.6.17/pip/_vendor/certifi/LICENSE",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-vendored-certifi-2026.6.17/pip/_vendor/certifi/__init__.py",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-vendored-certifi-2026.6.17/pip/_vendor/certifi/__main__.py",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-vendored-certifi-2026.6.17/pip/_vendor/certifi/cacert.pem",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-vendored-certifi-2026.6.17/pip/_vendor/certifi/core.py",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-vendored-certifi-2026.6.17/pip/_vendor/certifi/py.typed",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-context/pip/_vendor/vendor.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-context/pip-26.2.1.dist-info/METADATA",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-context/pip-26.2.1.dist-info/licenses/LICENSE.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-context/pip-26.2.1.dist-info/licenses/AUTHORS.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/MPL-2.0.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/evidence/darwin-arm64-PYTHON.json",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/evidence/darwin-x64-PYTHON.json",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/OPENSSL-ACKNOWLEDGMENTS.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/evidence/native-dependencies.json",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/evidence/current-input-binding.json",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/evidence/pip-vendor-source.json",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/README.txt",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/evidence/read-only-audit.cjs",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/delivery-manifest.json",
+    "resources/python-runtime/reviewed-materials/mac-final-obligations-review-1.7-20261011.json",
+    "docs/quality/mac-final-obligations-1.7-20261011.md"
+  ]
+}

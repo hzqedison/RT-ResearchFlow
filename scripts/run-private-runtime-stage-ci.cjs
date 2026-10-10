@@ -48,6 +48,8 @@ function read(filename, cap = 8 * 1024 * 1024) {
   if (bytes.length !== stat.size) fail('STAGE_FILE_CHANGED')
   return bytes
 }
+const FORMAL_LOCK_BYTE_CAP = 32 * 1024 * 1024
+function readFormalLock(filename) { return read(filename, FORMAL_LOCK_BYTE_CAP) }
 function writeJson(filename, value) { fs.writeFileSync(filename, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' }) }
 function options(argv) {
   const names = { '--target': 'target', '--candidate-proof': 'candidateProof', '--formal-lock': 'formalLock',
@@ -252,7 +254,7 @@ async function run(args, env = process.env) {
   pythonCall(args.python, EXTRACT, [archive, retained], work, env, 180000)
   const preparation = { candidateLockPath: path.join(retained, 'prepare/candidate-lock.json'),
     fragmentPath: path.join(retained, 'prepare/candidate-fragment.json'), handoffPath: path.join(retained, 'handoff.json') }
-  const lockBytes = read(formalLock)
+  const lockBytes = readFormalLock(formalLock)
   producer.verifyStagingInputPins({ formalLockSha256: lockBytes,
     candidateLockSha256: read(preparation.candidateLockPath), fragmentSha256: read(preparation.fragmentPath),
     handoffSha256: read(preparation.handoffPath) }, authorization.stagingInputs?.[args.target])
@@ -301,7 +303,7 @@ async function run(args, env = process.env) {
   writeJson(path.join(evidence, 'stage-input-receipt.json'), { target: args.target, candidateOrigin: origin,
     sourceCommit: env.GITHUB_SHA, runId: Number(env.GITHUB_RUN_ID), runAttempt: Number(env.GITHUB_RUN_ATTEMPT),
     rawInputAssets: false, finalSealAccepted: false, releaseEligible: false,
-    files: fs.readdirSync(evidence).sort().map(name => ({ path: name, sha256: hash(read(path.join(evidence, name))), size: fs.statSync(path.join(evidence, name)).size })) })
+    files: fs.readdirSync(evidence).sort().map(name => ({ path: name, sha256: hash(name === 'formal-lock.json' ? readFormalLock(path.join(evidence, name)) : read(path.join(evidence, name))), size: fs.statSync(path.join(evidence, name)).size })) })
   return result
 }
 if (require.main === module) {
@@ -310,4 +312,4 @@ if (require.main === module) {
     process.stderr.write(JSON.stringify({ status: 'pending', releaseEligible: false, code }) + '\n'); process.exitCode = 1
   })
 }
-module.exports = { options, sourceProof, verifyCandidateOrigin, assetPlan, owned, childEnvironment, EXTRACT, CACHE, run }
+module.exports = { options, sourceProof, verifyCandidateOrigin, assetPlan, owned, childEnvironment, EXTRACT, CACHE, readFormalLock, FORMAL_LOCK_BYTE_CAP, run }
