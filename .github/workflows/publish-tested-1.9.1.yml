@@ -54,7 +54,7 @@ jobs:
             const sums = fs.readFileSync(path.join(root,sumName),'utf8').trim().split(/\r?\n/)
             if (sums.length !== 1) throw Error('UNEXPECTED_INSTALLER_COUNT')
             const match = sums[0].match(/^([a-f0-9]{64})\s+release\/([^/]+)$/)
-            if (!match || match[2] !== `RT-ResearchFlow-1.9.1-${arch}.dmg`) throw Error('UNEXPECTED_INSTALLER_IDENTITY')
+            if (!match || match[2] !== `RT-ResearchFlow-macOS-1.9.1-${arch}.dmg`) throw Error('UNEXPECTED_INSTALLER_IDENTITY')
             const installer = path.join(root,match[2])
             const actual = crypto.createHash('sha256').update(fs.readFileSync(installer)).digest('hex')
             if (actual !== match[1] || existing.has(match[2]) || existing.has(sumName)) throw Error('HASH_MISMATCH_OR_PUBLISHED_ASSET_EXISTS')
