@@ -44,8 +44,15 @@ test('actual packaged application displays workbench, settings and exits cleanly
     await page.getByText('免费 · 早封首板', { exact: true }).first().click()
     await expect(page.getByTestId('public-limit-lab-guide')).toContainText('无需 Tushare Key 或 Python')
     await expect(page.getByTestId('public-limit-run-plan')).toContainText('收益回测不可用')
-    await page.getByRole('button', { name: '配置', exact: true }).click()
-    await expect(page.getByTestId('public-limit-strategy-editor')).toBeVisible()
+    // Fresh profiles can finish their initial health check after navigation.
+    // Dismiss its guide as a user would; never force a click through the overlay.
+    await expect(async () => {
+      if (await guide.isVisible()) await guide.getByLabel('关闭引导').click({ timeout: 2000 })
+      if (!await page.getByTestId('public-limit-strategy-editor').isVisible()) {
+        await page.getByRole('button', { name: '配置', exact: true }).click({ timeout: 2000 })
+      }
+      await expect(page.getByTestId('public-limit-strategy-editor')).toBeVisible({ timeout: 2000 })
+    }).toPass({ timeout: 45000 })
     await expect(page.getByTestId('public-limit-strategy-editor')).toContainText('免费盘后涨停规则')
     await page.getByRole('button', { name: '关闭配置', exact: true }).click()
     await page.getByTestId('nav-tab-feed').click()
