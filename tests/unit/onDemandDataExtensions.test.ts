@@ -25,6 +25,8 @@ describe('explicit online extension installation', () => {
       expect(executable).toContain(join(root, 'data-source-extensions', 'environment-'))
       expect(run.mock.calls[2][1]).toContain('--only-binary=:all:')
       expect(run.mock.calls[2][1]).toContain('https://pypi.org/simple')
+      expect(run.mock.calls[2][1]).toContain('--cache-dir')
+      expect(run.mock.calls[2][1]).toContain(join(root, 'data-source-cache', 'pip'))
       expect(extensionInstallProgress().phase).toBe('complete')
     } finally { await rm(root, { recursive: true, force: true }) }
   })

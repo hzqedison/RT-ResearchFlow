@@ -22,6 +22,7 @@ jobs:
     env:
       RT_EXTENSION_DELIVERY: on-demand
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      USE_HARD_LINKS: 'false'
       NODE_OPTIONS: ''
       NODE_PATH: ''
     steps:
@@ -44,7 +45,7 @@ jobs:
       - name: Type checks and extension contracts
         run: |
           pnpm run typecheck
-          pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts
+          pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts
       - name: Build same-product native installer
         run: node macos/build.mjs
       - name: Actual DMG install, startup and first-use online extension test

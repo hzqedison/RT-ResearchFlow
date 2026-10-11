@@ -35,7 +35,8 @@ export async function installOnDemandExtensions(config: MultiSourcePreference, b
       progress = { running: true, phase: 'downloading', provider, message: `正在下载并安装 ${provider}，请勿退出；网络较慢时可能需要数分钟` }
       // Only wheels from the public PyPI index. Do not inherit custom pip config,
       // execute an arbitrary source build, or silently use an unofficial mirror.
-      await run(executable, ['-I', '-m', 'pip', '--isolated', '--disable-pip-version-check', 'install',
+      await run(executable, ['-I', '-m', 'pip', '--isolated', '--disable-pip-version-check',
+        '--cache-dir', join(userData, 'data-source-cache', 'pip'), 'install',
         '--index-url', 'https://pypi.org/simple', '--only-binary=:all:', '--timeout', '30', '--retries', '1', requirements[provider]], '', 600_000, false)
     }
     progress = { running: true, phase: 'verifying', message: '检查所选扩展能否实际导入' }
