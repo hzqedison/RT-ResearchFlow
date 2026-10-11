@@ -57,7 +57,8 @@ async function prepare(root: string, configuredPython: string, minimumMinor: num
     throw Error('PRODUCT_PYTHON_UNSAFE_SOURCE')
   }
   await mkdir(root, { recursive: true })
-  const stage = await mkdtemp(join(root, 'python-preparing-'))
+  const container = await mkdtemp(join(root, 'python-preparing-'))
+  const stage = join(container, 'python')
   try {
     await cp(sourceRoot, stage, {
       recursive: true,
@@ -82,9 +83,9 @@ async function prepare(root: string, configuredPython: string, minimumMinor: num
     // installer cannot silently replace an already working private runtime.
     await rename(stage, destination)
     return executable
-  } catch (error) {
-    // Remove only the staging directory allocated by this invocation.
-    await rm(stage, { recursive: true, force: true }).catch(() => {})
-    throw error
+  } finally {
+    // The copy target itself is initially absent, including on newer Node
+    // versions. Remove only this invocation's owned temporary container.
+    await rm(container, { recursive: true, force: true }).catch(() => {})
   }
 }
