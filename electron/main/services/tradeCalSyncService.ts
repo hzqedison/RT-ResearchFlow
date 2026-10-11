@@ -7,6 +7,7 @@ import Database from 'better-sqlite3'
 import { upsertTradeCal, hasTradeCalCoverage, insertTradeCalIfMissing } from '../database/tradeCalRepository'
 import { fetchTradeCal } from './tushareService'
 import { getBeijingYmd, offsetYmd } from './marketSettlementPolicy'
+import { checkLocalWork, isLocalWorkCancelled, waitForLocalWork } from './publicMarketWorkOwner'
 import {
   buildOfficialSseTradingCalendar,
   OFFICIAL_SSE_CALENDAR_START,
@@ -44,29 +45,34 @@ export function seedOfficialTradeCalendar(db: Database.Database): TradeCalSyncRe
   }
 }
 
-export async function syncTradeCalIfNeeded(db: Database.Database, token?: string | null): Promise<void> {
+export async function syncTradeCalIfNeeded(db: Database.Database, token?: string | null, signal?: AbortSignal): Promise<void> {
+  checkLocalWork(signal)
   if (_syncPromise) {
-    await _syncPromise
+    await waitForLocalWork(_syncPromise, signal)
+    checkLocalWork(signal)
     return
   }
   seedOfficialTradeCalendar(db)
   const today = getBeijingYmd()
   if (hasTradeCalCoverage(db, today, offsetYmd(today, 60))) return
-  await syncTradeCalFull(db, token)
+  await syncTradeCalFull(db, token, signal)
 }
 
-export function syncTradeCalFull(db: Database.Database, token?: string | null): Promise<TradeCalSyncResult> {
-  if (_syncPromise) return _syncPromise
+export function syncTradeCalFull(db: Database.Database, token?: string | null, signal?: AbortSignal): Promise<TradeCalSyncResult> {
+  try { checkLocalWork(signal) } catch (error) { return Promise.reject(error) }
+  if (_syncPromise) return waitForLocalWork(_syncPromise, signal)
   _syncRunning = true
   let promise: Promise<TradeCalSyncResult>
   promise = Promise.resolve().then(async (): Promise<TradeCalSyncResult> => {
     try {
+      checkLocalWork(signal)
       const today = getBeijingYmd()
       const startDate = offsetYmd(today, -3 * 365)
       const endDate = offsetYmd(today, 365)
       if (token?.trim()) {
         try {
-          const rows = await fetchTradeCal(token, 'SSE', startDate, endDate)
+          const rows = await fetchTradeCal(token, 'SSE', startDate, endDate, signal)
+          checkLocalWork(signal)
           if (rows.length > 0 && rows.every((row) =>
             /^\d{8}$/.test(row.calDate) && (row.isOpen === 0 || row.isOpen === 1),
           )) {
@@ -82,12 +88,17 @@ export function syncTradeCalFull(db: Database.Database, token?: string | null): 
             }
           }
           console.warn('[TradeCal] Tushare returned no usable calendar; using published official schedules')
-        } catch {
+        } catch (error) {
+          checkLocalWork(signal)
+          if (isLocalWorkCancelled(error)) throw error
           console.warn('[TradeCal] Tushare calendar unavailable; using published official schedules')
         }
       }
+      checkLocalWork(signal)
       return seedOfficialTradeCalendar(db)
-    } catch {
+    } catch (error) {
+      checkLocalWork(signal)
+      if (isLocalWorkCancelled(error)) throw error
       console.warn('[TradeCal] Calendar persistence failed; existing data was not cleared')
       return { status: 'failed', rowCount: 0 }
     }

@@ -15,6 +15,8 @@ import {
 } from './tushareService'
 import { syncTradeCalFull, syncTradeCalIfNeeded } from './tradeCalSyncService'
 import { getLastSettledCalendarDate } from './marketSettlementPolicy'
+import { checkLocalWork, isLocalWorkCancelled, localWorkDelay } from './publicMarketWorkOwner'
+import { tushareHistoricalWorkOwner } from './tushareHistoricalWorkOwner'
 
 export interface HistoricalDailyProgress {
   totalTradeDays: number
@@ -37,6 +39,7 @@ export interface HistoricalDailySyncResult extends HistoricalDailyProgress {
 export type HistoricalDailyTurnoverWarning = TushareAccessErrorCode | 'TUSHARE_UPSTREAM_UNAVAILABLE'
 
 export interface HistoricalDailySyncOptions {
+  signal?: AbortSignal
   tradeDayCount?: number
   completeRowThreshold?: number
   endDate?: string
@@ -55,7 +58,7 @@ export function getHistoricalDailyDefaultEndDate(now = Date.now()): string {
 }
 
 function emitProgress(win: BrowserWindow | undefined, progress: HistoricalDailyProgress, onProgress?: (progress: HistoricalDailyProgress) => void): void {
-  win?.webContents.send('diagnostics:historicalDailyProgress', progress)
+  if (win && !win.isDestroyed?.() && !win.webContents.isDestroyed?.()) win.webContents.send('diagnostics:historicalDailyProgress', progress)
   onProgress?.({ ...progress })
 }
 
@@ -69,14 +72,20 @@ function createHistoricalDailyError(code: string, message = code): Error & { cod
   return error
 }
 
-export async function runHistoricalDailySync(
+export function runHistoricalDailySync(
   db: Database.Database,
   token: string,
   win?: BrowserWindow,
   options: HistoricalDailySyncOptions = {}
 ): Promise<HistoricalDailySyncResult> {
-  if (syncRunning) throw new Error('HISTORICAL_DAILY_SYNC_RUNNING')
+  try { tushareHistoricalWorkOwner.assertAccepting(options.signal) } catch (error) { return Promise.reject(error) }
+  if (syncRunning) return Promise.reject(new Error('HISTORICAL_DAILY_SYNC_RUNNING'))
   syncRunning = true
+  return tushareHistoricalWorkOwner.run(signal => runHistoricalDailySyncOwned(db, token, win, { ...options, signal }), options.signal)
+    .finally(() => { syncRunning = false })
+}
+async function runHistoricalDailySyncOwned(db: Database.Database, token: string, win: BrowserWindow | undefined, options: HistoricalDailySyncOptions): Promise<HistoricalDailySyncResult> {
+  checkLocalWork(options.signal)
   const tradeDayCount = options.tradeDayCount ?? HISTORICAL_DAILY_TARGET_TRADE_DAYS
   const completeRowThreshold = options.completeRowThreshold ?? DEFAULT_COMPLETE_ROW_THRESHOLD
   const endDate = options.endDate ?? getHistoricalDailyDefaultEndDate()
@@ -97,10 +106,12 @@ export async function runHistoricalDailySync(
   let turnoverSupplementWarning: HistoricalDailyTurnoverWarning | null = null
 
   try {
-    await syncTradeCalIfNeeded(db, token)
+    await syncTradeCalIfNeeded(db, token, options.signal)
+    checkLocalWork(options.signal)
     let tradeDays = getLastNTradingDays(db, tradeDayCount, endDate)
     if (tradeDays.length < tradeDayCount) {
-      await syncTradeCalFull(db, token)
+      await syncTradeCalFull(db, token, options.signal)
+      checkLocalWork(options.signal)
       tradeDays = getLastNTradingDays(db, tradeDayCount, endDate)
     }
     if (tradeDays.length < tradeDayCount) {
@@ -112,11 +123,13 @@ export async function runHistoricalDailySync(
     progress.totalTradeDays = tradeDays.length
     progress.message = `待检查 ${tradeDays.length} 个交易日`
     emitProgress(win, progress, options.onProgress)
+    checkLocalWork(options.signal)
 
     const coverage = countDailyCloseByTradeDates(db, tradeDays)
     const turnoverGaps = countMissingDailyCloseTurnoverByTradeDates(db, tradeDays)
 
     for (const tradeDate of tradeDays) {
+      checkLocalWork(options.signal)
       progress.currentTradeDate = tradeDate
       const existingRows = coverage.get(tradeDate) ?? 0
       const missingTurnoverRows = turnoverGaps.get(tradeDate) ?? 0
@@ -130,6 +143,7 @@ export async function runHistoricalDailySync(
 
       let requested = false
       let dateSucceeded = false
+      let dateCancelled = false
       try {
         if (existingRows >= completeRowThreshold) {
           if (turnoverSupplementWarning) {
@@ -141,7 +155,8 @@ export async function runHistoricalDailySync(
             emitProgress(win, progress, options.onProgress)
             requested = true
             try {
-              const basics = await fetchDailyBasicByDate(token, tradeDate)
+              const basics = await fetchDailyBasicByDate(token, tradeDate, options.signal)
+              checkLocalWork(options.signal)
               const updated = backfillDailyCloseTurnover(db, basics)
               progress.insertedRows += updated
               if (updated >= missingTurnoverRows) {
@@ -154,6 +169,8 @@ export async function runHistoricalDailySync(
                 progress.message = `${tradeDate} 仅补齐 ${updated}/${missingTurnoverRows} 条换手率`
               }
             } catch (err) {
+              checkLocalWork(options.signal)
+              if (isLocalWorkCancelled(err)) throw err
               const warning = getTushareAccessErrorCode(err) ?? 'TUSHARE_UPSTREAM_UNAVAILABLE'
               turnoverSupplementWarning = warning
               progress.skippedTradeDays += 1
@@ -166,7 +183,8 @@ export async function runHistoricalDailySync(
           progress.message = `正在同步 ${tradeDate} 全市场日线`
           emitProgress(win, progress, options.onProgress)
           requested = true
-          const rows = await fetchDailyByDate(token, tradeDate)
+          const rows = await fetchDailyByDate(token, tradeDate, options.signal)
+          checkLocalWork(options.signal)
           if (rows.length === 0) {
             progress.failedTradeDays += 1
             failedDates.push(tradeDate)
@@ -175,7 +193,8 @@ export async function runHistoricalDailySync(
             let mergedRows = rows
             if (!turnoverSupplementWarning) {
               try {
-                const basics = await fetchDailyBasicByDate(token, tradeDate)
+                const basics = await fetchDailyBasicByDate(token, tradeDate, options.signal)
+                checkLocalWork(options.signal)
                 if (basics.length > 0) {
                   const turnoverMap = new Map(basics.map((row) => [row.tsCode, row.turnoverRate]))
                   mergedRows = rows.map((row) => ({
@@ -184,11 +203,14 @@ export async function runHistoricalDailySync(
                   }))
                 }
               } catch (err) {
+                checkLocalWork(options.signal)
+                if (isLocalWorkCancelled(err)) throw err
                 turnoverSupplementWarning = getTushareAccessErrorCode(err) ?? 'TUSHARE_UPSTREAM_UNAVAILABLE'
                 console.warn('[HistoricalDailySync] daily_basic merge failed:', err instanceof Error ? err.message : String(err))
               }
             }
 
+            checkLocalWork(options.signal)
             upsertDailyClose(db, mergedRows, {
               dataSource: 'tushare',
               amountSource: 'tushare',
@@ -202,6 +224,7 @@ export async function runHistoricalDailySync(
           }
         }
       } catch (err) {
+        if (options.signal?.aborted || isLocalWorkCancelled(err)) { dateCancelled = true; checkLocalWork(options.signal); throw err }
         progress.failedTradeDays += 1
         failedDates.push(tradeDate)
         const accessCode = getTushareAccessErrorCode(err)
@@ -211,8 +234,7 @@ export async function runHistoricalDailySync(
         console.warn('[HistoricalDailySync] date failed:', tradeDate, err)
         if (accessCode) throw createHistoricalDailyError(accessCode)
       } finally {
-        progress.processedTradeDays += 1
-        emitProgress(win, progress, options.onProgress)
+        if (!dateCancelled) { progress.processedTradeDays += 1; emitProgress(win, progress, options.onProgress) }
       }
       consecutiveDateFailures = dateSucceeded ? 0 : consecutiveDateFailures + 1
       if (consecutiveDateFailures >= MAX_CONSECUTIVE_DATE_FAILURES) {
@@ -222,10 +244,11 @@ export async function runHistoricalDailySync(
         )
       }
       if (requested && requestDelayMs > 0 && progress.processedTradeDays < progress.totalTradeDays) {
-        await new Promise((resolve) => setTimeout(resolve, requestDelayMs))
+        await localWorkDelay(requestDelayMs, options.signal)
       }
     }
 
+    checkLocalWork(options.signal)
     progress.currentTradeDate = null
     const turnoverMessage = turnoverSupplementWarning ? `, 换手率补充已降级(${turnoverSupplementWarning})` : ''
     progress.message = failedDates.length > 0
@@ -240,7 +263,12 @@ export async function runHistoricalDailySync(
       failedDates,
       turnoverSupplementWarning,
     }
-  } finally {
-    syncRunning = false
+  } catch (error) {
+    if (options.signal?.aborted || isLocalWorkCancelled(error)) {
+      progress.message = '历史日线同步已停止，已提交日期保留，下次可继续补齐'
+      emitProgress(win, progress, options.onProgress)
+      checkLocalWork(options.signal)
+    }
+    throw error
   }
 }

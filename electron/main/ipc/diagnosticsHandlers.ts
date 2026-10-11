@@ -7,6 +7,7 @@ import type { SupportErrorCode } from '../../shared/supportDiagnostics'
 import { FACT_REASON_MESSAGES } from '../../shared/dataReadiness'
 import { getHistoricalDailyProgress } from '../services/historicalDailyProgressService'
 import { isPublicHistoricalDailySyncRunning } from '../services/publicHistoricalDailySyncService'
+import { isLocalWorkCancelled } from '../services/publicMarketWorkOwner'
 
 const ALLOWED_ACTIONS: DiagnosticRunAction[] = [
   'refreshHealth',
@@ -136,6 +137,7 @@ export function registerDiagnosticsHandlers(getWindow: TrustedWindowGetter): voi
       }
       return { ok: true as const, data }
     } catch (err) {
+      if (isLocalWorkCancelled(err)) return { ok: false as const, error: 'LOCAL_WORK_CANCELLED', message: '同步已停止，已提交的数据保留，下次可继续补齐。' }
       const code = toErrorCode(err)
       const failure = recordSupportFailure(toSupportErrorCode(code), action === 'refreshHealth' ? 'runtime' : 'data')
       console.error(`[diagnostics:runCheck] action=${action} failed:`, { code, correlationId: failure.correlationId })

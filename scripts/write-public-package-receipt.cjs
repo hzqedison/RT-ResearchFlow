@@ -18,6 +18,7 @@ async function main() {
   if (Number(version.split('.')[1]) >= 17 && process.env.RT_PACKAGED_CAPITAL_VERIFIED !== '1') throw Error('PACKAGED_CAPITAL_ACCEPTANCE_REQUIRED')
   if (Number(version.split('.')[1]) >= 18 && process.env.RT_PACKAGED_VALIDATION_VERIFIED !== '1') throw Error('PACKAGED_VALIDATION_ACCEPTANCE_REQUIRED')
   if (Number(version.split('.')[1]) >= 18 && process.env.RT_PACKAGED_PUBLIC_WORK_VERIFIED !== '1') throw Error('PACKAGED_PUBLIC_WORK_ACCEPTANCE_REQUIRED')
+  if (Number(version.split('.')[1]) >= 18 && process.env.RT_PACKAGED_TUSHARE_WORK_VERIFIED !== '1') throw Error('PACKAGED_TUSHARE_WORK_ACCEPTANCE_REQUIRED')
   const executable = process.env.RT_PACKAGED_EXE
   if (!executable || !path.isAbsolute(executable)) throw Error('PACKAGED_EXECUTABLE_REQUIRED')
   const proof = JSON.parse(fs.readFileSync(path.join(root, `packaged-ai-credentials-proof-${process.platform}-${process.arch}.json`), 'utf8'))
@@ -38,6 +39,7 @@ async function main() {
     localPortfolioSimulationPersistenceVerified: process.env.RT_PACKAGED_CAPITAL_VERIFIED === '1',
     localRollingValidationPersistenceVerified: process.env.RT_PACKAGED_VALIDATION_VERIFIED === '1',
     localPublicWorkShutdownVerified: process.env.RT_PACKAGED_PUBLIC_WORK_VERIFIED === '1',
+    localSyntheticTushareWorkShutdownVerified: process.env.RT_PACKAGED_TUSHARE_WORK_VERIFIED === '1',
     liveMarketDataAccepted: false, brokerOrdersSubmitted: false, published: false }
   fs.writeFileSync(path.join(root, `acceptance-${label}.json`), JSON.stringify(receipt, null, 2) + '\n')
   console.log(JSON.stringify(receipt))

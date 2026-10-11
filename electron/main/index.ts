@@ -56,6 +56,7 @@ import { decryptApiKey } from './utils/apiKeyEncryption'
 import { isArticleExpired } from './utils/articleAgeUtils'
 import { startScheduler, stopScheduler, waitForSchedulerIdle, runConceptMembersSyncJob } from './services/schedulerService'
 import { stopPublicMarketWork, waitForPublicMarketWorkIdle } from './services/publicMarketWorkOwner'
+import { stopTushareHistoricalWork, waitForTushareHistoricalWorkIdle } from './services/tushareHistoricalWorkOwner'
 import { syncTradeCalIfNeeded } from './services/tradeCalSyncService'
 import { scheduleDailyCleanup, stopDailyCleanup } from './services/cleanerService'
 import { registerTrustedIpcHandler, isTrustedIpcSender } from './security/trustedIpc'
@@ -122,6 +123,7 @@ async function stopApplication(): Promise<void> {
   applicationStopping = true
   macThsOrderService?.beginStop()
   stopHeartbeat()
+  stopTushareHistoricalWork()
   stopPublicMarketWork()
   stopScheduler()
   stopDailyCleanup()
@@ -137,6 +139,7 @@ async function stopApplication(): Promise<void> {
     await Promise.allSettled([
       waitForSchedulerIdle(5000),
       waitForPublicMarketWorkIdle(5000),
+      waitForTushareHistoricalWorkIdle(5000),
       waitForScanIdle(5000),
       stopResearchAccessTransport(),
     ])

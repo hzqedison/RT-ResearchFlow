@@ -1,4 +1,5 @@
 import { verifyTushareCredential } from './tushareCredentialVerification'
+import { checkLocalWork, isLocalWorkCancelled } from './publicMarketWorkOwner'
 import type Database from 'better-sqlite3'
 import { getCachedDates, getCachedPrices, getStockInfo, hasMissingAmount, insertPrices, upsertStockInfo } from '../database/stockPriceCacheRepository'
 import { upsertDailyClose } from '../database/dailyCloseCacheRepository'
@@ -86,6 +87,7 @@ const TUSHARE_ACCESS_ERROR_CODES = new Set<TushareAccessErrorCode>([
 
 /** 把上游自然语言错误收敛为可判定终态，频率限制必须先于通用“权限”文案识别。 */
 export function getTushareAccessErrorCode(error: unknown): TushareAccessErrorCode | null {
+  if (isLocalWorkCancelled(error)) return null
   const explicitCode = typeof error === 'object' && error !== null && 'code' in error
     ? String((error as { code?: unknown }).code ?? '')
     : ''
@@ -2035,16 +2037,28 @@ export async function fetchDailyForCandidates(
  * 约返回 4700-5000 行，覆盖当日全 A 股。
  * 用于 18:00 统一盘后批次全量写入 daily_close_cache，为 hover 微缩蜡烛图提供数据。
  */
+async function callHistoricalTushareApi(token: string, apiName: string, params: Record<string, string>, fields: string, signal?: AbortSignal): Promise<TushareResponse> {
+  checkLocalWork(signal)
+  if (!signal) return callTushareApi(token, apiName, params, fields)
+  const scope = createBoundedTushareScope({ signal, deadlineMs: Date.now() + TUSHARE_REQUEST_TIMEOUT_MS, maxAttempts: 3, retryDelayMs: 1000 })
+  try {
+    const json = await callTushareApi(token, apiName, params, fields, scope.options)
+    checkLocalWork(signal)
+    return json
+  } catch (error) { checkLocalWork(signal); throw error } finally { scope.dispose() }
+}
+
 export async function fetchDailyByDate(
   token: string,
-  tradeDate: string
+  tradeDate: string,
+  signal?: AbortSignal,
 ): Promise<DailyRow[]> {
   const params: Record<string, string> = {
     trade_date: tradeDate,
     limit: '8000',
   }
   const fields = 'ts_code,trade_date,open,high,low,close,pct_chg,vol,amount'
-  const json = await callTushareApi(token, 'daily', params, fields)
+  const json = await callHistoricalTushareApi(token, 'daily', params, fields, signal)
   if (!json.data) return []
   const { fields: fs, items } = json.data
   const idx = (n: string) => fs.indexOf(n)
@@ -2070,14 +2084,15 @@ export async function fetchDailyByDate(
  */
 export async function fetchDailyBasicByDate(
   token: string,
-  tradeDate: string
+  tradeDate: string,
+  signal?: AbortSignal,
 ): Promise<DailyBasicRow[]> {
   const params: Record<string, string> = {
     trade_date: tradeDate,
     limit: '8000',
   }
   const fields = 'ts_code,trade_date,turnover_rate,float_share'
-  const json = await callTushareApi(token, 'daily_basic', params, fields)
+  const json = await callHistoricalTushareApi(token, 'daily_basic', params, fields, signal)
   if (!json.data) return []
   const { fields: fs, items } = json.data
   const idx = (n: string) => fs.indexOf(n)
@@ -2546,12 +2561,13 @@ export async function fetchTradeCal(
   token: string,
   exchange = 'SSE',
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  signal?: AbortSignal,
 ): Promise<TradeCalFetchRow[]> {
   const params: Record<string, string> = { exchange }
   if (startDate) params.start_date = startDate
   if (endDate) params.end_date = endDate
-  const json = await callTushareApi(token, 'trade_cal', params, 'cal_date,is_open,pretrade_date')
+  const json = await callHistoricalTushareApi(token, 'trade_cal', params, 'cal_date,is_open,pretrade_date', signal)
   if (!json.data) return []
   const { fields: fs, items } = json.data
   const idx = (n: string) => fs.indexOf(n)

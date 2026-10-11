@@ -115,7 +115,9 @@ describe('historicalDailySyncService', () => {
 
     expect(mocks.syncTradeCalFull).not.toHaveBeenCalled()
     expect(mocks.fetchDailyByDate).toHaveBeenCalledOnce()
-    expect(mocks.fetchDailyByDate).toHaveBeenCalledWith('token', '20260716')
+    expect(mocks.fetchDailyByDate).toHaveBeenCalledWith('token', '20260716', expect.any(AbortSignal))
+    expect(mocks.fetchDailyByDate.mock.calls[0][2]).toBe(mocks.syncTradeCalIfNeeded.mock.calls[0][2])
+    expect(mocks.fetchDailyByDate.mock.calls[0][2].aborted).toBe(false)
     expect(mocks.upsertDailyClose).toHaveBeenCalledOnce()
     expect(result).toMatchObject({ syncedTradeDays: 1, skippedTradeDays: 2, failedTradeDays: 0 })
     expect(onProgress).toHaveBeenCalled()
@@ -139,7 +141,8 @@ describe('historicalDailySyncService', () => {
     })
 
     expect(mocks.fetchDailyByDate).not.toHaveBeenCalled()
-    expect(mocks.fetchDailyBasicByDate).toHaveBeenCalledWith('token', '20260623')
+    expect(mocks.fetchDailyBasicByDate).toHaveBeenCalledWith('token', '20260623', expect.any(AbortSignal))
+    expect(mocks.fetchDailyBasicByDate.mock.calls[0][2]).toBe(mocks.syncTradeCalIfNeeded.mock.calls[0][2])
     expect(mocks.backfillDailyCloseTurnover).toHaveBeenCalledWith(expect.anything(), basics)
     expect(result).toMatchObject({
       syncedTradeDays: 1,
