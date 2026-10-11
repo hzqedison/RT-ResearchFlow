@@ -4,7 +4,7 @@ on:
     inputs:
       target:
         type: choice
-        options: [all, windows, macos, installer, probe]
+        options: [all, windows, macos, installer, probe, trace]
         default: all
       tested_windows_run:
         type: string
@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   package:
-    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target != 'windows' && inputs.target != 'installer' && inputs.target != 'probe'
+    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target != 'windows' && inputs.target != 'installer' && inputs.target != 'probe' && inputs.target != 'trace'
     strategy:
       fail-fast: false
       matrix:
@@ -140,7 +140,13 @@ jobs:
           pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
           pnpm run build
       - name: Build the actual Windows installer
+        if: inputs.target != 'trace'
         run: pnpm exec electron-builder --win --x64 --config electron-builder.js --config.nsis.runAfterFinish=false --publish never
+      - name: Build an unpublishable full-installer diagnostic
+        if: inputs.target == 'trace'
+        run: |
+          node scripts/trace-full-nsis.cjs
+          pnpm exec electron-builder --win --x64 --config electron-builder.js --config.nsis.runAfterFinish=false --publish never
       - name: Verify packaged runtime and first-use private extension
         shell: pwsh
         env:
@@ -162,6 +168,7 @@ jobs:
           $started = Get-Date
           $p = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$install") -WindowStyle Hidden -Wait -PassThru
           if ($p.ExitCode -ne 0) {
+            if (Test-Path -LiteralPath "$env:TEMP\rt-native-installer.log") { Get-Content -LiteralPath "$env:TEMP\rt-native-installer.log" }
             Start-Sleep -Seconds 5
             $faults = @(Get-WinEvent -FilterHashtable @{LogName='Application';Id=1000;StartTime=$started} -ErrorAction SilentlyContinue | ForEach-Object {
               $xml = [xml]$_.ToXml()
@@ -183,6 +190,7 @@ jobs:
           node scripts/write-public-package-receipt.cjs
           if ($LASTEXITCODE -ne 0) { throw 'Package receipt failed' }
       - name: Upload tested direct Windows installer
+        if: inputs.target != 'trace'
         uses: actions/upload-artifact@v4
         with:
           name: public-windows-x64-${{ github.sha }}
