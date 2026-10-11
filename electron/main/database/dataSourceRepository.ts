@@ -86,3 +86,17 @@ export function updateMultiSourcePreference(db: Database.Database, update: SaveD
   db.prepare('INSERT INTO multi_data_source_config(id,preference,wencai_cookie_encrypted) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET preference=excluded.preference,wencai_cookie_encrypted=excluded.wencai_cookie_encrypted')
     .run(JSON.stringify(next), encrypted)
 }
+
+function ensureCredentialVerificationTable(db: Database.Database): void {
+  db.exec('CREATE TABLE IF NOT EXISTS tushare_credential_verification (id INTEGER PRIMARY KEY CHECK(id=1), credential BLOB NOT NULL, proof TEXT NOT NULL)')
+}
+export function getTushareVerification(db: Database.Database): import('../services/tushareCredentialVerification').TushareVerification | null {
+  ensureCredentialVerificationTable(db)
+  const row = db.prepare('SELECT v.proof FROM tushare_credential_verification v JOIN data_source_config c ON c.id=v.id AND c.tushareTokenEncrypted=v.credential WHERE v.id=1').get() as { proof: string } | undefined
+  if (!row) return null
+  try { return JSON.parse(row.proof) } catch { return null }
+}
+export function saveTushareVerification(db: Database.Database, credential: Buffer, proof: import('../services/tushareCredentialVerification').TushareVerification): void {
+  ensureCredentialVerificationTable(db)
+  db.prepare('INSERT INTO tushare_credential_verification(id,credential,proof) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET credential=excluded.credential, proof=excluded.proof').run(credential, JSON.stringify(proof))
+}

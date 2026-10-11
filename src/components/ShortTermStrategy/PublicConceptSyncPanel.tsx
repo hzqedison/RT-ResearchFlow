@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PublicConceptSyncFailure, PublicConceptSyncStatus } from '../../../electron/shared/publicConceptSnapshots'
+import { CurrentPublicConceptLookupPanel } from './CurrentPublicConceptLookupPanel'
 
 const LABELS: Record<PublicConceptSyncStatus['state'], string> = {
   idle: '尚未开始本轮同步', running: '正在同步', completed: '本轮索引中的板块已同步',
@@ -88,6 +89,7 @@ export function PublicConceptSyncPanel({ open }: { open: boolean }): JSX.Element
         <button type="button" onClick={() => setRevision(value => value + 1)} className="min-h-10 rounded-md border border-slate-300 px-3 text-xs">重新检查</button>
       </div>
       <p className="mt-2 text-[11px] leading-5 text-slate-500 dark:text-slate-400">任务在后台执行；关闭此面板不会取消，重新打开可查看进度。遇到连续失败会停止采集，已保存的观察保留；网络接口可用性仍需实际使用验证。</p>
+      <CurrentPublicConceptLookupPanel open={open} />
     </section>
   )
 }

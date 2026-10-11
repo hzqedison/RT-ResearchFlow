@@ -20,6 +20,7 @@ export interface MultiSourcePreference {
 export interface DataSourcePreference extends MultiSourcePreference {
   tushareEnabled: boolean
   hasTushareToken: boolean
+  tushareVerification?: import('../main/services/tushareCredentialVerification').TushareVerification | null
   hasWencaiCookie: boolean
 }
 
@@ -73,6 +74,7 @@ export interface DataSourceProbeResult {
 }
 
 export type PublicLimitPoolDateBasis = 'request-only' | 'source-reported' | 'unknown'
+export type PublicLimitPoolSource = 'akshare_eastmoney' | 'eastmoney_public'
 export type PublicLimitPoolFilterField = 'pctChg' | 'fdAmountYuan' | 'firstTime' | 'openTimes' | 'limitTimes'
 
 export interface PublicLimitPoolMetadata {
@@ -80,6 +82,7 @@ export interface PublicLimitPoolMetadata {
   verifiedAt?: number | null
   dateBasis?: PublicLimitPoolDateBasis
   rowmissingFields?: Record<string, PublicLimitPoolFilterField[]>
+  priceCheck?: 'matched-local-closes' | 'not-complete' | 'unknown'
 }
 
 export interface PublicLimitPoolObservationRow {
@@ -96,7 +99,8 @@ export interface PublicLimitPoolObservationRow {
 }
 
 export interface PublicLimitPoolObservationSnapshot extends PublicLimitPoolMetadata {
+  recommendedTradeDate?: string | null
   tradeDate: string | null
-  source: 'akshare_eastmoney'
+  source: PublicLimitPoolSource
   rows: PublicLimitPoolObservationRow[]
 }

@@ -219,7 +219,7 @@ describe('verified public limit-up cache', () => {
     expect(storedCache()).toEqual(before)
   })
 
-  it.each(['disabled', 'calendar', 'daily', 'empty', 'failure', 'insert'] as const)('preserves the old cache for rejection/failure: %s', async reason => {
+  it.each(['calendar', 'daily', 'empty', 'failure', 'insert'] as const)('preserves the old cache for rejection/failure: %s', async reason => {
     await seedCache()
     const before = storedCache()
     if (reason === 'calendar') db.exec('DELETE FROM trade_cal')
@@ -227,9 +227,9 @@ describe('verified public limit-up cache', () => {
     if (reason === 'empty') vi.mocked(fetchPublicLimitUpPool).mockResolvedValue({ ...sourceSnapshot(), rows: [], state: 'unavailable' })
     if (reason === 'failure') vi.mocked(fetchPublicLimitUpPool).mockRejectedValue(new Error('isolated provider failure'))
     if (reason === 'insert') db.exec("CREATE TRIGGER reject_public_insert BEFORE INSERT ON public_limit_up_facts BEGIN SELECT RAISE(ABORT, 'isolated write failure'); END;")
-    const result = await syncVerifiedPublicLimitPool(db, reason === 'disabled' ? { ...config, dailyProviders: [] } : config, '20261008')
+    const result = await syncVerifiedPublicLimitPool(db, config, '20261008')
     expect(result).toMatchObject({ ok: false, rows: 0, quality: 'blocked', verifiedAt: null })
     expect(storedCache()).toEqual(before)
-    if (['disabled', 'calendar', 'daily'].includes(reason)) expect(fetchPublicLimitUpPool).not.toHaveBeenCalled()
+    if (reason === 'calendar') expect(fetchPublicLimitUpPool).not.toHaveBeenCalled()
   })
 })

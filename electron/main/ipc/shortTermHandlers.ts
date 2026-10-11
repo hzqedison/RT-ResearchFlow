@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../database/db'
 import { cancelPublicConceptSync, getPublicConceptSyncStatus, syncPublicConceptSnapshots } from '../services/publicConceptSnapshotSyncService'
+import { queryCurrentPublicConcepts } from '../services/currentPublicConceptLookupService'
 import {
   getShortTermActiveSubTab,
   setShortTermActiveSubTab,
@@ -711,6 +712,8 @@ export function registerShortTermHandlers(): void {
     try { return { ok: true, status: getPublicConceptSyncStatus(getDb()) } }
     catch { return { ok: false, error: 'PUBLIC_CONCEPT_CACHE_UNAVAILABLE' } }
   })
+  ipcMain.handle('shortTerm:lookupCurrentPublicConcepts', (_event, payload: unknown) =>
+    queryCurrentPublicConcepts(payload, { getDb }))
   ipcMain.handle('shortTerm:syncPublicConceptSnapshots', () => {
     try {
       const db = getDb()

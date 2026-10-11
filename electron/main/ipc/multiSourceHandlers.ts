@@ -45,16 +45,13 @@ export function registerMultiSourceHandlers(getWindow: TrustedWindowGetter): voi
           return { ok: false, provider, message: '请选择有效的交易日期。' }
         }
         const config = getMultiSourcePreference(getDb())
-        if (!config.dailyProviders.includes('akshare')) {
-          return { ok: false, provider, message: '请先选择 AKShare 并安装所选本地扩展。' }
-        }
         const result = await fetchPublicLimitUpPool(config, tradeDate)
         const detail = result.missingFields.length > 0 ? `；缺失字段：${result.missingFields.join('、')}` : ''
         return {
           ok: result.state === 'available', provider, rows: result.rows.length,
           message: result.state === 'unavailable'
             ? `请求日期 ${tradeDate} 未取得近期涨停池；不代表当天没有涨停股票。`
-            : `请求日期 ${tradeDate}，取得 ${result.rows.length} 条，拒收 ${result.rejectedRows} 条${detail}。仅为公开源样本，未写入策略库或核验实际交易日。`,
+            : `源站声明日期 ${result.sourceReportedTradeDate ?? '未知'}，取得 ${result.rows.length} 条，拒收 ${result.rejectedRows} 条${detail}。免 Key、免 Python；未写入缓存，不代表全市场覆盖。`,
         }
       }
       if (provider === 'iwencai') {

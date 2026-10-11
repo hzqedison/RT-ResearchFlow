@@ -1,3 +1,4 @@
+import { getTushareVerification, saveTushareVerification } from '../database/dataSourceRepository'
 import { BrowserWindow } from 'electron'
 import { registerTrustedIpcHandler, type TrustedWindowGetter } from '../security/trustedIpc'
 import type Database from 'better-sqlite3'
@@ -1602,7 +1603,8 @@ export function registerAIHandlers(getWindow: TrustedWindowGetter): void {
       ...getMultiSourcePreference(db),
       tushareEnabled: row.tushareEnabled === 1,
       hasTushareToken: !!(row.tushareTokenEncrypted && row.tushareTokenEncrypted.length > 0),
-      hasWencaiCookie: !!getWencaiCookieEncrypted(db)?.length
+      hasWencaiCookie: !!getWencaiCookieEncrypted(db)?.length,
+      tushareVerification: getTushareVerification(db)
     }
   })
 
@@ -1635,8 +1637,24 @@ export function registerAIHandlers(getWindow: TrustedWindowGetter): void {
   })
 
   // ── datasource:validateTushare ────────────────────────────────────────────────
-  registerTrustedIpcHandler('datasource:validateTushare', getWindow, async (_e, data: { token: string }) => {
-    return validateTushareToken(data.token)
+  registerTrustedIpcHandler('datasource:validateTushare', getWindow, async (_e, data: { token?: unknown; bind?: boolean }) => {
+    const db = getDb()
+    const before = getDataSourceConfig(db).tushareTokenEncrypted
+    const supplied = typeof data?.token === 'string' ? data.token.trim() : ''
+    if (data?.token != null && typeof data.token !== 'string') return validateTushareToken(null)
+    if (data?.bind && !supplied) return validateTushareToken(null)
+    const result = await validateTushareToken(supplied || decryptApiKey(before))
+    if (data?.bind && (result.state === 'verified' || result.state === 'permission-limited')) {
+      const credential = encryptRequiredApiKey(supplied)
+      db.transaction(() => {
+        updateDataSourceConfig(db, { tushareTokenEncrypted: credential })
+        saveTushareVerification(db, credential, result)
+      })()
+    } else if (!supplied && before) {
+      const current = getDataSourceConfig(db).tushareTokenEncrypted
+      if (current && current.equals(before)) saveTushareVerification(db, before, result)
+    }
+    return result
   })
 
   // ── datasource:listStocks ──────────────────────────────────────────────────────

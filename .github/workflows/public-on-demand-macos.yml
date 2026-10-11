@@ -56,6 +56,7 @@ jobs:
       - name: Type checks and extension contracts
         run: |
           pnpm run typecheck
+          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/tushareCredentialVerification.test.tsx tests/unit/publicLimitUpRules.test.tsx tests/unit/nativePublicLimitPool.test.ts tests/unit/verifiedPublicLimitPoolCache.test.ts tests/unit/currentPublicConceptLookup.service.test.ts tests/unit/currentPublicConceptLookup.wiring.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
       - name: Build same-product native installer
         run: node macos/build.mjs
@@ -81,7 +82,7 @@ jobs:
           export RT_PACKAGED_VERSION="$(node -p 'require("./package.json").version')"
           export RT_PACKAGED_TEST_ROOT="$RUNNER_TEMP/public-acceptance"
           node scripts/mac-packaged-acceptance.cjs "$RT_PACKAGED_EXE"
-          pnpm exec playwright test tests/e2e/on-demand-extensions.spec.ts --workers=1 --reporter=line
+          pnpm exec playwright test tests/e2e/packaged-startup.spec.ts tests/e2e/on-demand-extensions.spec.ts --workers=1 --reporter=line
           shasum -a 256 release/*.dmg > release/SHA256SUMS-${{ matrix.arch }}.txt
           node scripts/write-public-package-receipt.cjs
       - name: Upload only tested direct installers
@@ -127,7 +128,7 @@ jobs:
       - name: Isolate application and build caches on D drive
         shell: pwsh
         run: |
-          $root = 'D:\rt-public-1.10-' + $env:GITHUB_RUN_ID
+          $root = 'D:\rt-public-1.11-' + $env:GITHUB_RUN_ID
           New-Item -ItemType Directory -Path $root -Force | Out-Null
           "TEMP=$root" | Add-Content $env:GITHUB_ENV
           "TMP=$root" | Add-Content $env:GITHUB_ENV
@@ -137,6 +138,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile --config.side-effects-cache=false
           pnpm run typecheck
+          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/tushareCredentialVerification.test.tsx tests/unit/publicLimitUpRules.test.tsx tests/unit/nativePublicLimitPool.test.ts tests/unit/verifiedPublicLimitPoolCache.test.ts tests/unit/currentPublicConceptLookup.service.test.ts tests/unit/currentPublicConceptLookup.wiring.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
           pnpm run build
       - name: Build the actual Windows installer
@@ -154,7 +156,7 @@ jobs:
           RT_ONDEMAND_ALLOW_NETWORK: '1'
         run: |
           $env:RT_PACKAGED_EXE = (Resolve-Path 'release/win-unpacked/RT-ResearchFlow.exe').Path
-          $env:RT_PACKAGED_VERSION = '1.10.0'
+          $env:RT_PACKAGED_VERSION = '1.11.0'
           $env:RT_PACKAGED_TEST_ROOT = Join-Path $env:TEMP 'acceptance'
           node scripts/verify-packaged-runtime.cjs $env:RT_PACKAGED_EXE
           if ($LASTEXITCODE -ne 0) { throw 'Packaged runtime acceptance failed' }
@@ -163,7 +165,7 @@ jobs:
       - name: Install the exact NSIS package and verify installed startup
         shell: pwsh
         run: |
-          $installer = (Resolve-Path 'release/RT-ResearchFlow-Setup-1.10.0-x64.exe').Path
+          $installer = (Resolve-Path 'release/RT-ResearchFlow-Setup-1.11.0-x64.exe').Path
           $install = Join-Path $env:TEMP 'installed-product'
           $started = Get-Date
           $p = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$install") -WindowStyle Hidden -Wait -PassThru
@@ -182,7 +184,7 @@ jobs:
             throw "NSIS failed: $($p.ExitCode)"
           }
           $env:RT_PACKAGED_EXE = Join-Path $install 'RT-ResearchFlow.exe'
-          $env:RT_PACKAGED_VERSION = '1.10.0'
+          $env:RT_PACKAGED_VERSION = '1.11.0'
           $env:RT_PACKAGED_ALLOW_EXISTING_DATA = '1'
           $env:RT_PACKAGED_TEST_ROOT = Join-Path $env:TEMP 'installed-acceptance'
           pnpm exec playwright test tests/e2e/packaged-startup.spec.ts --workers=1 --retries=0 --reporter=line
@@ -195,7 +197,7 @@ jobs:
         with:
           name: public-windows-x64-${{ github.sha }}
           path: |
-            release/RT-ResearchFlow-Setup-1.10.0-x64.exe
+            release/RT-ResearchFlow-Setup-1.11.0-x64.exe
             release/SHA256SUMS-win32-x64.txt
             release/acceptance-win32-x64.json
           if-no-files-found: error
@@ -205,7 +207,7 @@ jobs:
         with:
           name: unaccepted-windows-diagnostic-${{ github.sha }}
           path: |
-            release/RT-ResearchFlow-Setup-1.10.0-x64.exe
+            release/RT-ResearchFlow-Setup-1.11.0-x64.exe
             release/nsis-diagnostic.json
           if-no-files-found: warn
       - name: Upload test evidence
@@ -241,15 +243,15 @@ jobs:
           TESTED_WINDOWS_COMMIT: ${{ inputs.tested_windows_commit }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $env:TEMP = 'D:\rt-lifecycle-1.10-' + $env:GITHUB_RUN_ID
+          $env:TEMP = 'D:\rt-lifecycle-1.11-' + $env:GITHUB_RUN_ID
           $env:TMP = $env:TEMP
           New-Item -ItemType Directory -Path $env:TEMP | Out-Null
           $target = 'D:\Program Files\RT-ResearchFlow'
           if (Test-Path -LiteralPath $target) { throw 'Fresh fixture target already exists' }
-          $installer = (Resolve-Path 'tested-installer/RT-ResearchFlow-Setup-1.10.0-x64.exe').Path
+          $installer = (Resolve-Path 'tested-installer/RT-ResearchFlow-Setup-1.11.0-x64.exe').Path
           $receipt = Get-Content -Raw 'tested-installer/acceptance-win32-x64.json' | ConvertFrom-Json
           $sha = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($receipt.version -ne '1.10.0' -or $receipt.sourceCommit -ne $env:TESTED_WINDOWS_COMMIT -or $receipt.sha256 -ne $sha) { throw 'Tested installer identity mismatch' }
+          if ($receipt.version -ne '1.11.0' -or $receipt.sourceCommit -ne $env:TESTED_WINDOWS_COMMIT -or $receipt.sha256 -ne $sha) { throw 'Tested installer identity mismatch' }
           $sharedHash = (Get-FileHash -LiteralPath $env:SHARED_PYTHON -Algorithm SHA256).Hash
           $p = Start-Process -FilePath $installer -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Default NSIS install failed: $($p.ExitCode)" }
@@ -279,7 +281,7 @@ jobs:
             if ((Get-FileHash -LiteralPath (Join-Path $data $relative) -Algorithm SHA256).Hash -ne $before[$relative]) { throw 'Uninstall changed retained fixture data' }
           }
           if ((Get-FileHash -LiteralPath $env:SHARED_PYTHON -Algorithm SHA256).Hash -ne $sharedHash) { throw 'Shared Python changed' }
-          @{version='1.10.0';sourceCommit=$receipt.sourceCommit;installerSha256=$sha;defaultNonSystemPathPassed=$true;sameDirectoryUpgradePreservesData=$true;silentUninstallPreservesData=$true;sharedPythonUnchanged=$true;usesSyntheticData=$true;brokerOrdersSubmitted=$false} | ConvertTo-Json | Set-Content 'installer-lifecycle-acceptance.json' -Encoding utf8
+          @{version='1.11.0';sourceCommit=$receipt.sourceCommit;installerSha256=$sha;defaultNonSystemPathPassed=$true;sameDirectoryUpgradePreservesData=$true;silentUninstallPreservesData=$true;sharedPythonUnchanged=$true;usesSyntheticData=$true;brokerOrdersSubmitted=$false} | ConvertTo-Json | Set-Content 'installer-lifecycle-acceptance.json' -Encoding utf8
       - uses: actions/upload-artifact@v4
         with:
           name: public-installer-lifecycle-${{ github.run_id }}

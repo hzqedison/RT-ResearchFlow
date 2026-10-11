@@ -1,3 +1,4 @@
+import { verifyTushareCredential } from './tushareCredentialVerification'
 import type Database from 'better-sqlite3'
 import { getCachedDates, getCachedPrices, getStockInfo, hasMissingAmount, insertPrices, upsertStockInfo } from '../database/stockPriceCacheRepository'
 import { upsertDailyClose } from '../database/dailyCloseCacheRepository'
@@ -146,19 +147,7 @@ function bjDateRange(): { endDate: string; startDate30: string } {
 }
 
 /** Validate a Tushare token using the trade_cal API (lightweight, no data cost) */
-export async function validateTushareToken(token: string): Promise<{ valid: boolean; message: string }> {
-  try {
-    const res = await withRetry(() => fetch(
-      TUSHARE_API_URL,
-      buildRequest(token, 'trade_cal', { exchange: 'SSE', start_date: '20240101', end_date: '20240101' }, 'cal_date')
-    ))
-    const json = (await res.json()) as TushareResponse
-    if (json.code === 0) return { valid: true, message: 'Token 有效' }
-    return { valid: false, message: json.msg || 'Token 无效' }
-  } catch (err) {
-    return { valid: false, message: err instanceof Error ? err.message : '网络错误' }
-  }
-}
+export const validateTushareToken = verifyTushareCredential
 
 interface EastmoneyKlineResponse {
   rc: number

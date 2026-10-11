@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import TushareCredentialPanel from './TushareCredentialPanel'
+import { useEffect, useRef, useState } from 'react'
 import { HistoricalDailyProgressCard } from './HistoricalDailyProgressCard'
 import type {
   DailyDataProvider, DataProbeProvider, DataSourcePreference, ReportDataProvider,
@@ -24,6 +25,8 @@ export function DataSource() {
   const [cookie, setCookie] = useState('')
   const [stockCode, setStockCode] = useState('000001')
   const [limitPoolDate, setLimitPoolDate] = useState(() => new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
+  const limitPoolDateEdited = useRef(false)
+  const [limitPoolDateHint, setLimitPoolDateHint] = useState('正在依据本地交易日历选择最近已收盘交易日…')
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState('')
   const [extensionProgress, setExtensionProgress] = useState('')
@@ -33,6 +36,19 @@ export function DataSource() {
   const [probeMessages, setProbeMessages] = useState<Record<string, string>>({})
   const [reportResult, setReportResult] = useState<ResearchReportResult | null>(null)
   const [wencaiResult, setWencaiResult] = useState<WencaiResult | null>(null)
+
+  useEffect(() => {
+    let active = true
+    window.api.datasource.listVerifiedPublicLimitPool().then(snapshot => {
+      if (!active) return
+      const date = snapshot.recommendedTradeDate
+      if (date && /^\d{8}$/.test(date)) {
+        if (!limitPoolDateEdited.current) setLimitPoolDate(date.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3'))
+        setLimitPoolDateHint(`本地日历建议最近已收盘交易日：${date}。可手动选择其他已收盘日期；公开接口不保证历史覆盖。`)
+      } else setLimitPoolDateHint('本地日历尚不能确认最近已收盘交易日。请先初始化交易日历，或手动选择已知日期；不会按工作日猜测。')
+    }).catch(() => { if (active) setLimitPoolDateHint('交易日建议读取失败，可重试或手动选择已收盘日期。') })
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -99,7 +115,7 @@ export function DataSource() {
 
   async function probe(provider: DataProbeProvider, tradeDate?: string) {
     await run('检测连接', async () => {
-      await save()
+      if (provider !== 'akshare-limit-pool') await save()
       const result = await window.api.datasource.probe(provider, stockCode, tradeDate)
       setProbeMessages(current => ({ ...current, [provider]: (result.ok ? '已取得样本：' : '未完成：') + result.message }))
     })
@@ -112,6 +128,7 @@ export function DataSource() {
 
   return (
     <div className="flex-1 overflow-y-auto p-6 max-w-4xl space-y-6">
+      <TushareCredentialPanel onBound={() => { void window.api.datasource.getConfig().then(setConfig) }} />
       <HistoricalDailyProgressCard />
       <header>
         <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">数据源配置</h2>
@@ -148,37 +165,27 @@ export function DataSource() {
             <button className={buttonClass} disabled={disabled || index === daily.length - 1} onClick={() => moveProvider(index, 1)}>下移</button>
           </div>)}
         </div>
-        <label className="block text-xs font-medium">Tushare Token {config?.hasTushareToken && <span className="text-green-700">（已加密保存）</span>}</label>
-        <div className="flex gap-2">
-          <input type="password" autoComplete="off" className={inputClass} value={token}
-            onChange={event => setToken(event.target.value)} placeholder="留空保留已有 Token；腾讯、东财不需要此项" disabled={disabled} />
-          <button className={buttonClass} disabled={disabled || !token.trim()} onClick={() => void run('验证 Token', async () => {
-            const result = await window.api.datasource.validateTushare(token.trim())
-            if (!result.valid) throw new Error(result.message)
-            setMessage(result.message)
-          })}>验证</button>
-        </div>
       </section>
 
       <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-5 space-y-3">
         <h3 className="font-medium text-sm">短线数据候选来源：东方财富涨停池</h3>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          通过本地 AKShare 扩展读取近期涨停池，检查连板、封板时间、炸板次数与封板资金。先勾选上方 AKShare 并安装扩展；检测只读取样本。核对后保存会写入独立研究缓存，不会混入原有 Tushare 涨停表，也不代表竞价、筹码或历史回测已经可用。
+          直接读取东方财富近期涨停池，无需 Token、Python 或勾选 AKShare。检测只读取样本；保存会保留源站声明日期，日线齐备时另核对收盘价。支持连板、封板时间、炸板次数与封板资金筛选；源站口径不等于全市场，竞价、筹码与历史回测仍需独立数据。
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-xs" htmlFor="limit-pool-date">请求日期</label>
           <input id="limit-pool-date" type="date" className={inputClass + ' max-w-44'} value={limitPoolDate}
-            disabled={disabled} onChange={event => setLimitPoolDate(event.target.value)} />
-          <button className={buttonClass} disabled={disabled || !daily.includes('akshare') || !limitPoolDate}
+            disabled={disabled} onChange={event => { limitPoolDateEdited.current = true; setLimitPoolDate(event.target.value) }} />
+          <button className={buttonClass} disabled={disabled || !limitPoolDate}
             onClick={() => void probe('akshare-limit-pool', limitPoolDate.replaceAll('-', ''))}>检测免费涨停池</button>
-          <button className={buttonClass} disabled={disabled || !daily.includes('akshare') || !limitPoolDate}
+          <button className={buttonClass} disabled={disabled || !limitPoolDate}
             onClick={() => void run('核对并保存涨停池', async () => {
-              await save()
               const result = await window.api.datasource.syncPublicLimitPool(limitPoolDate.replaceAll('-', ''))
               if (!result.ok) throw new Error(result.message)
               setMessage(result.message)
             })}>核对后存入研究缓存</button>
         </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400">{limitPoolDateHint}</p>
         {probeMessages['akshare-limit-pool'] && <p role="status" className="text-xs text-gray-600 dark:text-gray-300">{probeMessages['akshare-limit-pool']}</p>}
       </section>
 

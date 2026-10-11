@@ -1,4 +1,5 @@
 import React from 'react'
+import { PublicLimitUpRulePanel } from './PublicLimitUpRulePanel'
 import { SHORT_TERM_WORKBENCH_ACTION_CLASS, ShortTermCombobox } from './ShortTermDecisionControls'
 import {
   formatPublicSealAmount, selectPublicLimitPoolRows, publicObservationMissingFields,
@@ -34,16 +35,17 @@ export function PublicLimitPoolObservation({ snapshot, loading, readFailed, filt
     <section aria-label="公开涨停观察" className="shrink-0 border-b border-slate-200 bg-cyan-50/40 px-4 py-3 dark:border-slate-800 dark:bg-cyan-950/15">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">公开涨停观察 · 东方财富 / AKShare</h3>
+          <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">公开涨停观察 · 东方财富{snapshot?.source === 'akshare_eastmoney' ? ' / AKShare（旧缓存）' : '（免 Key / Python）'}</h3>
           <p className="mt-1 text-[11px] leading-4 text-slate-500 dark:text-slate-400">
-            {date ? `缓存标记日期 ${date} · ${selection.total} 只。按请求日期与本地收盘行情交叉核对，不代表上游已证明日期或全市场覆盖。` :
+            {date ? `${snapshot?.dateBasis === 'source-reported' ? '源站声明日期' : '缓存标记日期'} ${date} · ${selection.total} 只。${snapshot?.dateBasis === 'source-reported' ? '不代表全市场涨跌停及炸板覆盖。' : '不代表上游已证明日期或全市场覆盖。'}` :
               loading ? '正在读取本地公开资料…' : readFailed ? '暂时无法读取本地公开资料。' :
-                '暂无已保存的公开涨停资料。可在数据源选择 AKShare，检测并保存同日资料后返回这里刷新。'}
+                '暂无已保存的公开涨停资料。可在配置中心的数据源页检测并保存免费涨停池，无需安装 Python。'}
           </p>
           <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">可用于只读筛选和查看日K；不冒充竞价、筹码，也不自动生成下方策略评分或交易订单。</p>
           {date && <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-200">
             日期依据：{snapshot?.dateBasis === 'request-only' ? '请求参数，非上游日期证明' : snapshot?.dateBasis === 'source-reported' ? '上游声明，尚未独立验证' : '未知，旧缓存未记录日期来历'}
-            {snapshot?.verifiedAt && Number.isFinite(snapshot.verifiedAt) ? ` · 最近行情核对 ${new Date(snapshot.verifiedAt).toLocaleString('zh-CN', { hour12: false })}` : ' · 核对时间未知'}
+            {snapshot?.verifiedAt && Number.isFinite(snapshot.verifiedAt) ? ` · 最近缓存检查 ${new Date(snapshot.verifiedAt).toLocaleString('zh-CN', { hour12: false })}` : ' · 核对时间未知'}
+            {snapshot?.priceCheck === 'matched-local-closes' ? ' · 已核对本地同日收盘价' : snapshot?.priceCheck === 'not-complete' ? ' · 本地同日日线尚未完整核对' : ' · 历史价格核对依据未知'}
           </p>}
         </div>
         <button type="button" onClick={onRefresh} disabled={loading} className={SHORT_TERM_WORKBENCH_ACTION_CLASS}>
@@ -94,6 +96,7 @@ export function PublicLimitPoolObservation({ snapshot, loading, readFailed, filt
         </div>
         </details>
       </>}
+      <PublicLimitUpRulePanel snapshot={snapshot} onOpenStock={onOpenStock} />
     </section>
   )
 }

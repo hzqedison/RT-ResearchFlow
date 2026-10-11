@@ -1924,7 +1924,8 @@ const api = {
     getConfig: () => ipcRenderer.invoke('datasource:getConfig') as Promise<DataSourcePreference>,
     saveConfig: (data: SaveDataSourcePreference) =>
       ipcRenderer.invoke('datasource:saveConfig', data),
-    validateTushare: (token: string) => ipcRenderer.invoke('datasource:validateTushare', { token }),
+    validateTushare: (token: string) => ipcRenderer.invoke('datasource:validateTushare', { token }) as Promise<import('../main/services/tushareCredentialVerification').TushareVerification>,
+    bindTushare: (token: string) => ipcRenderer.invoke('datasource:validateTushare', { token, bind: true }) as Promise<import('../main/services/tushareCredentialVerification').TushareVerification>,
     probe: (provider: DataProbeProvider, stockCode = '000001', tradeDate?: string) =>
       ipcRenderer.invoke('datasource:probe', { provider, stockCode, tradeDate }) as Promise<DataSourceProbeResult>,
     syncPublicLimitPool: (tradeDate: string) =>
@@ -2711,6 +2712,8 @@ const api = {
       >,
     getPublicConceptSyncStatus: () =>
       ipcRenderer.invoke('shortTerm:getPublicConceptSyncStatus') as Promise<import('../shared/publicConceptSnapshots').PublicConceptSyncReply>,
+    lookupCurrentPublicConcepts: (tsCode: string) =>
+      ipcRenderer.invoke('shortTerm:lookupCurrentPublicConcepts', { tsCode }) as Promise<import('../shared/publicConceptSnapshots').CurrentPublicConceptLookupReply>,
     syncPublicConceptSnapshots: () =>
       ipcRenderer.invoke('shortTerm:syncPublicConceptSnapshots') as Promise<import('../shared/publicConceptSnapshots').PublicConceptSyncReply>,
     cancelPublicConceptSync: () =>
