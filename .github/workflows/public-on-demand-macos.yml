@@ -2,6 +2,9 @@ name: Public on-demand Windows and Mac packages
 on:
   workflow_dispatch:
     inputs:
+      version:
+        type: string
+        default: '1.12.0'
       target:
         type: choice
         options: [all, windows, macos, installer, probe, trace]
