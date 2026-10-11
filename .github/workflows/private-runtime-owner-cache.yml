@@ -1,0 +1,60 @@
+name: Owner-only runtime cache transfer
+on:
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+jobs:
+  transfer:
+    if: github.repository == 'hzqedison/RT-ResearchFlow'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: private-runtime-cache-1.7-38086414260
+      SOURCE: b3994908e75c8cec4a8bbc9b0ab7a230e39db35c
+    steps:
+      - name: Verify exact completed producer and private artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/38086414260" > "$RUNNER_TEMP/run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/11681863167" > "$RUNNER_TEMP/artifact.json"
+          node - "$RUNNER_TEMP" <<'NODE'
+          const fs = require('node:fs'); const path = require('node:path');
+          const root = process.argv[2];
+          const run = JSON.parse(fs.readFileSync(path.join(root, 'run.json')));
+          const artifact = JSON.parse(fs.readFileSync(path.join(root, 'artifact.json')));
+          if (run.id !== 38086414260 || run.run_attempt !== 1 || run.status !== 'completed' || run.conclusion !== 'success' ||
+              run.head_sha !== process.env.SOURCE || run.repository.id !== 1408465497 || run.head_repository.id !== 1408465497 ||
+              run.path !== '.github/workflows/private-runtime-prepare-native.yml' || artifact.id !== 11681863167 ||
+              artifact.name !== 'private-runtime-prepare-win32-x64' || artifact.expired || artifact.size_in_bytes !== 319283710 ||
+              artifact.workflow_run.id !== run.id || artifact.workflow_run.head_sha !== run.head_sha ||
+              artifact.digest !== 'sha256:edda78761f4266760340e2add86dd1dae41893b5224473755b6e0fa56839a46b') {
+            throw new Error('Exact private input origin rejected');
+          }
+          NODE
+      - name: Transfer unchanged bytes to an owner-only draft cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/11681863167/zip" > prepare-11681863167.zip
+          echo 'edda78761f4266760340e2add86dd1dae41893b5224473755b6e0fa56839a46b  prepare-11681863167.zip' | sha256sum --check --strict
+          test "$(stat -c %s prepare-11681863167.zip)" = 319283710
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft > state.txt 2>/dev/null; then
+            test "$(cat state.txt)" = true
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --target "$SOURCE" \
+              --title 'Private runtime cache 1.7 (not an application release)' \
+              --notes 'Owner-only byte-identical dependency cache. Not an installer, not public redistribution approval, and not the 1.7 product release. Do not publish this draft.'
+          fi
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" = true
+          existing="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[] | select(.name == "prepare-11681863167.zip") | .id')"
+          if test -n "$existing"; then
+            gh api "repos/$GITHUB_REPOSITORY/releases/assets/$existing" > existing.json
+            node -e "const a=require('./existing.json'); if(a.size!==319283710 || a.digest!=='sha256:edda78761f4266760340e2add86dd1dae41893b5224473755b6e0fa56839a46b')throw Error('Existing private cache mismatch')"
+          else
+            gh release upload "$TAG" prepare-11681863167.zip --repo "$GITHUB_REPOSITORY"
+          fi
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" = true
