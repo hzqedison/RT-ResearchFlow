@@ -15,6 +15,8 @@ test('packaged initialization prioritizes free setup, scopes provider errors and
   const app = await electron.launch({ executablePath: executable, args: [`--user-data-dir=${profile}`], env: { ...environment, NODE_ENV: 'test' } })
   const child = app.process()
   try {
+    const window = await app.firstWindow()
+    await expect(window.getByTestId('nav-tab-feed')).toBeVisible({ timeout: 30000 })
     await app.evaluate(({ ipcMain }) => {
       type Item = { key: string; title: string; status: 'ok' | 'warning' | 'error'; message: string; recordCount: number; checkedAt: number }
       type Health = { status: string; checkedAt: number; summary: { ok: number; warning: number; error: number }; groups: { key: string; title: string; items: Item[] }[] }
@@ -43,10 +45,14 @@ test('packaged initialization prioritizes free setup, scopes provider errors and
         return complete()
       })
     })
-    const window = await app.firstWindow()
     await window.reload()
-    await window.getByText('配置中心', { exact: true }).first().click()
-    await window.getByTestId('config-open-onboarding-guide-btn').click()
+    await expect(async () => {
+      const initialGuide = window.getByTestId('cold-start-guide')
+      if (await initialGuide.isVisible()) await initialGuide.getByLabel('关闭引导').click({ timeout: 2000 })
+      const openGuide = window.getByTestId('config-open-onboarding-guide-btn')
+      if (!await openGuide.isVisible()) await window.getByTestId('open-config-drawer-btn').click({ timeout: 2000 })
+      await openGuide.click({ timeout: 2000 })
+    }).toPass({ timeout: 30000 })
     const guide = window.getByTestId('cold-start-guide')
     await expect(guide.getByTestId('initialization-status')).toHaveText('可使用')
     await expect(guide.getByTestId('onboarding-primary-action')).toHaveText('进入今日看板')

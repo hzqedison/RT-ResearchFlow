@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ForecastPanel } from '../ForecastPanel/ForecastPanel'
+import { AccountLedgerPanel } from '../AccountLedger/AccountLedgerPanel'
 import { StockKlineChipDrawer } from '../shared/StockMiniChart'
 import { useAppStore } from '../../store/appStore'
 import { getConclusion } from '../../utils/chipColors'
@@ -90,6 +91,7 @@ const ADVICE_META: Record<PositionAdvice, { label: string; className: string }> 
 }
 
 export function PortfolioDashboard({ snapshot, loading, errorMessage, onRefresh }: TrendWorkbenchPageProps) {
+  const [ledgerOpen, setLedgerOpen] = useState(false)
   const [portfolioItems, setPortfolioItems] = useState<PortfolioDashboardItem[]>([])
   const [portfolioLoading, setPortfolioLoading] = useState(false)
   const [portfolioError, setPortfolioError] = useState('')
@@ -249,6 +251,7 @@ export function PortfolioDashboard({ snapshot, loading, errorMessage, onRefresh 
 
   return (
     <div data-testid="trend-portfolio-overview" className="flex h-full min-h-0 flex-col overflow-y-auto">
+      {ledgerOpen && <AccountLedgerPanel onClose={() => setLedgerOpen(false)} />}
       <TrendPageHeader
         title="持仓总览"
         subtitle="按风险、趋势恶化和今日信号排序，先处理最需要复核的股票"
@@ -262,6 +265,7 @@ export function PortfolioDashboard({ snapshot, loading, errorMessage, onRefresh 
         )}
         actions={(
           <div className="flex flex-wrap gap-2">
+            <button type="button" data-testid="open-account-ledger" onClick={() => setLedgerOpen(true)} className="min-h-11 rounded-md border border-cyan-600 px-3 text-sm font-semibold text-cyan-700 dark:text-cyan-300">账户账本</button>
             {missingCodes.length > 0 && (
               <button
                 type="button"

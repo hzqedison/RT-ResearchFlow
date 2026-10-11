@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { AppendLedgerEvent, CreateLedgerAccount, LedgerAccount, LedgerRecord, LedgerResult, LedgerSnapshot } from '../shared/accountLedger'
 import type { HistoricalDailyProgressResult } from '../shared/historicalDailyProgress'
 import type { ConceptSource, DiagnosticReadiness, EvaluationCounts, FactSyncReceipt } from '../shared/dataReadiness'
 import type { SupportDiagnosticPreview, SupportFeedbackResult, SupportFeedbackSaveOutcome } from '../shared/supportDiagnostics'
@@ -3636,6 +3637,13 @@ const api = {
   },
 
   // ── FR-168: 持仓批量 AI 预测 ────────────────────────
+  accountLedger: {
+    list: () => ipcRenderer.invoke('accountLedger:list') as Promise<LedgerResult<LedgerAccount[]>>,
+    get: (accountId: string) => ipcRenderer.invoke('accountLedger:get', accountId) as Promise<LedgerResult<LedgerSnapshot>>,
+    create: (input: CreateLedgerAccount) => ipcRenderer.invoke('accountLedger:create', input) as Promise<LedgerResult<LedgerSnapshot>>,
+    append: (input: AppendLedgerEvent) => ipcRenderer.invoke('accountLedger:append', input) as Promise<LedgerResult<LedgerSnapshot>>,
+    findEvent: (accountId: string, eventId: string) => ipcRenderer.invoke('accountLedger:findEvent', { accountId, eventId }) as Promise<LedgerResult<LedgerRecord | null>>,
+  },
   portfolio: {
     list: () =>
       ipcRenderer.invoke('portfolio:list') as Promise<{
