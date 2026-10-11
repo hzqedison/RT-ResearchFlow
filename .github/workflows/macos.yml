@@ -1,14 +1,14 @@
-name: Public on-demand Mac packages
+name: Product-private Python native acceptance
+
 on:
   workflow_dispatch:
+
 permissions:
   contents: read
-concurrency:
-  group: public-on-demand-macos-${{ github.ref }}
-  cancel-in-progress: false
+
 jobs:
-  package:
-    if: github.repository == 'hzqedison/RT-ResearchFlow'
+  native-python:
+    name: Native Python ${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:
@@ -18,13 +18,11 @@ jobs:
           - runner: macos-15-intel
             arch: x64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: 20
     env:
-      RT_EXTENSION_DELIVERY: on-demand
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+      npm_config_cache: ${{ runner.temp }}/npm-cache
       USE_HARD_LINKS: 'false'
-      NODE_OPTIONS: ''
-      NODE_PATH: ''
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -32,58 +30,30 @@ jobs:
           version: 10.14.0
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20.18.0
           cache: pnpm
-      - uses: actions/setup-python@v5
-        id: python
-        with:
-          python-version: '3.12'
-      - name: Install native dependencies
+      - name: Install test dependencies without application setup hooks
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install the native Electron test host
+        run: node node_modules/electron/install.js
+      - name: Verify archive contracts and main-process types
         run: |
-          test "$(node -p process.arch)" = '${{ matrix.arch }}'
-          pnpm install --frozen-lockfile --config.side-effects-cache=false
-      - name: Type checks and extension contracts
-        run: |
-          pnpm run typecheck
-          pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts
-      - name: Build same-product native installer
-        run: node macos/build.mjs
-      - name: Actual DMG install, startup and first-use online extension test
-        shell: bash
+          pnpm exec vitest run tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts
+          pnpm exec tsc --noEmit -p tsconfig.node.json --composite false
+      - name: Compile isolated native smoke harness
+        run: pnpm exec esbuild tests/native/productPythonSmoke.ts --bundle --platform=node --format=cjs --external:electron --outfile="$RUNNER_TEMP/product-private-python-smoke.cjs"
+      - name: Accept actual Python download, relocation and AkShare installation
         env:
-          RT_ONDEMAND_PYTHON: ${{ steps.python.outputs.python-path }}
-          RT_ONDEMAND_ALLOW_NETWORK: '1'
-        run: |
-          set -euo pipefail
-          mount="$RUNNER_TEMP/public-dmg"
-          install="$RUNNER_TEMP/public-installed"
-          mkdir -p "$mount" "$install"
-          dmg="$(find release -maxdepth 1 -name '*-${{ matrix.arch }}.dmg' -print -quit)"
-          test -n "$dmg"
-          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount"
-          trap 'hdiutil detach "$mount" || true' EXIT
-          ditto "$mount/RT-ResearchFlow.app" "$install/RT-ResearchFlow.app"
-          hdiutil detach "$mount"
-          trap - EXIT
-          codesign --verify --deep --strict "$install/RT-ResearchFlow.app"
-          export RT_PACKAGED_EXE="$install/RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow"
-          export RT_PACKAGED_VERSION="$(node -p 'require("./package.json").version')"
-          export RT_PACKAGED_TEST_ROOT="$RUNNER_TEMP/public-acceptance"
-          node scripts/mac-packaged-acceptance.cjs "$RT_PACKAGED_EXE"
-          pnpm exec playwright test tests/e2e/on-demand-extensions.spec.ts --workers=1 --reporter=line
-          shasum -a 256 release/*.dmg > release/SHA256SUMS-${{ matrix.arch }}.txt
-      - name: Upload only tested direct installers
-        uses: actions/upload-artifact@v4
-        with:
-          name: public-mac-${{ matrix.arch }}-${{ github.sha }}
-          path: |
-            release/*.dmg
-            release/SHA256SUMS-${{ matrix.arch }}.txt
-          if-no-files-found: error
-      - name: Upload test evidence
+          RT_EXPECTED_ARCH: ${{ matrix.arch }}
+          RT_PRODUCT_PYTHON_TEST_ROOT: ${{ runner.temp }}/product-private-python
+          RT_PRODUCT_PYTHON_RECEIPT: ${{ runner.temp }}/product-private-python-acceptance.json
+        run: pnpm exec electron "$RUNNER_TEMP/product-private-python-smoke.cjs"
+      - name: Upload the bounded native acceptance receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: public-mac-evidence-${{ matrix.arch }}
-          path: test-results/
-          if-no-files-found: ignore
+          name: product-private-python-${{ matrix.arch }}-${{ github.sha }}
+          path: ${{ runner.temp }}/product-private-python-acceptance.json
+          if-no-files-found: warn
+
+# This workflow publishes no installers and never accesses production user data.
