@@ -83,9 +83,9 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REPOSITORY: hzqedison/RT-ResearchFlow
       MAC_COMMIT: 066d0299cae99c5b4709a5705376fa87373b7f9b
-      WINDOWS_COMMIT: 88849a16e665fa2b39c2b18e9b7f042075bad4e8
+      WINDOWS_COMMIT: d81d9804f7143b884562b25263a91147662ea4a5
       MAC_RUN: '38151538487'
-      WINDOWS_RUN: '38153236375'
+      WINDOWS_RUN: '38154742158'
       LIFECYCLE_RUN: ${{ inputs.lifecycle_run }}
       RELEASE_TAG: v1.10.0
     steps:
@@ -106,10 +106,18 @@ jobs:
           jq -e '[.jobs[] | select(.name == "windows")] | length == 1 and all(.conclusion == "success")' "jobs-$WINDOWS_RUN.json"
           jq -e '[.jobs[] | select(.name == "installer_lifecycle")] | length == 1 and all(.conclusion == "success")' "jobs-$LIFECYCLE_RUN.json"
           gh api "repos/$REPOSITORY/compare/$MAC_COMMIT...$WINDOWS_COMMIT" > source-difference.json
+          gh api "repos/$REPOSITORY/contents/pnpm-lock.yaml?ref=$MAC_COMMIT" > mac-lock.json
+          gh api "repos/$REPOSITORY/contents/pnpm-lock.yaml?ref=$WINDOWS_COMMIT" > windows-lock.json
+          gh api "repos/$REPOSITORY/contents/patches/app-builder-lib%4024.13.3.patch?ref=$WINDOWS_COMMIT" > windows-patch.json
           node <<'NODE'
-          const fs = require('node:fs'), d = JSON.parse(fs.readFileSync('source-difference.json', 'utf8'))
-          const allowed = new Set(['.github/workflows/public-on-demand-macos.yml', '.github/workflows/publish-tested-1.9.1.yml', 'resources/installer.nsh', 'scripts/native-nsis-defaults-probe.cjs', 'tests/unit/nsisInstallPath.contract.test.ts', 'tests/unit/nsisNativeRegisterOutputs.contract.test.ts'])
+          const fs = require('node:fs'), crypto = require('node:crypto'), d = JSON.parse(fs.readFileSync('source-difference.json', 'utf8'))
+          const allowed = new Set(['.github/workflows/public-on-demand-macos.yml', '.github/workflows/publish-tested-1.9.1.yml', 'README.md', 'patches/app-builder-lib@24.13.3.patch', 'pnpm-lock.yaml', 'resources/installer.nsh', 'scripts/native-nsis-defaults-probe.cjs', 'scripts/trace-full-nsis.cjs', 'tests/unit/nsisInstallPath.contract.test.ts', 'tests/unit/nsisNativeRegisterOutputs.contract.test.ts', 'tests/unit/traceFullNsis.isolated.test.cjs'])
           if (d.status !== 'ahead' || !Array.isArray(d.files) || d.files.length !== allowed.size || d.files.some(file => !allowed.has(file.filename))) throw Error('SHARED_APPLICATION_OR_DEPENDENCY_SOURCES_CHANGED')
+          const bytes = file => Buffer.from(JSON.parse(fs.readFileSync(file, 'utf8')).content, 'base64')
+          const before = bytes('mac-lock.json').toString('utf8').replace(/\r\n/g, '\n')
+          const after = bytes('windows-lock.json').toString('utf8').replace(/\r\n/g, '\n')
+          const hash = text => text.match(/app-builder-lib@24\.13\.3:\n\s+hash: ([a-f0-9]{64})/)[1]
+          if (before.replaceAll(hash(before), hash(after)) !== after || crypto.createHash('sha256').update(bytes('windows-patch.json')).digest('hex') !== hash(after)) throw Error('DEPENDENCY_LOCK_CHANGED_BEYOND_INSTALLER_PATCH_METADATA')
           NODE
           gh api "repos/$REPOSITORY/releases?per_page=100" | jq -e '[.[] | select(.tag_name == "v1.10.0")] | if length == 1 then .[0] else error("draft identity missing or ambiguous") end' > release.json
           jq -e --arg sha "$WINDOWS_COMMIT" '.draft == true and .target_commitish == $sha' release.json
