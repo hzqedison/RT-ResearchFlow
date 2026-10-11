@@ -6,6 +6,8 @@ import type { MultiSourcePreference } from '../../shared/dataSourceTypes'
 import { minimumDataSourcePythonMinor, supportsDataSourcePython } from '../../shared/pythonSourceRequirements'
 import { privateProviderForOperation, privatePythonInvocation, resolvePrivatePythonRuntime } from './privatePythonRuntimeResolver'
 import type { PrivatePythonProvider } from '../../shared/privatePythonRuntimeTypes'
+import { dataExtensionDeliveryMode } from './dataExtensionDelivery'
+import { extensionInstallProgress, installOnDemandExtensions } from './onDemandDataExtensions'
 
 // Packaged applications use only the complete, offline, per-provider runtime.
 // Explicit development interpreter selection remains available for isolated fixtures.
@@ -86,6 +88,7 @@ const bridgeMessages: Record<string, string> = {
   BRIDGE_TIMEOUT: '本地数据扩展请求超时，已停止本次请求。',
   BRIDGE_INVALID_RESPONSE: '本地扩展响应不符合预期，请检查依赖版本。',
   BRIDGE_INSTALL_FAILED: '扩展安装未完成，请检查 Python、网络与磁盘空间；原有数据未被改动。',
+  EXTENSION_DELIVERY_INVALID: '扩展交付配置损坏，请重新安装应用；不会自动下载或切换解释器。',
   PRIVATE_RUNTIME_PENDING: '随包数据扩展尚未准备完整，不能使用系统 Python 或在线安装代替；原有数据保持不变。',
   PRIVATE_RUNTIME_INVALID: '随包数据扩展校验失败，已停止本次调用；原有数据保持不变。',
 }
@@ -160,7 +163,7 @@ export async function callPythonDataSource(
   config: MultiSourcePreference,
   request: Record<string, unknown>,
 ): Promise<unknown> {
-  if (app.isPackaged) {
+  if (app.isPackaged && dataExtensionDeliveryMode(true, process.resourcesPath) === 'bundled') {
     const runtime = resolvePrivatePythonRuntime(process.resourcesPath)
     const invoke = async (provider: PrivatePythonProvider) => {
       const command = await privatePythonInvocation(runtime, provider, app.getPath('userData'), PYTHON_BRIDGE, request)
@@ -199,9 +202,18 @@ function parseBridgeOutput(output: string): unknown {
 
 let installation: Promise<string> | null = null
 
+export function getDataExtensionInstallStatus() {
+  return { mode: dataExtensionDeliveryMode(app.isPackaged, process.resourcesPath), progress: extensionInstallProgress() }
+}
+
 export function installSelectedDataSourceExtensions(config: MultiSourcePreference): Promise<string> {
   if (installation) return installation
   installation = (async () => {
+    if (dataExtensionDeliveryMode(app.isPackaged, process.resourcesPath) === 'on-demand') {
+      const temporary = join(app.getPath('userData'), 'data-source-cache', 'tmp')
+      await mkdir(temporary, { recursive: true })
+      return installOnDemandExtensions(config, pythonExecutable(config), app.getPath('userData'), runPython)
+    }
     const selected: PrivatePythonProvider[] = []
     if (config.dailyProviders.includes('akshare') || config.reportProviders.includes('akshare')) selected.push('akshare')
     if (config.dailyProviders.includes('tdx')) selected.push('mootdx')

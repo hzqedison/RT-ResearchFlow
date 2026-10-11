@@ -70,6 +70,8 @@ module.exports = {
 }
 
 // Preserve the native Mac signing hook, then verify the installed runtime ledger.
+if (process.env.RT_EXTENSION_DELIVERY !== 'on-demand') {
 module.exports = require("../scripts/private-python-runtime-builder.cjs").withPrivatePythonPostPackValidation(module.exports)
 
 module.exports = require('../scripts/mac-owner-source-delivery.cjs').withMacSourceDelivery(module.exports)
+}

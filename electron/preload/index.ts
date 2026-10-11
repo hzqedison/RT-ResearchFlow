@@ -1935,6 +1935,10 @@ const api = {
     listVerifiedPublicLimitPool: () =>
       ipcRenderer.invoke('datasource:listVerifiedPublicLimitPool') as Promise<PublicLimitPoolObservationSnapshot>,
     choosePython: () => ipcRenderer.invoke('datasource:choosePython') as Promise<string | null>,
+    extensionInstallStatus: () => ipcRenderer.invoke('datasource:extensionInstallStatus') as Promise<{
+      mode: 'bundled' | 'on-demand';
+      progress: import('../shared/dataSourceTypes').DataExtensionInstallProgress
+    }>,
     bridgeStatus: () => ipcRenderer.invoke('datasource:bridgeStatus') as Promise<
       { ok: true; data: unknown } | { ok: false; message: string }
     >,

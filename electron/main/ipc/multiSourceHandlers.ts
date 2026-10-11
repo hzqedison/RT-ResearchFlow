@@ -4,12 +4,13 @@ import { getDb } from '../database/db'
 import { getMultiSourcePreference, updateMultiSourcePreference } from '../database/dataSourceRepository'
 import { fetchSelectedStockDaily } from '../services/multiSourceMarketService'
 import { getSelectedResearchReports, queryWencai } from '../services/multiSourceResearchService'
-import { callPythonDataSource, dataBridgeMessage, installSelectedDataSourceExtensions } from '../services/pythonDataSourceBridge'
+import { callPythonDataSource, dataBridgeMessage, getDataExtensionInstallStatus, installSelectedDataSourceExtensions } from '../services/pythonDataSourceBridge'
 import { fetchPublicLimitUpPool } from '../services/publicLimitPoolAdapter'
 import { readVerifiedPublicLimitPool, syncVerifiedPublicLimitPool } from '../services/verifiedPublicLimitPoolCache'
 import { DAILY_DATA_PROVIDERS, type DataProbeProvider, type DataSourceProbeResult } from '../../shared/dataSourceTypes'
 
 export function registerMultiSourceHandlers(getWindow: TrustedWindowGetter): void {
+  registerTrustedIpcHandler('datasource:extensionInstallStatus', getWindow, () => getDataExtensionInstallStatus())
   registerTrustedIpcHandler('datasource:choosePython', getWindow, async () => {
     const result = await dialog.showOpenDialog({ title: '选择本机 Python 解释器', properties: ['openFile'] })
     return result.canceled ? null : result.filePaths[0] ?? null

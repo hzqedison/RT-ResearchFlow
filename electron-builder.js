@@ -48,12 +48,16 @@ const config = {
 module.exports = config
 
 // All packaged data extensions must be complete and offline before packaging.
+if (process.env.RT_EXTENSION_DELIVERY === 'on-demand') {
+  module.exports = require('./scripts/on-demand-extension-builder.cjs').withOnDemandExtensions(module.exports)
+} else {
 module.exports = require("./scripts/private-python-runtime-builder.cjs").withPrivatePythonPostPackValidation(
   require("./scripts/private-python-runtime-builder.cjs").withPrivatePythonRuntime(module.exports),
 )
 
 // Deliver complete Mac notice/source materials and verify the actual copied bytes.
 module.exports = require('./scripts/mac-distribution-materials.cjs').withMacDistributionMaterials(module.exports)
+}
 
 // pdf-parse embeds PDF.js but still requires the native canvas package at runtime.
 module.exports = require('./scripts/packaged-pdf-runtime.cjs').withPackagedPdfRuntime(module.exports)
