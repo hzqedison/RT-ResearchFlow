@@ -98,7 +98,8 @@ describe('dataQualityService', () => {
       seedUsableFixture(db)
       const current = getDataQualitySnapshot(db, NOW)
       expect(current.datasets.find((item) => item.key === 'tradeCalendar')?.status).toBe('reliable')
-      expect(current.datasets.find((item) => item.key === 'dailyMarket')?.status).not.toBe('blocked')
+      expect(current.datasets.find((item) => item.key === 'dailyMarket')).toMatchObject({ status: 'blocked', evidence: { readiness: 'partial', targetScope: 'market-history-480' } })
+      expect(current.datasets.find((item) => item.key === 'dailyMarket')?.reasons.map(item => item.code)).toContain('SECURITY_UNIVERSE_INCOMPLETE')
       expect(current.datasets.find((item) => item.key === 'auction')).toMatchObject({ status: 'degraded', evidence: { reasonCode: 'COVERAGE_UNKNOWN' } })
       expect(current.datasets.find((item) => item.key === 'benchmarks')?.status).toBe('reliable')
       expect(current.datasets.find((item) => item.key === 'financials')?.status).toBe('reliable')
@@ -123,7 +124,7 @@ describe('dataQualityService', () => {
         VALUES ('600002.SH', '20260730', 10, 0, 10, 11, 9, 100, 1)
       `).run()
       const daily = getDataQualitySnapshot(db, NOW).datasets.find((item) => item.key === 'dailyMarket')
-      expect(daily?.status).toBe('degraded')
+      expect(daily?.status).toBe('blocked')
       expect(daily?.reasons.map((item) => item.code)).toEqual(expect.arrayContaining(['FUTURE_FACTS', 'ADJUSTMENT_GAPS']))
     } finally {
       db.close()

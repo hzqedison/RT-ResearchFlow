@@ -212,9 +212,8 @@ function dailyMarketQuality(
   const activeStockCount = tableHasColumns(db, 'stock_basic_cache', ['ts_code', 'list_status'])
     ? (db.prepare(`SELECT COUNT(*) AS count FROM stock_basic_cache WHERE list_status IS NULL OR list_status != 'D'`).get() as { count: number }).count
     : 0
-  const completeRowThreshold = activeStockCount > 0
-    ? Math.min(COMPLETE_DAILY_ROW_THRESHOLD, Math.max(1, Math.floor(activeStockCount * 0.9)))
-    : COMPLETE_DAILY_ROW_THRESHOLD
+  // A tiny local watchlist cannot shrink the all-market coverage denominator.
+  const completeRowThreshold = COMPLETE_DAILY_ROW_THRESHOLD
   const completeDays = tradeDays.length > 0
     ? tradeDays.filter((date) => (coverage.get(date) ?? 0) >= completeRowThreshold).length
     : (db.prepare(`
@@ -238,6 +237,7 @@ function dailyMarketQuality(
   const reasons: DataQualityReason[] = []
   if (quality.totalRows === 0) reasons.push(reason('EMPTY', '本地尚无日线数据。', 'error'))
   if (completeDays < HISTORICAL_DAILY_TARGET_TRADE_DAYS) reasons.push(reason('TRADE_DAY_COVERAGE_LOW', `全市场完整交易日只有 ${completeDays}/${HISTORICAL_DAILY_TARGET_TRADE_DAYS}。`, 'error'))
+  if (activeStockCount < COMPLETE_DAILY_ROW_THRESHOLD) reasons.push(reason('SECURITY_UNIVERSE_INCOMPLETE', '本地证券范围未达到全市场基础规模；个股历史可使用，但不能据此认证全市场扫描或回测底座。', 'error'))
   const missingKeyRows = quality.fields.open.missingRows + quality.fields.high.missingRows + quality.fields.low.missingRows
   if (missingKeyRows > 0) reasons.push(reason('KEY_FIELDS_MISSING', `OHLC关键字段累计缺失 ${missingKeyRows} 行。`, 'warning'))
   const invalidMarketRows = quality.invalid.nonPositiveCloseRows + quality.invalid.negativeVolumeRows + quality.invalid.invalidOhlcRows
@@ -246,13 +246,19 @@ function dailyMarketQuality(
   }
   if (quality.invalid.futureRows > 0) reasons.push(reason('FUTURE_FACTS', `${quality.invalid.futureRows} 条日线晚于当前可用截止日，已排除在覆盖判断之外。`, 'warning'))
   if (registeredSecurities > adjustedSecurities) reasons.push(reason('ADJUSTMENT_GAPS', `已登记产业公司中 ${registeredSecurities - adjustedSecurities} 只证券缺少复权因子。`, 'warning'))
-  const status: DataTrustStatus = quality.totalRows === 0 || completeDays < HISTORICAL_DAILY_TARGET_TRADE_DAYS
+  const status: DataTrustStatus = reasons.some(item => item.severity === 'error')
     ? 'blocked' : reasons.length > 0 ? 'degraded' : 'reliable'
   return {
     key: 'dailyMarket', title: '日线与复权', status,
     summary: status === 'reliable' ? `全市场 ${completeDays} 个交易日可用` : status === 'blocked' ? `完整交易日仅 ${completeDays}/${HISTORICAL_DAILY_TARGET_TRADE_DAYS}` : '行情可用，但部分字段或复权仍有缺口',
     recordCount: quality.totalRows, earliestDate: quality.earliestTradeDate, latestDate: quality.latestTradeDate,
     sourceLabel: 'Tushare 日线 / 复权因子', affectedModules: ['行情图表', '趋势评分', '策略回测', '产业决策'], reasons, action,
+    evidence: {
+      applicability: 'required', readiness: status === 'reliable' ? 'ready' : quality.totalRows === 0 ? 'missing' : 'partial',
+      reasonCode: reasons.find(item => item.severity === 'error')?.code ?? reasons[0]?.code ?? 'HISTORICAL_SCOPE_CHECKED',
+      expectedTradeDate: asOf, latestTradeDate: quality.latestTradeDate, calendarBasis: 'local_verified',
+      targetScope: 'market-history-480',
+    },
   }
 }
 

@@ -11,6 +11,7 @@ export function basicUseBlockers(snapshot: DiagnosticsHealthSnapshot | null): Di
 export function diagnosticFactStatus(item: DiagnosticItem | undefined): DiagnosticStatus {
   if (!item || item.displayStatus === 'neutral') return 'warning'
   if (item.status === 'error') return 'error'
+  if (item.evidence?.readiness === 'partial') return 'warning'
   if (item.evidence && !['ready', 'partial'].includes(item.evidence.readiness)) return 'warning'
   if (item.recordCount != null && (!Number.isFinite(item.recordCount) || item.recordCount < 0)) return 'warning'
   if (item.recordCount === 0 && item.evidence?.readiness !== 'ready') return 'warning'

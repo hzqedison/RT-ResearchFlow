@@ -34,6 +34,7 @@ import { getPublicMarketSyncJob } from '../database/publicMarketDataRepository'
 import { runPublicHistoricalDailySync } from './publicHistoricalDailySyncService'
 import { readKnownCalendar, resolveCompletedTradeDate, resolveFactDates, tradingDayAge } from './dataReadinessService'
 import { getReadinessAttempt, syncDiagnosticFacts } from './diagnosticFactSyncService'
+import { alignDiagnosticQuality } from './diagnosticQualityAlignment'
 import { evaluationCounts, factReceiptMessage, type ConceptSource, type DiagnosticReadiness, type EvaluationCounts, type FactSyncReceipt } from '../../shared/dataReadiness'
 
 export type DiagnosticStatus = 'ok' | 'warning' | 'error'
@@ -380,11 +381,15 @@ function buildFreshnessItem(db: Database.Database, spec: TableFreshnessSpec, che
   }
 }
 
-function buildFreshnessGroup(db: Database.Database, checkedAt: number): DiagnosticGroup {
+function buildFreshnessGroup(db: Database.Database, checkedAt: number, quality: DataQualitySnapshot): DiagnosticGroup {
   return {
     key: 'freshness',
     title: '数据新鲜度',
-    items: FRESHNESS_TABLES.map((spec) => buildFreshnessItem(db, spec, checkedAt))
+    items: FRESHNESS_TABLES.map((spec) => {
+      const item = buildFreshnessItem(db, spec, checkedAt)
+      const datasetKey = spec.key === 'stockBasic' ? 'stockBasic' : spec.key === 'dailyClose' ? 'dailyMarket' : null
+      return datasetKey ? alignDiagnosticQuality(item, quality.datasets.find(dataset => dataset.key === datasetKey)) : item
+    })
   }
 }
 
@@ -520,9 +525,10 @@ export function getDiagnosticsHealth(db: Database.Database): DiagnosticsHealthSn
   const dailyCloseSummary = tableExists(db, 'daily_close_cache')
     ? getDailyCloseQualitySummary(db, completedDate)
     : undefined
+  const dataQuality = getDataQualitySnapshot(db, checkedAt, dailyCloseSummary)
   const groups = [
     buildConfigGroup(db, checkedAt),
-    buildFreshnessGroup(db, checkedAt),
+    buildFreshnessGroup(db, checkedAt, dataQuality),
     buildSyncGroup(db, checkedAt),
     buildDatabaseGroup(db, checkedAt)
   ]
@@ -536,7 +542,7 @@ export function getDiagnosticsHealth(db: Database.Database): DiagnosticsHealthSn
     selectedConceptSource: getConceptSource(),
     groups,
     dailyCloseQuality: buildDailyCloseQuality(db, dailyCloseSummary),
-    dataQuality: getDataQualitySnapshot(db, checkedAt, dailyCloseSummary),
+    dataQuality,
   }
 }
 

@@ -4,7 +4,7 @@ on:
     inputs:
       version:
         type: string
-        default: '1.14.0'
+        default: '1.15.0'
       target:
         type: choice
         options: [all, windows, macos, installer, probe, trace]
@@ -63,6 +63,7 @@ jobs:
           pnpm run typecheck
           node --test scripts/packaged-ai-credential-proof.test.cjs
           pnpm exec vitest run tests/unit/initializationCapabilities.test.tsx tests/unit/initializationTaskModel.test.ts tests/unit/dataReadiness.contract.test.ts --maxWorkers=1 --minWorkers=1
+          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/diagnosticQualityAlignment.test.ts tests/unit/diagnosticsCapabilitySessions.test.ts tests/unit/dataQuality.service.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/aiConfigStorage.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/strategyLab.publicLimitUp.test.tsx tests/unit/strategyLab.service.test.ts tests/unit/strategyLab.conditionSnapshotRun.test.ts tests/unit/tushareCredentialVerification.test.tsx tests/unit/publicLimitUpRules.test.tsx tests/unit/nativePublicLimitPool.test.ts tests/unit/verifiedPublicLimitPoolCache.test.ts tests/unit/currentPublicConceptLookup.service.test.ts tests/unit/currentPublicConceptLookup.wiring.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
@@ -153,6 +154,7 @@ jobs:
           pnpm run typecheck
           node --test scripts/packaged-ai-credential-proof.test.cjs
           pnpm exec vitest run tests/unit/initializationCapabilities.test.tsx tests/unit/initializationTaskModel.test.ts tests/unit/dataReadiness.contract.test.ts --maxWorkers=1 --minWorkers=1
+          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/diagnosticQualityAlignment.test.ts tests/unit/diagnosticsCapabilitySessions.test.ts tests/unit/dataQuality.service.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/aiConfigStorage.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/strategyLab.publicLimitUp.test.tsx tests/unit/strategyLab.service.test.ts tests/unit/strategyLab.conditionSnapshotRun.test.ts tests/unit/tushareCredentialVerification.test.tsx tests/unit/publicLimitUpRules.test.tsx tests/unit/nativePublicLimitPool.test.ts tests/unit/verifiedPublicLimitPoolCache.test.ts tests/unit/currentPublicConceptLookup.service.test.ts tests/unit/currentPublicConceptLookup.wiring.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts

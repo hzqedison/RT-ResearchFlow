@@ -1,4 +1,5 @@
 import type { DiagnosticRunAction, DiagnosticsHealthSnapshot } from './onboardingModel'
+import { diagnosticFactStatus, isUsableDiagnosticFact } from './initializationCapabilityPolicy'
 
 export type InitializationTaskKey = 'refresh-before' | 'sync-stock-basic' | 'sync-historical-daily' | 'sync-concepts' | 'backfill-decision' | 'refresh-after'
 export type InitializationTaskStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped' | 'deferred' | 'retryable'
@@ -118,8 +119,12 @@ export function shouldSkipInitializationTask(snapshot: DiagnosticsHealthSnapshot
   const concept = source ? findDiagnosticItem(snapshot, [`freshness.${source}Concept`, `${source}Concept`]) : undefined
   const decision = findDiagnosticItem(snapshot, ['freshness.decisionSignals', 'decisionSignals'])
 
-  if (task.key === 'sync-stock-basic' && stockBasic?.status === 'ok') return '股票基础数据已可用, 跳过同步。'
-  if (task.key === 'sync-historical-daily' && dailyClose?.status === 'ok') return '全市场历史日线底座已可用, 跳过同步。'
+  if (task.key === 'sync-stock-basic' && isUsableDiagnosticFact(stockBasic) && diagnosticFactStatus(stockBasic) === 'ok'
+    && (stockBasic?.recordCount ?? 0) > 0) return '股票基础数据已可用, 跳过同步。'
+  if (task.key === 'sync-historical-daily' && isUsableDiagnosticFact(dailyClose) && diagnosticFactStatus(dailyClose) === 'ok'
+    && dailyClose?.evidence?.readiness === 'ready' && dailyClose.evidence.targetScope === 'market-history-480'
+    && dailyClose.evidence.calendarBasis === 'local_verified' && !!dailyClose.evidence.expectedTradeDate)
+    return '全市场历史日线底座的目标范围已核验, 跳过同步。'
   if (task.key === 'sync-concepts' && concept?.status === 'ok' && concept.displayStatus !== 'neutral'
     && (concept.recordCount ?? 0) > 0 && concept.evidence?.readiness === 'ready'
     && concept.evidence.selectedSource === source && concept.evidence.applicability === 'selected'
@@ -127,7 +132,7 @@ export function shouldSkipInitializationTask(snapshot: DiagnosticsHealthSnapshot
     && concept.evidence.lastAttempt.source === source
     && (source === 'ths' ? concept.evidence.targetScope === 'complete-directory-members'
       : !!concept.evidence.expectedTradeDate && concept.evidence.lastAttempt.targetDate === concept.evidence.expectedTradeDate)) return `当前 ${source?.toUpperCase()} 题材目标范围已核验, 跳过同步。`
-  if (task.key === 'backfill-decision' && decision?.status === 'ok') return '今日看板已有可用状态, 跳过补种。'
+  if (task.key === 'backfill-decision' && isUsableDiagnosticFact(decision) && diagnosticFactStatus(decision) === 'ok') return '今日看板已有可用状态, 跳过补种。'
   return null
 }
 
