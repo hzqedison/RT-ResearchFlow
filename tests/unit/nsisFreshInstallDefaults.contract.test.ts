@@ -48,30 +48,38 @@ function run(f: Fixture = {}, original = C, errors = false) {
       vars.$R1 = '10'; vars.$R0 = String(status); return
     }
     if (text.startsWith('advapi32::RegCloseKey')) { expect(text).toContain('i .R0'); vars.$R0 = '0'; return }
-    if (text.startsWith('kernel32::GetDriveTypeW')) { stack.push(String(f.types?.[quoted[0]] ?? 3)); return }
+    if (text.startsWith('kernel32::GetDriveTypeW')) { vars.$R3 = String(f.types?.[quoted[0]] ?? 3); return }
     if (text.startsWith('kernel32::GetFileAttributesW')) {
       const name = quoted[0]
       const attrs = f.attributes?.[name] ?? (owned.has(name) ? 16 : /^[DK]:\\$/.test(name) ? 16 : -1)
-      stack.push(String(attrs)); lastError = 2; return
+      vars.$R3 = String(attrs); lastError = 2
+      if (text.includes('?e')) stack.push(String(lastError))
+      return
     }
     if (text.startsWith('kernel32::GetLastError')) { stack.push(String(lastError)); return }
     if (text.startsWith('ole32::CoCreateGuid')) { expect(text).toContain('g .R6) i .R3'); vars.$R6 = '{fixture-guid}'; vars.$R3 = '0'; return }
     if (text.startsWith('kernel32::CreateDirectoryW')) {
-      if (f.collision || f.fail === 'directory') { stack.push('0'); return }
+      if (f.collision || f.fail === 'directory') { vars.$R3 = '0'; return }
       if (owned.has(quoted[0])) throw new Error('probe reused')
-      owned.add(quoted[0]); effects.push('create-owned-directory:' + quoted[0]); stack.push('1'); return
+      owned.add(quoted[0]); effects.push('create-owned-directory:' + quoted[0]); vars.$R3 = '1'; return
     }
     if (text.startsWith('kernel32::CreateFileW')) {
-      const directory = text.includes('0x06200080'), name = quoted[0]
-      expect(text).toContain(directory ? 'i 3, i 0x06200080' : 'i 1, i 0x04000080')
-      if (f.fail === (directory ? 'directory-handle' : 'file-handle')) { stack.push('-1'); return }
+      const directory = text.includes('0x02200080'), name = quoted[0]
+      expect(text).toContain(directory ? 'i 3, i 0x02200080' : 'i 1, i 0x04000080')
+      if (f.fail === (directory ? 'directory-handle' : 'file-handle')) { vars[directory ? '$R9' : '$R7'] = '-1'; return }
       const handle = String(++nextHandle); open.set(handle, name)
       effects.push((directory ? 'open-owned-directory:' : 'create-owned-file:') + name)
-      stack.push(handle); return
+      vars[directory ? '$R9' : '$R7'] = handle; return
     }
     if (text.startsWith('kernel32::WriteFile')) {
       expect(text).toContain('*i .R4, p 0) i .R3')
       effects.push('write-owned-file'); vars.$R4 = f.fail === 'write' ? '0' : '1'; vars.$R3 = f.fail === 'write' ? '0' : '1'; return
+    }
+    if (text.startsWith('kernel32::SetFileInformationByHandle')) {
+      expect(text).toContain('i 4, *i 1, i 1) i .R3')
+      const handle = /p (\d+)/.exec(text)![1]
+      expect(open.has(handle)).toBe(true)
+      vars.$R3 = '1'; return
     }
     if (text.startsWith('kernel32::CloseHandle')) {
       const handle = /p (\d+)/.exec(text)![1], name = open.get(handle)
@@ -79,7 +87,7 @@ function run(f: Fixture = {}, original = C, errors = false) {
       open.delete(handle)
       effects.push('close-owned:' + name)
       if (owned.has(name) && f.fail !== 'cleanup') owned.delete(name)
-      stack.push(f.fail === 'close' ? '0' : '1'); return
+      vars.$R3 = f.fail === 'close' ? '0' : '1'; return
     }
     throw new Error('unsupported native observation: ' + text)
   }

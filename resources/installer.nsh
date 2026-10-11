@@ -343,35 +343,29 @@ Function rtProbeFreshInstallDefault
   Push $R9
   StrCpy $R1 "0"
   StrCpy $R2 $R0 3
-  System::Call 'kernel32::GetDriveTypeW(w "$R2") i .s'
-  Pop $R3
+  System::Call 'kernel32::GetDriveTypeW(w "$R2") i .R3'
   StrCmp $R3 "3" 0 rt_default_probe_done
-  System::Call 'kernel32::GetFileAttributesW(w "$R2") i .s'
-  Pop $R3
+  System::Call 'kernel32::GetFileAttributesW(w "$R2") i .R3'
   IntOp $R4 $R3 & 0x410
   StrCmp $R4 "16" 0 rt_default_probe_done
 
   # A registered install never reaches this function. An unregistered existing
   # target is not proved owned, even when its name looks like this product.
-  System::Call 'kernel32::GetFileAttributesW(w "$R0") i .s'
-  Pop $R3
+  System::Call 'kernel32::GetFileAttributesW(w "$R0") i .R3 ?e'
+  Pop $R4
   StrCmp $R3 "-1" 0 rt_default_probe_unsafe
-  System::Call 'kernel32::GetLastError() i .s'
-  Pop $R3
-  StrCmp $R3 "2" rt_default_probe_parent
-  StrCmp $R3 "3" rt_default_probe_parent rt_default_probe_done
+  StrCmp $R4 "2" rt_default_probe_parent
+  StrCmp $R4 "3" rt_default_probe_parent rt_default_probe_done
   rt_default_probe_parent:
   GetFullPathName $R5 "$R0\.."
-  System::Call 'kernel32::GetFileAttributesW(w "$R5") i .s'
-  Pop $R3
+  System::Call 'kernel32::GetFileAttributesW(w "$R5") i .R3 ?e'
+  Pop $R4
   StrCmp $R3 "-1" rt_default_probe_missing_parent
   IntOp $R4 $R3 & 0x410
   StrCmp $R4 "16" rt_default_probe_create rt_default_probe_unsafe
   rt_default_probe_missing_parent:
-  System::Call 'kernel32::GetLastError() i .s'
-  Pop $R3
-  StrCmp $R3 "2" rt_default_probe_root_parent
-  StrCmp $R3 "3" rt_default_probe_root_parent rt_default_probe_done
+  StrCmp $R4 "2" rt_default_probe_root_parent
+  StrCmp $R4 "3" rt_default_probe_root_parent rt_default_probe_done
   rt_default_probe_root_parent:
   StrCpy $R5 $R2
   rt_default_probe_create:
@@ -380,32 +374,31 @@ Function rtProbeFreshInstallDefault
   StrCpy $R8 "$R5\.RT-ResearchFlow-default-probe-$R6"
   # CreateDirectoryW must succeed for this new unique name. Collision is NOT
   # ownership. Never reuse a probe, change ACLs, or delete an existing object.
-  System::Call 'kernel32::CreateDirectoryW(w "$R8", p 0) i .s'
-  Pop $R3
+  System::Call 'kernel32::CreateDirectoryW(w "$R8", p 0) i .R3'
   StrCmp $R3 "0" rt_default_probe_done
-  # DELETE_ON_CLOSE uses owned handles, not pathname-based recursive cleanup.
-  # Without FILE_SHARE_DELETE, the opened probe directory cannot be replaced.
-  System::Call 'kernel32::CreateFileW(w "$R8", i 0x10080, i 3, p 0, i 3, i 0x06200080, p 0) p .s'
-  Pop $R9
+  # Hold a non-share-delete directory handle while creating its child. Mark
+  # deletion by handle only AFTER closing the child; opening the directory
+  # DELETE_ON_CLOSE first can prevent creation inside a delete-pending directory.
+  System::Call 'kernel32::CreateFileW(w "$R8", i 0x10080, i 3, p 0, i 3, i 0x02200080, p 0) p .R9'
   StrCmp $R9 "-1" rt_default_probe_retained
-  System::Call 'kernel32::CreateFileW(w "$R8\probe", i 0x40010000, i 0, p 0, i 1, i 0x04000080, p 0) p .s'
-  Pop $R7
+  System::Call 'kernel32::CreateFileW(w "$R8\probe", i 0x40010000, i 0, p 0, i 1, i 0x04000080, p 0) p .R7'
   StrCmp $R7 "-1" rt_default_probe_close_directory
   System::Call 'kernel32::WriteFile(p $R7, m "x", i 1, *i .R4, p 0) i .R3'
   StrCmp $R3 "0" rt_default_probe_close_file
   StrCmp $R4 "1" 0 rt_default_probe_close_file
   StrCpy $R1 "1"
   rt_default_probe_close_file:
-  System::Call 'kernel32::CloseHandle(p $R7) i .s'
-  Pop $R3
+  System::Call 'kernel32::CloseHandle(p $R7) i .R3'
   StrCmp $R3 "0" 0 rt_default_probe_close_directory
   StrCpy $R1 "0"
   rt_default_probe_close_directory:
-  System::Call 'kernel32::CloseHandle(p $R9) i .s'
-  Pop $R3
+  # FILE_DISPOSITION_INFO is a one-byte BOOLEAN, class FileDispositionInfo=4.
+  System::Call 'kernel32::SetFileInformationByHandle(p $R9, i 4, *i 1, i 1) i .R3'
+  StrCmp $R3 "0" 0 +2
+    StrCpy $R1 "0"
+  System::Call 'kernel32::CloseHandle(p $R9) i .R3'
   StrCmp $R3 "0" rt_default_probe_retained
-  System::Call 'kernel32::GetFileAttributesW(w "$R8") i .s'
-  Pop $R3
+  System::Call 'kernel32::GetFileAttributesW(w "$R8") i .R3'
   StrCmp $R3 "-1" rt_default_probe_done
   rt_default_probe_retained:
   StrCpy $R1 "0"

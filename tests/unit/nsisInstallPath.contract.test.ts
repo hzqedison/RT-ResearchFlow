@@ -13,10 +13,10 @@ const installer = readFileSync(resolve(root, 'resources/installer.nsh'), 'utf8')
 
 // Apply the actual dependency patch in memory, without editing node_modules.
 // Registration may already have applied it: reverse and reapply in that case.
-function applyPatch(source: string, reverse = false, file = 'templates/nsis/multiUser.nsh') {
+function applyPatch(source: string, reverse = false, file = 'templates/nsis/multiUser.nsh', patchText = patch) {
   let result = source.replace(/\r\n/g, '\n')
   let delta = 0
-  const section = patch.split(/(?=^diff --git )/m).find(part => part.startsWith(`diff --git a/${file} b/${file}\n`))
+  const section = patchText.replace(/\r\n/g, '\n').split(/(?=^diff --git )/m).find(part => part.startsWith(`diff --git a/${file} b/${file}\n`))
   if (!section) throw new Error(`Missing patch section: ${file}`)
   const lines = section.trimEnd().split('\n')
   for (let index = 0; index < lines.length; index++) {
@@ -34,14 +34,24 @@ function applyPatch(source: string, reverse = false, file = 'templates/nsis/mult
     const to = (reverse ? before : after).join('\n') + '\n'
     const line = Number(reverse ? header[3] : header[1]) - 1 + delta
     const offset = result.split('\n').slice(0, line).reduce((length, part) => length + part.length + 1, 0)
-    if (result.slice(offset, offset + from.length) !== from) throw new Error('Patch context mismatch')
+    if (result.slice(offset, offset + from.length) !== from) throw new Error(`Patch context mismatch: ${header[0]}, reverse=${reverse}, expected=${JSON.stringify(from)}, actual=${JSON.stringify(result.slice(offset, offset + from.length))}`)
     result = result.slice(0, offset) + to + result.slice(offset + from.length)
     delta += reverse ? before.length - after.length : after.length - before.length
   }
   return result
 }
 
-const original = installedTemplate.includes('!macro GetDParameter outVar') ? applyPatch(installedTemplate, true) : installedTemplate.replace(/\r\n/g, '\n')
+// A shared local dependency tree may still carry the previous installer patch.
+// Undo exactly that older patch in memory, then exercise the complete new patch.
+const normalizedPatch = patch.replace(/\r\n/g, '\n')
+const legacyPatch = normalizedPatch.slice(0, normalizedPatch.indexOf('@@ -30,11 +30,10 @@'))
+  + normalizedPatch.slice(normalizedPatch.indexOf('@@ -41,7 +40,8 @@'))
+    .replace('@@ -41,7 +40,8 @@', '@@ -41,7 +41,8 @@')
+    .replace('@@ -84,10 +84,49 @@', '@@ -84,10 +85,49 @@')
+const original = installedTemplate.includes('!macro GetDParameter outVar')
+  ? applyPatch(installedTemplate, true, 'templates/nsis/multiUser.nsh',
+    installedTemplate.includes('System::Store "p1 p2"') ? patch : legacyPatch)
+  : installedTemplate.replace(/\r\n/g, '\n')
 const repaired = applyPatch(original)
 const utilFile = 'templates/nsis/include/installUtil.nsh'
 const sectionFile = 'templates/nsis/installSection.nsh'
@@ -303,7 +313,7 @@ describe('official NSIS install path backport execution contract', () => {
     expect(applyPatch(repaired, true)).toBe(original)
     expect(applyPatch(repairedUtil, true, utilFile)).toBe(utilBase)
     expect(applyPatch(repairedSection, true, sectionFile)).toBe(sectionBase)
-    if (installedTemplate.includes('!macro GetDParameter outVar')) expect(repaired).toBe(installedTemplate.replace(/\r\n/g, '\n'))
+    if (installedTemplate.includes('System::Store "p1 p2"')) expect(repaired).toBe(installedTemplate.replace(/\r\n/g, '\n'))
   })
 
   it.each(['allusers', 'currentuser'] as const)('preserves the complete unquoted space path for /%s despite a corrupt registered path', scope => {
