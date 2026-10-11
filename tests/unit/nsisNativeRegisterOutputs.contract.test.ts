@@ -26,7 +26,8 @@ describe('native installer parameter and owned-probe source contracts', () => {
     expect(source.indexOf('SetFileInformationByHandle')).toBeGreaterThan(source.indexOf('kernel32::CloseHandle(p $R7)'))
   })
   it('receives the known-folder path directly rather than leaving it on the NSIS stack', () => {
-    expect(additions).toContain('(&w${NSIS_MAX_STRLEN} .r0)')
+    expect(additions).toContain('kernel32::lstrcpynW(w .r0, p r2, i ${NSIS_MAX_STRLEN})')
+    expect(additions).not.toContain('(&w${NSIS_MAX_STRLEN}')
     expect(additions).toContain('System::Store "p1 p2"')
     expect(additions).toContain('System::Store "r2 r1"')
     expect(additions).not.toContain('StrCpy $0 $1')

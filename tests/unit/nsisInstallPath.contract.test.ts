@@ -44,13 +44,13 @@ function applyPatch(source: string, reverse = false, file = 'templates/nsis/mult
 // A shared local dependency tree may still carry the previous installer patch.
 // Undo exactly that older patch in memory, then exercise the complete new patch.
 const normalizedPatch = patch.replace(/\r\n/g, '\n')
-const legacyPatch = normalizedPatch.slice(0, normalizedPatch.indexOf('@@ -30,11 +30,10 @@'))
-  + normalizedPatch.slice(normalizedPatch.indexOf('@@ -41,7 +40,8 @@'))
-    .replace('@@ -41,7 +40,8 @@', '@@ -41,7 +41,8 @@')
-    .replace('@@ -84,10 +84,49 @@', '@@ -84,10 +85,49 @@')
+const legacyPatch = normalizedPatch.slice(0, normalizedPatch.indexOf('@@ -30,11 +30,15 @@'))
+  + normalizedPatch.slice(normalizedPatch.indexOf('@@ -41,7 +45,8 @@'))
+    .replace('@@ -41,7 +45,8 @@', '@@ -41,7 +41,8 @@')
+    .replace('@@ -84,10 +89,49 @@', '@@ -84,10 +85,49 @@')
 const original = installedTemplate.includes('!macro GetDParameter outVar')
   ? applyPatch(installedTemplate, true, 'templates/nsis/multiUser.nsh',
-    installedTemplate.includes('System::Store "p1 p2"') ? patch : legacyPatch)
+    installedTemplate.includes('kernel32::lstrcpynW') ? patch : legacyPatch)
   : installedTemplate.replace(/\r\n/g, '\n')
 const repaired = applyPatch(original)
 const utilFile = 'templates/nsis/include/installUtil.nsh'
@@ -321,7 +321,7 @@ describe('official NSIS install path backport execution contract', () => {
     expect(applyPatch(repaired, true)).toBe(original)
     expect(applyPatch(repairedUtil, true, utilFile)).toBe(utilBase)
     expect(applyPatch(repairedSection, true, sectionFile)).toBe(sectionBase)
-    if (installedTemplate.includes('System::Store "p1 p2"')) expect(repaired).toBe(installedTemplate.replace(/\r\n/g, '\n'))
+    if (installedTemplate.includes('kernel32::lstrcpynW')) expect(repaired).toBe(installedTemplate.replace(/\r\n/g, '\n'))
   })
 
   it.each(['allusers', 'currentuser'] as const)('preserves the complete unquoted space path for /%s despite a corrupt registered path', scope => {

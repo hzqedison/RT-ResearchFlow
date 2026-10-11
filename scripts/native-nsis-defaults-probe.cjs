@@ -27,7 +27,10 @@ functions = functions.split('\n').map(line => line.includes('System::Call')
 const knownFolder = [
   'StrCpy $0 "$LocalAppData\\Programs"', 'System::Store "p1 p2"',
   `System::Call 'SHELL32::SHGetKnownFolderPath(g "{5CD7AEE2-2219-4A67-B85D-6C9CE15660CB}", i 0x00008000, p 0, *p .r2)i.r1'`,
-  '${If} $1 == 0', `System::Call '*$2(&w${'${NSIS_MAX_STRLEN}'} .r0)'`,
+  '${If} $1 == 0', '${AndIf} $2 != 0',
+  `System::Call 'kernel32::lstrlenW(p r2) i .r1'`,
+  '${If} $1 < ${NSIS_MAX_STRLEN}', '${AndIf} $1 > 0',
+  `System::Call 'kernel32::lstrcpynW(w .r0, p r2, i ${'${NSIS_MAX_STRLEN}'}) p .r1'`, '${EndIf}',
   `System::Call 'OLE32::CoTaskMemFree(p r2)'`, '${endif}', 'System::Store "r2 r1"',
 ].map((line, index) => trace(`known-folder-${index}`) + line).join('\n')
 // The selector is tested without /D. This fixture uses FileFunc parameters,
