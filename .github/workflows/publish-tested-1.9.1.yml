@@ -1,0 +1,63 @@
+name: Publish tested 1.9.1 installers without rebuilding
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: github.repository == 'hzqedison/RT-ResearchFlow'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPOSITORY: hzqedison/RT-ResearchFlow
+      TESTED_COMMIT: 67ae2281801e5b7b54e957170a86104c0fbd207c
+      TESTED_RUN: '38138615536'
+      RELEASE_TAG: v1.9.1
+    steps:
+      - name: Require completed native acceptance and immutable release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPOSITORY/actions/runs/$TESTED_RUN" > run.json
+          jq -e --arg commit "$TESTED_COMMIT" '.status == "completed" and .conclusion == "success" and .head_sha == $commit' run.json
+          gh api "repos/$REPOSITORY/actions/runs/$TESTED_RUN/jobs" > jobs.json
+          jq -e '[.jobs[] | select(.name | startswith("package ("))] | length == 2 and all(.conclusion == "success")' jobs.json
+          test "$(gh api "repos/$REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq .object.sha)" = "$TESTED_COMMIT"
+          gh release view "$RELEASE_TAG" --repo "$REPOSITORY" --json tagName,isDraft,assets > release.json
+          jq -e '.tagName == "v1.9.1" and .isDraft == false' release.json
+      - name: Retrieve only tested installers from the exact completed run
+        uses: actions/download-artifact@v4
+        with:
+          repository: hzqedison/RT-ResearchFlow
+          run-id: '38138615536'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: public-mac-*-67ae2281801e5b7b54e957170a86104c0fbd207c
+          path: tested-artifacts
+      - name: Verify native installer checksums and upload without overwriting assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto'), cp = require('node:child_process')
+          const existing = new Set(JSON.parse(fs.readFileSync('release.json','utf8')).assets.map(a=>a.name))
+          const files = []
+          for (const arch of ['arm64','x64']) {
+            const root = path.join('tested-artifacts', `public-mac-${arch}-${process.env.TESTED_COMMIT}`)
+            const sumName = `SHA256SUMS-${arch}.txt`
+            const sums = fs.readFileSync(path.join(root,sumName),'utf8').trim().split(/\r?\n/)
+            if (sums.length !== 1) throw Error('UNEXPECTED_INSTALLER_COUNT')
+            const match = sums[0].match(/^([a-f0-9]{64})\s+release\/([^/]+)$/)
+            if (!match || match[2] !== `RT-ResearchFlow-1.9.1-${arch}.dmg`) throw Error('UNEXPECTED_INSTALLER_IDENTITY')
+            const installer = path.join(root,match[2])
+            const actual = crypto.createHash('sha256').update(fs.readFileSync(installer)).digest('hex')
+            if (actual !== match[1] || existing.has(match[2]) || existing.has(sumName)) throw Error('HASH_MISMATCH_OR_PUBLISHED_ASSET_EXISTS')
+            console.log(JSON.stringify({arch,file:match[2],sha256:actual,sourceCommit:process.env.TESTED_COMMIT,testedRun:process.env.TESTED_RUN}))
+            files.push(installer,path.join(root,sumName))
+          }
+          const result = cp.spawnSync('gh',['release','upload',process.env.RELEASE_TAG,'--repo',process.env.REPOSITORY,...files],{stdio:'inherit'})
+          if (result.status !== 0) process.exit(result.status || 1)
+          NODE

@@ -1,89 +1,63 @@
-name: Public on-demand Mac packages
+name: Publish tested 1.9.1 installers without rebuilding
 on:
   workflow_dispatch:
 permissions:
   contents: read
-concurrency:
-  group: public-on-demand-macos-${{ github.ref }}
-  cancel-in-progress: false
 jobs:
-  package:
+  publish:
     if: github.repository == 'hzqedison/RT-ResearchFlow'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
     env:
-      RT_EXTENSION_DELIVERY: on-demand
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      USE_HARD_LINKS: 'false'
-      NODE_OPTIONS: ''
-      NODE_PATH: ''
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPOSITORY: hzqedison/RT-ResearchFlow
+      TESTED_COMMIT: 67ae2281801e5b7b54e957170a86104c0fbd207c
+      TESTED_RUN: '38138615536'
+      RELEASE_TAG: v1.9.1
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.14.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: pnpm
-      - uses: actions/setup-python@v5
-        id: python
-        with:
-          python-version: '3.12'
-      - name: Install native dependencies
-        run: |
-          test "$(node -p process.arch)" = '${{ matrix.arch }}'
-          pnpm install --frozen-lockfile --config.side-effects-cache=false
-      - name: Type checks and extension contracts
-        run: |
-          pnpm run typecheck
-          pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts
-      - name: Build same-product native installer
-        run: node macos/build.mjs
-      - name: Actual DMG install, startup and first-use online extension test
+      - name: Require completed native acceptance and immutable release identity
         shell: bash
-        env:
-          RT_ONDEMAND_PYTHON: ${{ steps.python.outputs.python-path }}
-          RT_ONDEMAND_ALLOW_NETWORK: '1'
         run: |
           set -euo pipefail
-          mount="$RUNNER_TEMP/public-dmg"
-          install="$RUNNER_TEMP/public-installed"
-          mkdir -p "$mount" "$install"
-          dmg="$(find release -maxdepth 1 -name '*-${{ matrix.arch }}.dmg' -print -quit)"
-          test -n "$dmg"
-          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount"
-          trap 'hdiutil detach "$mount" || true' EXIT
-          ditto "$mount/RT-ResearchFlow.app" "$install/RT-ResearchFlow.app"
-          hdiutil detach "$mount"
-          trap - EXIT
-          codesign --verify --deep --strict "$install/RT-ResearchFlow.app"
-          export RT_PACKAGED_EXE="$install/RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow"
-          export RT_PACKAGED_VERSION="$(node -p 'require("./package.json").version')"
-          export RT_PACKAGED_TEST_ROOT="$RUNNER_TEMP/public-acceptance"
-          node scripts/mac-packaged-acceptance.cjs "$RT_PACKAGED_EXE"
-          pnpm exec playwright test tests/e2e/on-demand-extensions.spec.ts --workers=1 --reporter=line
-          shasum -a 256 release/*.dmg > release/SHA256SUMS-${{ matrix.arch }}.txt
-      - name: Upload only tested direct installers
-        uses: actions/upload-artifact@v4
+          gh api "repos/$REPOSITORY/actions/runs/$TESTED_RUN" > run.json
+          jq -e --arg commit "$TESTED_COMMIT" '.status == "completed" and .conclusion == "success" and .head_sha == $commit' run.json
+          gh api "repos/$REPOSITORY/actions/runs/$TESTED_RUN/jobs" > jobs.json
+          jq -e '[.jobs[] | select(.name | startswith("package ("))] | length == 2 and all(.conclusion == "success")' jobs.json
+          test "$(gh api "repos/$REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq .object.sha)" = "$TESTED_COMMIT"
+          gh release view "$RELEASE_TAG" --repo "$REPOSITORY" --json tagName,isDraft,assets > release.json
+          jq -e '.tagName == "v1.9.1" and .isDraft == false' release.json
+      - name: Retrieve only tested installers from the exact completed run
+        uses: actions/download-artifact@v4
         with:
-          name: public-mac-${{ matrix.arch }}-${{ github.sha }}
-          path: |
-            release/*.dmg
-            release/SHA256SUMS-${{ matrix.arch }}.txt
-          if-no-files-found: error
-      - name: Upload test evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: public-mac-evidence-${{ matrix.arch }}
-          path: test-results/
-          if-no-files-found: ignore
+          repository: hzqedison/RT-ResearchFlow
+          run-id: '38138615536'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: public-mac-*-67ae2281801e5b7b54e957170a86104c0fbd207c
+          path: tested-artifacts
+      - name: Verify native installer checksums and upload without overwriting assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto'), cp = require('node:child_process')
+          const existing = new Set(JSON.parse(fs.readFileSync('release.json','utf8')).assets.map(a=>a.name))
+          const files = []
+          for (const arch of ['arm64','x64']) {
+            const root = path.join('tested-artifacts', `public-mac-${arch}-${process.env.TESTED_COMMIT}`)
+            const sumName = `SHA256SUMS-${arch}.txt`
+            const sums = fs.readFileSync(path.join(root,sumName),'utf8').trim().split(/\r?\n/)
+            if (sums.length !== 1) throw Error('UNEXPECTED_INSTALLER_COUNT')
+            const match = sums[0].match(/^([a-f0-9]{64})\s+release\/([^/]+)$/)
+            if (!match || match[2] !== `RT-ResearchFlow-1.9.1-${arch}.dmg`) throw Error('UNEXPECTED_INSTALLER_IDENTITY')
+            const installer = path.join(root,match[2])
+            const actual = crypto.createHash('sha256').update(fs.readFileSync(installer)).digest('hex')
+            if (actual !== match[1] || existing.has(match[2]) || existing.has(sumName)) throw Error('HASH_MISMATCH_OR_PUBLISHED_ASSET_EXISTS')
+            console.log(JSON.stringify({arch,file:match[2],sha256:actual,sourceCommit:process.env.TESTED_COMMIT,testedRun:process.env.TESTED_RUN}))
+            files.push(installer,path.join(root,sumName))
+          }
+          const result = cp.spawnSync('gh',['release','upload',process.env.RELEASE_TAG,'--repo',process.env.REPOSITORY,...files],{stdio:'inherit'})
+          if (result.status !== 0) process.exit(result.status || 1)
+          NODE
