@@ -8,7 +8,6 @@ const https = require('node:https')
 const crypto = require('node:crypto')
 const Module = require('node:module')
 const zlib = require('node:zlib')
-const { createDistributionEvidenceReader } = require('./private-runtime-recipient-materials.cjs')
 const TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64']
 const POLICY = 'resources/python-runtime/preparation.policy.json'
 const RULES = 'resources/python-runtime/distribution-obligations.policy.json'
@@ -420,6 +419,7 @@ function verifyDistributionPending(fragments, targets, assembled = false) {
 
 async function verifyObligationCoverage({ trust, proof, rules, manifests, preparedRoot, sourceMembers, authority, repositoryRoot }) {
   const targets = distributionTargets(trust)
+  const { createDistributionEvidenceReader } = verifiedModules(repositoryRoot, sourceMembers)('scripts/private-runtime-recipient-materials.cjs')
   const readEvidence = createDistributionEvidenceReader({ repositoryRoot, sourceMembers, trustedContext: trust })
   if (!rules) pending('OBLIGATION_RULES_MISSING')
   if (rules.schemaVersion !== 1 || rules.kind !== 'rt-runtime-distribution-obligation-policy-v1' ||
