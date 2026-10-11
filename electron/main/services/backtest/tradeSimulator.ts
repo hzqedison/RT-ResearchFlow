@@ -46,7 +46,8 @@ export function simulateTrade(
   plan: TradePlan,
   rows: OHLC[]
 ): TradeResult {
-  if (rows.length === 0 || plan.holdDays < 1) return invalid(signal)
+  if (rows.length === 0 || !Number.isSafeInteger(plan.holdDays) || plan.holdDays < 1
+    || !Number.isFinite(plan.feeBps) || plan.feeBps < 0 || plan.feeBps >= 10000) return invalid(signal)
 
   // 定位入场日索引 idxE
   let idxE: number
@@ -66,21 +67,44 @@ export function simulateTrade(
 
   // 计划出场行索引：持有 holdDays 个交易日后的收盘
   const exitIdxPlanned = idxE + plan.holdDays
-  // 未来数据不足以完成整个持有期 → 数据不足（亦防止前视未发生日期）
-  if (exitIdxPlanned >= rows.length) return invalid(signal)
+  // An observed early exit does not require future bars beyond its exit date.
+  const plannedExit = rows[exitIdxPlanned]
 
   const stopLossPct = plan.stopLoss ?? plan.stopLossPct ?? null
   const stopProfitPct = plan.stopProfit ?? plan.takeProfitPct ?? null
   const stopLossPrice = isPositive(stopLossPct) ? entryPrice * (1 - stopLossPct / 100) : null
   const stopProfitPrice = isPositive(stopProfitPct) ? entryPrice * (1 + stopProfitPct / 100) : null
 
-  let exitDate = rows[exitIdxPlanned].tradeDate
-  let exitPrice = rows[exitIdxPlanned].close
+  let exitDate = plannedExit?.tradeDate ?? null
+  let exitPrice = plannedExit?.close ?? null
   let exitReason: TradeResult['exitReason'] = 'hold_expired'
 
   // 止盈止损扫描：从 T+1 入场日的下一交易日（idxE+1）到计划出场日（含）
-  for (let j = idxE + 1; j <= exitIdxPlanned; j++) {
+  for (let j = idxE + 1; j <= Math.min(exitIdxPlanned, rows.length - 1); j++) {
     const day = rows[j]
+    if (day.tradeDate <= rows[j - 1].tradeDate) return invalid(signal)
+    if (stopLossPrice !== null || stopProfitPrice !== null) {
+      // The opening auction precedes intraday extremes. Do not fill a gap at
+      // a trigger price that the market never offered after the open.
+      if (!isPositive(day.open)) return invalid(signal)
+      if ((day.high != null && (!isPositive(day.high) || day.open > day.high))
+        || (day.low != null && (!isPositive(day.low) || day.open < day.low))) return invalid(signal)
+      if (stopLossPrice !== null && day.open <= stopLossPrice) {
+        exitDate = day.tradeDate
+        exitPrice = day.open
+        exitReason = 'stop_loss'
+        break
+      }
+      if (stopProfitPrice !== null && day.open >= stopProfitPrice) {
+        exitDate = day.tradeDate
+        exitPrice = day.open
+        exitReason = 'stop_profit'
+        break
+      }
+      // Missing extrema cannot prove that a configured stop did not trigger.
+      if ((stopLossPrice !== null && !isPositive(day.low))
+        || (stopProfitPrice !== null && !isPositive(day.high))) return invalid(signal)
+    }
     // 保守：先止损后止盈
     if (stopLossPrice !== null && isPositive(day.low) && day.low <= stopLossPrice) {
       exitDate = day.tradeDate
@@ -96,7 +120,7 @@ export function simulateTrade(
     }
   }
 
-  if (!isPositive(exitPrice)) return invalid(signal)
+  if (!exitDate || !isPositive(exitPrice)) return invalid(signal)
 
   // 扣双边费用：买入垫高、卖出折让
   const fee = plan.feeBps / 1e4

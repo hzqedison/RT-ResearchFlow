@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import * as cheerio from 'cheerio'
-import { PDFParse } from 'pdf-parse'
+import { extractResearchPdfText } from './researchPdfParser'
 import { getResearchWebSearchConfig } from '../database/industryResearchGenerationRepository'
 import type {
   ResearchAgentRunRow,
@@ -693,10 +693,9 @@ async function extractDocument(
   warnings: string[]
 }> {
   if (response.envelope.response.mimeKind === 'pdf') {
-    const parser = new PDFParse({ data: response.body })
     try {
-      const result = await parser.getText({ first: 24 })
-      const document = boundedDocument(candidate.title, candidate.publishedAt, normalizeWhitespace(result.text), asOf)
+      const content = await extractResearchPdfText(response.body)
+      const document = boundedDocument(candidate.title, candidate.publishedAt, normalizeWhitespace(content), asOf)
       return {
         ...document,
         warnings: document.excerpt.length >= 80
@@ -712,8 +711,6 @@ async function extractDocument(
         contentSha256: response.envelope.response.bodySha256,
         warnings: ['PDF原始响应已固化哈希，但文本解析失败；该文件不计入可用正文。'],
       }
-    } finally {
-      await parser.destroy().catch(() => undefined)
     }
   }
   const raw = response.body.toString('utf8')

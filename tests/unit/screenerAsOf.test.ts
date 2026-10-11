@@ -76,6 +76,26 @@ describe('actual screener day-level as-of boundaries', () => {
     expect(snapshot.stocks[0].amount).toBe(99000000)
     expect(snapshot.totalScanned).toBe(1)
   })
+  it('uses recorded daily amount in yuan rather than close-times-volume', () => {
+    deps.daily.mockReturnValue(new Map([[code, history('20261008').map(row => ({ ...row, amount: 2500 }))]]))
+    const snapshot = runScreener(database() as never, '20261008')
+    expect(snapshot.stocks[0].amount).toBe(2500000)
+    expect(deps.replace.mock.calls[0][2][0].amount).toBe(2500000)
+  })
+  it('preserves unknown daily amount as null instead of inventing an observation', () => {
+    const snapshot = runScreener(database() as never, '20261008')
+    expect(snapshot.stocks[0].amount).toBeNull()
+    expect(deps.replace.mock.calls[0][2][0].amount).toBeNull()
+  })
+  it.each([-1, NaN, Infinity])('rejects invalid daily amount %s', amount => {
+    deps.daily.mockReturnValue(new Map([[code, history('20261008').map(row => ({ ...row, amount }))]]))
+    expect(runScreener(database() as never, '20261008').stocks[0].amount).toBeNull()
+  })
+  it('does not substitute an old daily amount when a realtime amount is invalid', () => {
+    deps.daily.mockReturnValue(new Map([[code, history('20261009').map(row => ({ ...row, amount: 2500 }))]]))
+    deps.rt.mockReturnValue(new Map([[code, { price: 99, change: 20, vol: 99000, amount: NaN }]]))
+    expect(runScreener(database() as never, '20261009').stocks[0].amount).toBeNull()
+  })
   it.each([Date.parse('2026-10-08T02:00:00Z'), now + 1000, 0])('refuses an invalid-date/future-time realtime cache %s', cachedAt => {
     deps.cachedAt.mockReturnValue(cachedAt)
     deps.daily.mockReturnValue(new Map([[code, history('20261009')]]))

@@ -8,7 +8,7 @@
 import type Database from 'better-sqlite3'
 import type { StockScreenerResultRow } from './types'
 
-export const SCREENER_CACHE_VERSION = 'asof-v2'
+export const SCREENER_CACHE_VERSION = 'asof-fields-v3'
 
 export interface ScreenerRunMetadata {
   calculatedAt: string

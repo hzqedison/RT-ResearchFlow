@@ -11,6 +11,7 @@ const core = require('../electron/shared/privatePythonRuntimeManifest.cjs')
 const assembler = require('./bundle-private-python-runtime.cjs')
 const sourceDelivery = require('./mac-owner-source-delivery.cjs')
 const materialDelivery = require('./mac-distribution-materials.cjs')
+const { verifyPackagedAcceptance } = require('./mac-packaged-acceptance.cjs')
 const ROOT = path.resolve(__dirname, '..')
 const VERSION = require('../package.json').version
 const REPO = 'hzqedison/RT-ResearchFlow'
@@ -29,7 +30,7 @@ const hash = b => crypto.createHash('sha256').update(b).digest('hex')
 function fail(s) { throw Error(s) }
 function context() {
  const target = process.platform + '-' + process.arch
- if (!/^1\.(7|8)\.0$/.test(VERSION) || !PINS[target] || process.env.GITHUB_REPOSITORY !== REPO || process.env.GITHUB_REF !== BRANCH ||
+ if (!/^1\.(7|8|9)\.0$/.test(VERSION) || !PINS[target] || process.env.GITHUB_REPOSITORY !== REPO || process.env.GITHUB_REF !== BRANCH ||
      process.env.RUNNER_ENVIRONMENT !== 'github-hosted' || !/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA || '') ||
      !process.env.GITHUB_TOKEN || !path.isAbsolute(process.env.RUNNER_TEMP || '')) fail('OWNER_CONTEXT_INVALID')
  const temp = fs.realpathSync(process.env.RUNNER_TEMP)
@@ -249,9 +250,17 @@ async function finish() {
  console.log(smoke.stdout)
  const abi=JSON.parse(smoke.stdout.trim())
  if(!abi.electron || abi.arch!==process.arch || abi.inMemory!==true) fail('OWNER_SQLITE_ABI_SMOKE_IDENTITY')
+ // SQLite-only startup does not load the actual renderer or exercise pdf-parse.
+ // Require both main-agent verifiers against this exact DMG-installed binary.
+ // Missing verifiers, failed PDF parsing, skipped GUI tests and startup errors
+ // fail before writing the success receipt or permitting any draft upload.
+ const packagedAcceptance=verifyPackagedAcceptance(path.join(app,'Contents/MacOS',product),{
+  version:VERSION,arch:process.arch,testRoot:path.join(c.work,'packaged-startup'),
+ })
  const receipt={kind:'rt-mac-owner-package-receipt-v1',target:c.target,version:VERSION,sourceCommit:c.sha,
   formalLockSha256:FORMAL_SHA,runId:Number(process.env.GITHUB_RUN_ID),runAttempt:Number(process.env.GITHUB_RUN_ATTEMPT),
   actualCopyVerified:true,installedFromDmg:true,installedVersion,sourcePlan:source.plan,sqliteAbiSmoke:abi,signatureVerified:true,
+  packagedAcceptance,
   signing:'ad-hoc',developerIdSigned:false,notarizationVerified:false,
   releaseEligible:false,finalReleaseAuthorized:false,files:[await identity(path.join(release,dmgs[0]))]}
  write(path.join(release,'mac-owner-package-receipt-'+VERSION+'-'+c.target+'.json'),receipt)
@@ -277,6 +286,9 @@ async function publish() {
  if(before.id!==DRAFT_ID || before.tag_name!==TAG || before.draft!==true) fail('OWNER_RELEASE_NOT_DRAFT')
  const receiptPath=path.join(release,'mac-owner-package-receipt-'+VERSION+'-'+c.target+'.json'),receipt=json(receiptPath)
  if(receipt.version!==VERSION || receipt.sourceCommit!==c.sha || receipt.target!==c.target || receipt.actualCopyVerified!==true || receipt.installedFromDmg!==true || receipt.finalReleaseAuthorized!==false) fail('OWNER_PUBLISH_RECEIPT')
+ if(receipt.packagedAcceptance?.runtimeVerifierPassed!==true || receipt.packagedAcceptance?.guiStartupPassed!==true ||
+  !(receipt.packagedAcceptance.guiStats?.expected>0) || receipt.packagedAcceptance.guiStats.unexpected!==0 ||
+  receipt.packagedAcceptance.guiStats.skipped!==0 || receipt.packagedAcceptance.guiStats.flaky!==0) fail('OWNER_PUBLISH_PACKAGED_ACCEPTANCE_MISSING')
  for(const row of [...receipt.files,await identity(receiptPath)]) {
   const filename=path.join(release,row.path),actual=await identity(filename)
   if(actual.sha256!==row.sha256 || actual.size!==row.size) fail('OWNER_PUBLISH_BYTES_CHANGED')

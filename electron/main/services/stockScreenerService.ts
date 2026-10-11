@@ -152,7 +152,7 @@ export interface ScreenerStock {
   pctChg: number
   turnoverRate: number | null
   vol: number
-  amount: number
+  amount: number | null
   signalScore: number
   conditionsMet: string[]   // 满足的条件名称
   concepts: string[]        // 题材名称（最多 5 个）
@@ -473,7 +473,11 @@ export function runScreener(
 
     // 末日行情数据
     const lastRow = effectiveRows[last]
-    const amount = rtEntry?.amount ?? (lastRow.vol != null ? lastRow.vol * lastRow.close * 100 : 0) // 近似成交额（元）
+    // DailyRow amounts are in thousands of yuan; rt_k amounts are already yuan.
+    // A closing-price approximation is not an observed transaction amount.
+    const observedAmount = rtEntry ? rtEntry.amount : lastRow.amount == null ? null : lastRow.amount * 1000
+    const amount = observedAmount != null && Number.isFinite(observedAmount) && observedAmount >= 0
+      ? observedAmount : null
     const moneyFlowRow = moneyFlowMap.get(basic.tsCode) ?? moneyFlowMap.get(basic.tsCode.split('.')[0]) ?? null
     const moneyFlow = moneyFlowRow ? buildMoneyFlowSummary(moneyFlowRow, amount) : buildEstimatedMoneyFlowSummary()
     const moneyInflow = moneyFlow?.source === 'real' && (moneyFlow.mainNetInflow ?? 0) > 0

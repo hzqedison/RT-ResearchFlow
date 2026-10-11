@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../store/appStore'
 import { StockKlineChipDrawer } from '../shared/StockMiniChart'
 import { publishAppToast } from '../shared/appToastBus'
+import { compareNullableDescending } from './screenerNumericSort'
 import { describeScreenerEmptyResult, STOCK_BASIC_SYNC_FAILURE_MESSAGE } from './screenerDataPresentation'
 
 type ScreenerSignalKey = 'crossUp' | 'volAmplified' | 'bullTrend' | 'macdBull' | 'hasTurnover' | 'moneyInflow'
@@ -56,7 +57,7 @@ interface ScreenerStock {
   pctChg: number
   turnoverRate: number | null
   vol: number
-  amount: number
+  amount: number | null
   signalScore: number
   conditionsMet: string[]
   concepts: string[]
@@ -114,7 +115,8 @@ function pctColor(v: number): string {
   return 'text-gray-500 dark:text-gray-400'
 }
 
-function fmtAmount(yuan: number): string {
+function fmtAmount(yuan: number | null | undefined): string {
+  if (yuan == null || !Number.isFinite(yuan)) return '--'
   if (yuan >= 1e8) return (yuan / 1e8).toFixed(2) + '亿'
   return (yuan / 1e4).toFixed(0) + '万'
 }
@@ -377,7 +379,7 @@ export function PersonalScreener() {
     ? [...snapshot.stocks].sort((a, b) => {
         const tieA = rankConfig.tieBreaker === 'turnoverRate' ? (a.turnoverRate ?? -Infinity) : rankConfig.tieBreaker === 'amount' ? a.amount : a.pctChg
         const tieB = rankConfig.tieBreaker === 'turnoverRate' ? (b.turnoverRate ?? -Infinity) : rankConfig.tieBreaker === 'amount' ? b.amount : b.pctChg
-        return (b.rankScore ?? b.signalScore) - (a.rankScore ?? a.signalScore) || tieB - tieA
+        return (b.rankScore ?? b.signalScore) - (a.rankScore ?? a.signalScore) || compareNullableDescending(tieA, tieB)
       }).filter(s => {
         if (s.signalScore < minSignal) return false
         if (requireTurnover && !s.conditionsMet.includes('有效换手')) return false

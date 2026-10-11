@@ -154,7 +154,7 @@ function dbRowsToSnapshot(
       pctChg: r.pctChg ?? 0,
       turnoverRate: r.turnoverRate ?? null,
       vol: r.vol ?? 0,
-      amount: r.amount ?? 0,
+    amount: r.amount ?? null,
       signalScore: r.signalScore,
       conditionsMet: r.conditionsMet ? (JSON.parse(r.conditionsMet) as string[]) : [],
       concepts: r.concepts ? (JSON.parse(r.concepts) as string[]) : [],

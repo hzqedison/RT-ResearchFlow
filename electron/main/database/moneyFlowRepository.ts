@@ -39,7 +39,9 @@ export interface MoneyFlowSummary {
 }
 
 function toYuan(value: number | null | undefined): number | null {
-  return value == null ? null : value * 10000
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  const yuan = value * 10000
+  return Number.isFinite(yuan) ? yuan : null
 }
 
 function fromYuan(value: number | null | undefined): number | null {
@@ -107,10 +109,6 @@ function normalizeTsCode(tsCode: string): string {
   return `${code}.SZ`
 }
 
-function scalar(value: number | null | undefined): number {
-  return Number.isFinite(value) ? value as number : 0
-}
-
 export function upsertMoneyFlowRows(db: Database.Database, rows: MoneyFlowDailyRow[]): void {
   if (rows.length === 0) return
   const stmt = db.prepare(
@@ -167,10 +165,14 @@ export function buildMoneyFlowSummary(row: MoneyFlowDailyRow | null, amountYuan:
   const buyElg = toYuan(row.buyElgAmount)
   const sellLg = toYuan(row.sellLgAmount)
   const sellElg = toYuan(row.sellElgAmount)
-  const mainNetInflow = scalar(buyLg) + scalar(buyElg) - scalar(sellLg) - scalar(sellElg)
-  const ratio = amountYuan != null && amountYuan > 0 ? (mainNetInflow / amountYuan) * 100 : null
+  const amountsComplete = [buyLg, buyElg, sellLg, sellElg].every(value => value != null && value >= 0)
+  const calculatedNet = amountsComplete ? buyLg! + buyElg! - sellLg! - sellElg! : null
+  const mainNetInflow = calculatedNet != null && Number.isFinite(calculatedNet) ? calculatedNet : null
+  const calculatedRatio = mainNetInflow != null && amountYuan != null && Number.isFinite(amountYuan) && amountYuan > 0
+    ? (mainNetInflow / amountYuan) * 100 : null
+  const ratio = calculatedRatio != null && Number.isFinite(calculatedRatio) ? calculatedRatio : null
   return {
-    source: 'real',
+    source: mainNetInflow == null ? 'none' : 'real',
     mainNetInflow,
     mainNetInflowRatio: ratio,
     netMfAmount: toYuan(row.netMfAmount),

@@ -74,6 +74,10 @@ jobs:
           trap - EXIT
           codesign --verify --deep --strict "$install/RT-ResearchFlow.app"
           export TRADE_WATCH_PACKAGED_EXECUTABLE="$install/RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow"
+          export RT_PACKAGED_EXE="$TRADE_WATCH_PACKAGED_EXECUTABLE"
+          export RT_PACKAGED_VERSION="$(node -p 'require("./package.json").version')"
+          export RT_PACKAGED_TEST_ROOT="$RUNNER_TEMP/rt-packaged-startup-${{ matrix.arch }}"
+          node scripts/mac-packaged-acceptance.cjs "$RT_PACKAGED_EXE"
           pnpm exec playwright test tests/e2e/macos-app-smoke.spec.ts tests/e2e/quant-trading-onboarding.spec.ts tests/e2e/mac-ths-experiment.spec.ts --workers=1 --reporter=line
           shasum -a 256 release/*.dmg release/*.zip > release/SHA256SUMS.txt
       - name: Upload tested packages
@@ -142,7 +146,7 @@ jobs:
         run: pnpm install --frozen-lockfile --config.side-effects-cache=false
       - name: Build actual versioned native Mac DMG
         run: node macos/build.mjs
-      - name: Install actual DMG and verify version, source, ad-hoc signature and SQLite ABI
+      - name: Install actual DMG and verify GUI startup/exit, packaged PDF, source, signature and SQLite ABI
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/mac-owner-package-ci.cjs finish
@@ -159,6 +163,7 @@ jobs:
             release/*.dmg
             release/SHA256SUMS-*.txt
             release/mac-owner-package-receipt-*.json
+            test-results/
             ${{ runner.temp }}/rt-mac-owner-${{ matrix.target }}/ordinary-assembly-receipt.json
             ${{ runner.temp }}/rt-mac-owner-${{ matrix.target }}/source/source-receipt.json
             ${{ runner.temp }}/rt-mac-owner-${{ matrix.target }}/source/SOURCE-ACCESS.txt

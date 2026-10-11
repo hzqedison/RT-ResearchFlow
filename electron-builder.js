@@ -54,3 +54,6 @@ module.exports = require("./scripts/private-python-runtime-builder.cjs").withPri
 
 // Deliver complete Mac notice/source materials and verify the actual copied bytes.
 module.exports = require('./scripts/mac-distribution-materials.cjs').withMacDistributionMaterials(module.exports)
+
+// pdf-parse embeds PDF.js but still requires the native canvas package at runtime.
+module.exports = require('./scripts/packaged-pdf-runtime.cjs').withPackagedPdfRuntime(module.exports)
