@@ -6,6 +6,9 @@ on:
         type: choice
         options: [v1.10.0, v1.9.1]
         default: v1.10.0
+      lifecycle_run:
+        type: string
+        required: true
 permissions:
   contents: read
 jobs:
@@ -79,41 +82,40 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REPOSITORY: hzqedison/RT-ResearchFlow
-      MAC_COMMIT: c9dea47314174152bd09c0d59f936a85804ff9bc
-      WINDOWS_COMMIT: 26f6853b8f39d2d135df3f648df30617cdac508e
+      MAC_COMMIT: 066d0299cae99c5b4709a5705376fa87373b7f9b
+      WINDOWS_COMMIT: 066d0299cae99c5b4709a5705376fa87373b7f9b
+      MAC_RUN: '38151538487'
+      WINDOWS_RUN: '38151418862'
+      LIFECYCLE_RUN: ${{ inputs.lifecycle_run }}
       RELEASE_TAG: v1.10.0
     steps:
       - name: Require native acceptance and unchanged shared application sources
         shell: bash
         run: |
           set -euo pipefail
-          for run in 38146695142 38149298676 38150066618; do
+          [[ "$LIFECYCLE_RUN" =~ ^[0-9]+$ ]]
+          test "$MAC_COMMIT" = "$WINDOWS_COMMIT"
+          for run in "$MAC_RUN" "$WINDOWS_RUN" "$LIFECYCLE_RUN"; do
             gh api "repos/$REPOSITORY/actions/runs/$run" > "run-$run.json"
             gh api "repos/$REPOSITORY/actions/runs/$run/jobs" > "jobs-$run.json"
             jq -e '.status == "completed" and .path == ".github/workflows/public-on-demand-macos.yml" and .repository.full_name == "hzqedison/RT-ResearchFlow" and .head_repository.full_name == "hzqedison/RT-ResearchFlow"' "run-$run.json"
           done
-          jq -e --arg sha "$MAC_COMMIT" '.head_sha == $sha' run-38146695142.json
-          jq -e --arg sha "$WINDOWS_COMMIT" '.head_sha == $sha and .conclusion == "success"' run-38149298676.json
-          jq -e '.conclusion == "success"' run-38150066618.json
-          jq -e '[.jobs[] | select(.name == "package (macos-15, arm64)" or .name == "package (macos-15-intel, x64)")] | length == 2 and all(.conclusion == "success")' jobs-38146695142.json
-          jq -e '[.jobs[] | select(.name == "windows")] | length == 1 and all(.conclusion == "success")' jobs-38149298676.json
-          jq -e '[.jobs[] | select(.name == "installer_lifecycle")] | length == 1 and all(.conclusion == "success")' jobs-38150066618.json
-          gh api "repos/$REPOSITORY/compare/$MAC_COMMIT...$WINDOWS_COMMIT" > source-difference.json
-          node <<'NODE'
-          const fs=require('node:fs'),d=JSON.parse(fs.readFileSync('source-difference.json','utf8'))
-          const allowed=new Set(['.github/workflows/public-on-demand-macos.yml','resources/installer.nsh','tests/unit/nsisFreshInstallDefaults.contract.test.ts','tests/unit/nsisExplicitRepairDispatch.contract.test.ts'])
-          if(d.status!=='ahead'||d.total_commits!==2||!Array.isArray(d.files)||d.files.length!==4||d.files.some(f=>!allowed.has(f.filename)))throw Error('SHARED_APPLICATION_SOURCE_CHANGED')
-          NODE
+          jq -e --arg sha "$MAC_COMMIT" '.head_sha == $sha and .conclusion == "success"' "run-$MAC_RUN.json"
+          jq -e --arg sha "$WINDOWS_COMMIT" '.head_sha == $sha and .conclusion == "success"' "run-$WINDOWS_RUN.json"
+          jq -e '.conclusion == "success" and (.head_branch == "codex/public-product-runtime-1.10")' "run-$LIFECYCLE_RUN.json"
+          jq -e '[.jobs[] | select(.name == "package (macos-15, arm64)" or .name == "package (macos-15-intel, x64)")] | length == 2 and all(.conclusion == "success")' "jobs-$MAC_RUN.json"
+          jq -e '[.jobs[] | select(.name == "windows")] | length == 1 and all(.conclusion == "success")' "jobs-$WINDOWS_RUN.json"
+          jq -e '[.jobs[] | select(.name == "installer_lifecycle")] | length == 1 and all(.conclusion == "success")' "jobs-$LIFECYCLE_RUN.json"
           gh api "repos/$REPOSITORY/releases?per_page=100" | jq -e '[.[] | select(.tag_name == "v1.10.0")] | if length == 1 then .[0] else error("draft identity missing or ambiguous") end' > release.json
           jq -e --arg sha "$WINDOWS_COMMIT" '.draft == true and .target_commitish == $sha' release.json
       - name: Retrieve only already-tested installers and lifecycle receipt
         shell: bash
         run: |
           set -euo pipefail
-          gh run download 38146695142 --repo "$REPOSITORY" --name "public-mac-arm64-$MAC_COMMIT" --dir tested/mac-arm64
-          gh run download 38146695142 --repo "$REPOSITORY" --name "public-mac-x64-$MAC_COMMIT" --dir tested/mac-x64
-          gh run download 38149298676 --repo "$REPOSITORY" --name "public-windows-x64-$WINDOWS_COMMIT" --dir tested/windows-x64
-          gh run download 38150066618 --repo "$REPOSITORY" --name public-installer-lifecycle-38150066618 --dir tested/lifecycle
+          gh run download "$MAC_RUN" --repo "$REPOSITORY" --name "public-mac-arm64-$MAC_COMMIT" --dir tested/mac-arm64
+          gh run download "$MAC_RUN" --repo "$REPOSITORY" --name "public-mac-x64-$MAC_COMMIT" --dir tested/mac-x64
+          gh run download "$WINDOWS_RUN" --repo "$REPOSITORY" --name "public-windows-x64-$WINDOWS_COMMIT" --dir tested/windows-x64
+          gh run download "$LIFECYCLE_RUN" --repo "$REPOSITORY" --name "public-installer-lifecycle-$LIFECYCLE_RUN" --dir tested/lifecycle
       - name: Verify exact bytes, upload without overwriting, then publish
         shell: bash
         run: |
@@ -127,9 +129,9 @@ jobs:
           const lifecycle=JSON.parse(fs.readFileSync(lifecyclePath,'utf8').replace(/^\uFEFF/,''))
           if(lifecycle.version!=='1.10.0'||lifecycle.sourceCommit!==process.env.WINDOWS_COMMIT||lifecycle.defaultNonSystemPathPassed!==true||lifecycle.sameDirectoryUpgradePreservesData!==true||lifecycle.silentUninstallPreservesData!==true||lifecycle.sharedPythonUnchanged!==true||lifecycle.brokerOrdersSubmitted!==false)throw Error('INSTALLER_LIFECYCLE_NOT_ACCEPTED')
           for(const [folder,platform,arch,commit,run] of [
-            ['mac-arm64','darwin','arm64',process.env.MAC_COMMIT,'38146695142'],
-            ['mac-x64','darwin','x64',process.env.MAC_COMMIT,'38146695142'],
-            ['windows-x64','win32','x64',process.env.WINDOWS_COMMIT,'38149298676']]) {
+            ['mac-arm64','darwin','arm64',process.env.MAC_COMMIT,process.env.MAC_RUN],
+            ['mac-x64','darwin','x64',process.env.MAC_COMMIT,process.env.MAC_RUN],
+            ['windows-x64','win32','x64',process.env.WINDOWS_COMMIT,process.env.WINDOWS_RUN]]) {
             const root=path.join('tested',folder),label=platform+'-'+arch
             const name=platform==='darwin'?`RT-ResearchFlow-macOS-1.10.0-${arch}.dmg`:'RT-ResearchFlow-Setup-1.10.0-x64.exe'
             const receiptName=`acceptance-${label}.json`,sumName=`SHA256SUMS-${label}.txt`

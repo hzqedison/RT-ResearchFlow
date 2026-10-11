@@ -6,6 +6,12 @@ on:
         type: choice
         options: [all, windows, macos, installer]
         default: all
+      tested_windows_run:
+        type: string
+        default: '38151418862'
+      tested_windows_commit:
+        type: string
+        default: '066d0299cae99c5b4709a5705376fa87373b7f9b'
 permissions:
   contents: read
 concurrency:
@@ -216,14 +222,15 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           repository: hzqedison/RT-ResearchFlow
-          run-id: '38149298676'
+          run-id: ${{ inputs.tested_windows_run }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          name: public-windows-x64-26f6853b8f39d2d135df3f648df30617cdac508e
+          name: public-windows-x64-${{ inputs.tested_windows_commit }}
           path: tested-installer
       - name: Test default path, same-directory upgrade and data-preserving uninstall
         shell: pwsh
         env:
           SHARED_PYTHON: ${{ steps.python.outputs.python-path }}
+          TESTED_WINDOWS_COMMIT: ${{ inputs.tested_windows_commit }}
         run: |
           $ErrorActionPreference = 'Stop'
           $env:TEMP = 'D:\rt-lifecycle-1.10-' + $env:GITHUB_RUN_ID
@@ -234,7 +241,7 @@ jobs:
           $installer = (Resolve-Path 'tested-installer/RT-ResearchFlow-Setup-1.10.0-x64.exe').Path
           $receipt = Get-Content -Raw 'tested-installer/acceptance-win32-x64.json' | ConvertFrom-Json
           $sha = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($receipt.version -ne '1.10.0' -or $receipt.sourceCommit -ne '26f6853b8f39d2d135df3f648df30617cdac508e' -or $receipt.sha256 -ne $sha) { throw 'Tested installer identity mismatch' }
+          if ($receipt.version -ne '1.10.0' -or $receipt.sourceCommit -ne $env:TESTED_WINDOWS_COMMIT -or $receipt.sha256 -ne $sha) { throw 'Tested installer identity mismatch' }
           $sharedHash = (Get-FileHash -LiteralPath $env:SHARED_PYTHON -Algorithm SHA256).Hash
           $p = Start-Process -FilePath $installer -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Default NSIS install failed: $($p.ExitCode)" }
