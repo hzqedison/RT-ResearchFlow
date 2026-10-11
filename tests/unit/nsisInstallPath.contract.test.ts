@@ -149,7 +149,7 @@ function execute(source: string, state: Machine, parameters = '', attributes: (p
     .filter(line => line && !line.startsWith('#'))
   const tokens = (line: string) => (line.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map(token =>
     (token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'")) ? token.slice(1, -1) : token)
-  const value = (token: string) => token.replace(/\$(?:[A-Za-z_]\w*|\d)/g, variable => state.vars[variable] ?? '')
+  const value = (token: string) => token.replaceAll('${NSIS_MAX_STRLEN}', '1024').replace(/\$(?:[A-Za-z_]\w*|\d)/g, variable => state.vars[variable] ?? '')
   const number = (token: string) => Number(value(token))
   const equal = (left: string, right: string) => value(left).toLowerCase() === value(right).toLowerCase()
   const condition = (parts: string[]) => {
@@ -275,6 +275,14 @@ function execute(source: string, state: Machine, parameters = '', attributes: (p
         state.vars[args[0]] = nativeFullPaths[input]; break
       }
       case 'system::call': {
+        const fullPath = /^kernel32::GetFullPathNameW\(w "([^"]*)", i \$\{NSIS_MAX_STRLEN\}, w \.(R7|R9), p 0\) i \.R6$/.exec(args[0])
+        if (fullPath) {
+          const input = value(fullPath[1])
+          if (!(input in nativeFullPaths)) throw new Error(`Unspecified WINAPI response: ${input}`)
+          state.vars['$' + fullPath[2]] = nativeFullPaths[input]
+          state.vars.$R6 = String(nativeFullPaths[input].length)
+          break
+        }
         const match = /^(kernel32::GetFileAttributesW)\(w "([^"]*)"\) i \.s$/.exec(args[0])
         if (!match) throw new Error('Unsupported System call')
         const path = value(match[2])

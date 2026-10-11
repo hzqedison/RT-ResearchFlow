@@ -7,6 +7,12 @@ const patch = readFileSync(resolve('patches/app-builder-lib@24.13.3.patch'), 'ut
 const additions = patch.split('\n').filter(line => line.startsWith('+') && !line.startsWith('+++')).join('\n')
 
 describe('native installer parameter and owned-probe source contracts', () => {
+  it('normalizes fresh paths without requiring their parents to exist', () => {
+    const guard = source.slice(source.indexOf('Function ${PREFIX}AssertSafeInstallDirectory'), source.indexOf('FunctionEnd'))
+    expect(guard).toContain('kernel32::GetFullPathNameW')
+    expect(guard).not.toMatch(/^\s*GetFullPathName /m)
+    expect(guard).toContain('IntCmp $R6 ${NSIS_MAX_STRLEN} tw_target_invalid 0 tw_target_invalid')
+  })
   it('receives native multi-output values in distinct registers', () => {
     expect(source.split('\n').filter(line => line.includes('System::Call')).some(line => (line.match(/\.s\b/g) ?? []).length > 1)).toBe(false)
   })

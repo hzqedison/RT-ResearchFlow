@@ -67,9 +67,15 @@ Function ${PREFIX}AssertSafeInstallDirectory
   StrCmp $R9 "\" tw_target_unc_child tw_target_qualified
 
   tw_target_qualified:
-  GetFullPathName $R7 "$R8"
+  # NSIS GetFullPathName requires an existing parent. The native lexical API
+  # also supports a genuinely fresh product directory with missing parents.
+  System::Call 'kernel32::GetFullPathNameW(w "$R8", i ${NSIS_MAX_STRLEN}, w .R7, p 0) i .R6'
+  IntCmp $R6 0 tw_target_invalid tw_target_invalid 0
+  IntCmp $R6 ${NSIS_MAX_STRLEN} tw_target_invalid 0 tw_target_invalid
   StrCmp $R7 "" tw_target_invalid
-  GetFullPathName $R9 "$R7\.."
+  System::Call 'kernel32::GetFullPathNameW(w "$R7\..", i ${NSIS_MAX_STRLEN}, w .R9, p 0) i .R6'
+  IntCmp $R6 0 tw_target_invalid tw_target_invalid 0
+  IntCmp $R6 ${NSIS_MAX_STRLEN} tw_target_invalid 0 tw_target_invalid
   StrCmp $R9 "" tw_target_invalid
   # Normalize trailing separators on both native results before checking for a root.
   tw_target_trim_path:
