@@ -4,7 +4,7 @@ import type { MultiSourcePreference, DataExtensionInstallProgress } from '../../
 import { minimumDataSourcePythonMinor, supportsDataSourcePython } from '../../shared/pythonSourceRequirements'
 
 type Runner = (executable: string, args: string[], input?: string, timeout?: number, collect?: boolean) => Promise<string>
-const requirements = { akshare: 'akshare>=1.16,<2', mootdx: 'mootdx==0.11.7', pywencai: 'pywencai>=0.13,<0.14' } as const
+const requirements = { akshare: 'akshare==1.19.1', mootdx: 'mootdx==0.11.7', pywencai: 'pywencai==0.13.1' } as const
 type Provider = keyof typeof requirements
 let progress: DataExtensionInstallProgress = { running: false, phase: 'idle', message: '尚未开始安装扩展' }
 
@@ -33,11 +33,15 @@ export async function installOnDemandExtensions(config: MultiSourcePreference, b
     const executable = join(stage, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')
     for (const provider of selected) {
       progress = { running: true, phase: 'downloading', provider, message: `正在下载并安装 ${provider}，请勿退出；网络较慢时可能需要数分钟` }
-      // Only wheels from the public PyPI index. Do not inherit custom pip config,
-      // execute an arbitrary source build, or silently use an unofficial mirror.
+      // Prefer prebuilt wheels; jsonpath and PyExecJS are source-only Python
+      // dependencies. Explicitly limit those exceptions and pin their versions.
+      // Never inherit custom pip configuration or use an unofficial mirror.
+      const sourceDependencies = provider === 'pywencai' ? ['jsonpath==0.82.2', 'PyExecJS==1.5.1']
+        : provider === 'akshare' ? ['jsonpath==0.82.2'] : []
       await run(executable, ['-I', '-m', 'pip', '--isolated', '--disable-pip-version-check',
         '--cache-dir', join(userData, 'data-source-cache', 'pip'), 'install',
-        '--index-url', 'https://pypi.org/simple', '--only-binary=:all:', '--timeout', '30', '--retries', '1', requirements[provider]], '', 600_000, false)
+        '--index-url', 'https://pypi.org/simple', '--only-binary=:all:', '--no-binary=jsonpath,PyExecJS',
+        '--timeout', '30', '--retries', '1', requirements[provider], ...sourceDependencies], '', 600_000, false)
     }
     progress = { running: true, phase: 'verifying', message: '检查所选扩展能否实际导入' }
     const script = 'import importlib, importlib.metadata, json; names=json.loads(input()); [importlib.import_module(n) for n in names]; print(json.dumps({n:importlib.metadata.version(n) for n in names}))'
