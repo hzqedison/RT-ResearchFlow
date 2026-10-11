@@ -317,12 +317,10 @@ FunctionEnd
 !macroend
 
 !macro rtDefaultCheckRegistration HIVE ACCESS KEY
-  System::Call 'advapi32::RegOpenKeyExW(p ${HIVE}, w "${KEY}", i 0, i ${ACCESS}, *p .s) i .s'
-  Pop $R0
-  Pop $R1
+  # Keep output handles and status in distinct registers, never multiplex the NSIS stack.
+  System::Call 'advapi32::RegOpenKeyExW(p ${HIVE}, w "${KEY}", i 0, i ${ACCESS}, *p .R1) i .R0'
   ${If} $R0 == 0
-    System::Call 'advapi32::RegCloseKey(p $R1) i .s'
-    Pop $R0
+    System::Call 'advapi32::RegCloseKey(p $R1) i .R0'
     StrCpy $R2 "1"
   ${ElseIf} $R0 != 2
   ${AndIf} $R0 != 3
@@ -377,9 +375,7 @@ Function rtProbeFreshInstallDefault
   rt_default_probe_root_parent:
   StrCpy $R5 $R2
   rt_default_probe_create:
-  System::Call 'ole32::CoCreateGuid(g .s) i .s'
-  Pop $R3
-  Pop $R6
+  System::Call 'ole32::CoCreateGuid(g .R6) i .R3'
   StrCmp $R3 "0" 0 rt_default_probe_done
   StrCpy $R8 "$R5\.RT-ResearchFlow-default-probe-$R6"
   # CreateDirectoryW must succeed for this new unique name. Collision is NOT
@@ -395,9 +391,7 @@ Function rtProbeFreshInstallDefault
   System::Call 'kernel32::CreateFileW(w "$R8\probe", i 0x40010000, i 0, p 0, i 1, i 0x04000080, p 0) p .s'
   Pop $R7
   StrCmp $R7 "-1" rt_default_probe_close_directory
-  System::Call 'kernel32::WriteFile(p $R7, m "x", i 1, *i .s, p 0) i .s'
-  Pop $R3
-  Pop $R4
+  System::Call 'kernel32::WriteFile(p $R7, m "x", i 1, *i .R4, p 0) i .R3'
   StrCmp $R3 "0" rt_default_probe_close_file
   StrCmp $R4 "1" 0 rt_default_probe_close_file
   StrCpy $R1 "1"

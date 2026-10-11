@@ -22,7 +22,23 @@ function state(errors = false): State {
 // This is not a Windows emulator, installer run or real process-effects proof.
 function execute(parameters: string, input = state(), uninstaller = false) {
   const raw = macro('customExplicitRepairDispatch')
-  const body = uninstaller ? '' : raw.replace(/^\s*!ifndef BUILD_UNINSTALLER\s*$/m, '').replace(/^\s*!endif\s*$/m, '')
+  // Resolve nested compile-time guards before interpreting runtime instructions.
+  // Removing the first !endif incorrectly removes an inner guard, not the outer one.
+  const defines = new Set(uninstaller ? ['BUILD_UNINSTALLER'] : [])
+  const active = [true]
+  const body = raw.split('\n').filter(line => {
+    const directive = /^\s*!(ifdef|ifndef)\s+(\w+)\s*$/.exec(line)
+    if (directive) {
+      active.push(active[active.length - 1] && (defines.has(directive[2]) === (directive[1] === 'ifdef')))
+      return false
+    }
+    if (/^\s*!endif\s*$/.test(line)) {
+      if (active.length === 1) throw Error('unmatched compiler guard')
+      active.pop(); return false
+    }
+    return active[active.length - 1]
+  }).join('\n')
+  if (active.length !== 1) throw Error('unclosed compiler guard')
   const lines = body.split('\n').map(line => line.replace(/\s+#.*$/, '').trim()).filter(line => line && !line.startsWith('#'))
   const tokens = (line: string) => (line.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map(value =>
     ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) ? value.slice(1, -1) : value)

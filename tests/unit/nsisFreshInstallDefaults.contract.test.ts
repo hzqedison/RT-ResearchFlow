@@ -44,9 +44,10 @@ function run(f: Fixture = {}, original = C, errors = false) {
     if (text.startsWith('advapi32::RegOpenKeyExW')) {
       const hive = /p (0x[\da-f]+)/i.exec(text)![1], access = /i (0x[\da-f]+)/i.exec(text)![1]
       const status = f.registry?.[hive + '/' + access + '/' + quoted[0]] ?? 2
-      stack.push('10', String(status)); return
+      expect(text).toContain('*p .R1) i .R0')
+      vars.$R1 = '10'; vars.$R0 = String(status); return
     }
-    if (text.startsWith('advapi32::RegCloseKey')) { stack.push('0'); return }
+    if (text.startsWith('advapi32::RegCloseKey')) { expect(text).toContain('i .R0'); vars.$R0 = '0'; return }
     if (text.startsWith('kernel32::GetDriveTypeW')) { stack.push(String(f.types?.[quoted[0]] ?? 3)); return }
     if (text.startsWith('kernel32::GetFileAttributesW')) {
       const name = quoted[0]
@@ -54,7 +55,7 @@ function run(f: Fixture = {}, original = C, errors = false) {
       stack.push(String(attrs)); lastError = 2; return
     }
     if (text.startsWith('kernel32::GetLastError')) { stack.push(String(lastError)); return }
-    if (text.startsWith('ole32::CoCreateGuid')) { stack.push('{fixture-guid}', '0'); return }
+    if (text.startsWith('ole32::CoCreateGuid')) { expect(text).toContain('g .R6) i .R3'); vars.$R6 = '{fixture-guid}'; vars.$R3 = '0'; return }
     if (text.startsWith('kernel32::CreateDirectoryW')) {
       if (f.collision || f.fail === 'directory') { stack.push('0'); return }
       if (owned.has(quoted[0])) throw new Error('probe reused')
@@ -69,7 +70,8 @@ function run(f: Fixture = {}, original = C, errors = false) {
       stack.push(handle); return
     }
     if (text.startsWith('kernel32::WriteFile')) {
-      effects.push('write-owned-file'); stack.push(f.fail === 'write' ? '0' : '1', f.fail === 'write' ? '0' : '1'); return
+      expect(text).toContain('*i .R4, p 0) i .R3')
+      effects.push('write-owned-file'); vars.$R4 = f.fail === 'write' ? '0' : '1'; vars.$R3 = f.fail === 'write' ? '0' : '1'; return
     }
     if (text.startsWith('kernel32::CloseHandle')) {
       const handle = /p (\d+)/.exec(text)![1], name = open.get(handle)
