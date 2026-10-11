@@ -4,7 +4,7 @@ on:
     inputs:
       version:
         type: string
-        default: '1.12.0'
+        default: '1.13.0'
       target:
         type: choice
         options: [all, windows, macos, installer, probe, trace]
@@ -61,6 +61,8 @@ jobs:
       - name: Type checks and extension contracts
         run: |
           pnpm run typecheck
+          node --test scripts/packaged-ai-credential-proof.test.cjs
+          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/aiConfigStorage.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/strategyLab.publicLimitUp.test.tsx tests/unit/strategyLab.service.test.ts tests/unit/strategyLab.conditionSnapshotRun.test.ts tests/unit/tushareCredentialVerification.test.tsx tests/unit/publicLimitUpRules.test.tsx tests/unit/nativePublicLimitPool.test.ts tests/unit/verifiedPublicLimitPoolCache.test.ts tests/unit/currentPublicConceptLookup.service.test.ts tests/unit/currentPublicConceptLookup.wiring.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
       - name: Build same-product native installer
@@ -87,7 +89,8 @@ jobs:
           export RT_PACKAGED_VERSION="$(node -p 'require("./package.json").version')"
           export RT_PACKAGED_TEST_ROOT="$RUNNER_TEMP/public-acceptance"
           node scripts/mac-packaged-acceptance.cjs "$RT_PACKAGED_EXE"
-          pnpm exec playwright test tests/e2e/packaged-startup.spec.ts tests/e2e/on-demand-extensions.spec.ts --workers=1 --reporter=line
+          pnpm exec playwright test tests/e2e/on-demand-extensions.spec.ts --workers=1 --retries=0 --reporter=line
+          node scripts/verify-packaged-ai-credentials.cjs "$RT_PACKAGED_EXE"
           shasum -a 256 release/*.dmg > release/SHA256SUMS-${{ matrix.arch }}.txt
           node scripts/write-public-package-receipt.cjs
       - name: Upload only tested direct installers
@@ -144,6 +147,8 @@ jobs:
           node -e "if(require('./package.json').version !== '${{ inputs.version }}')throw Error('Requested version differs from source')"
           pnpm install --frozen-lockfile --config.side-effects-cache=false
           pnpm run typecheck
+          node --test scripts/packaged-ai-credential-proof.test.cjs
+          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/aiConfigStorage.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/strategyLab.publicLimitUp.test.tsx tests/unit/strategyLab.service.test.ts tests/unit/strategyLab.conditionSnapshotRun.test.ts tests/unit/tushareCredentialVerification.test.tsx tests/unit/publicLimitUpRules.test.tsx tests/unit/nativePublicLimitPool.test.ts tests/unit/verifiedPublicLimitPoolCache.test.ts tests/unit/currentPublicConceptLookup.service.test.ts tests/unit/currentPublicConceptLookup.wiring.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
           pnpm run build
@@ -168,6 +173,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Packaged runtime acceptance failed' }
           pnpm exec playwright test tests/e2e/packaged-startup.spec.ts tests/e2e/on-demand-extensions.spec.ts --workers=1 --retries=0 --reporter=line
           if ($LASTEXITCODE -ne 0) { throw 'Packaged GUI or private extension acceptance failed' }
+          node scripts/verify-packaged-ai-credentials.cjs $env:RT_PACKAGED_EXE
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged credential persistence acceptance failed' }
       - name: Install the exact NSIS package and verify installed startup
         shell: pwsh
         run: |

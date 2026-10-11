@@ -3,6 +3,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
+const { requireCredentialProof } = require('./packaged-ai-credential-proof.cjs')
+const { digest, asarPath } = require('./verify-packaged-ai-credentials.cjs')
 const version = require('../package.json').version
 const commit = process.env.GITHUB_SHA
 const root = path.resolve(__dirname, '..', 'release')
@@ -12,6 +14,11 @@ const name = process.platform === 'darwin'
   : `RT-ResearchFlow-Setup-${version}-${process.arch}.exe`
 const filename = path.join(root, name)
 async function main() {
+  const executable = process.env.RT_PACKAGED_EXE
+  if (!executable || !path.isAbsolute(executable)) throw Error('PACKAGED_EXECUTABLE_REQUIRED')
+  const proof = JSON.parse(fs.readFileSync(path.join(root, `packaged-ai-credentials-proof-${process.platform}-${process.arch}.json`), 'utf8'))
+  requireCredentialProof(proof, { version, sourceCommit: commit, runId: process.env.GITHUB_RUN_ID,
+    platform: process.platform, arch: process.arch, executableSha256: await digest(executable), appAsarSha256: await digest(asarPath(executable)) })
   const stat = fs.lstatSync(filename)
   if (!stat.isFile() || stat.isSymbolicLink()) throw Error('INVALID_INSTALLER_FILE')
   const hash = crypto.createHash('sha256')
@@ -22,6 +29,7 @@ async function main() {
   const receipt = { version, sourceCommit: commit, runId: process.env.GITHUB_RUN_ID, platform: process.platform,
     arch: process.arch, file: name, size: stat.size, sha256, extensionDelivery: 'on-demand',
     packagedStartupAndExit: true, packagedPdfCanvasSqlite: true, actualPrivateAkshareInstall: true,
+    localCredentialPersistenceVerified: true, credentialFixture: 'synthetic-loopback',
     liveMarketDataAccepted: false, brokerOrdersSubmitted: false, published: false }
   fs.writeFileSync(path.join(root, `acceptance-${label}.json`), JSON.stringify(receipt, null, 2) + '\n')
   console.log(JSON.stringify(receipt))

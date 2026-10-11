@@ -74,5 +74,11 @@ test('packaged AI partial saves retain drafts and OS-encrypted keys survive rest
     expect(configuration.providerConfigs.deepseek.hasApiKey).toBe(false)
     expect(configuration.providerConfigs.deepseek.credentialStatus).toBe('unconfigured')
     await quitNormally()
+    app = await electron.launch({ executablePath: executable, args: [`--user-data-dir=${profile}`], env })
+    page = await openConfiguration()
+    configuration = await read()
+    expect(configuration.providerConfigs.deepseek.hasApiKey).toBe(false)
+    expect(configuration.providerConfigs.deepseek.credentialStatus).toBe('unconfigured')
+    await quitNormally()
   } finally { await app.close().catch(() => {}) }
 })
