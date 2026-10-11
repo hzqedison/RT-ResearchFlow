@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { rollingValidationApi } from './rollingValidationApi'
 import type { AppendLedgerEvent, CreateLedgerAccount, LedgerAccount, LedgerRecord, LedgerResult, LedgerSnapshot } from '../shared/accountLedger'
 import type { CapitalCatalog, CapitalReport, CapitalRequest, CapitalResult } from '../shared/capitalSimulation'
 import type { HistoricalDailyProgressResult } from '../shared/historicalDailyProgress'
@@ -3643,6 +3644,7 @@ const api = {
     run: (request: CapitalRequest) => ipcRenderer.invoke('capitalSimulation:run', request) as Promise<CapitalResult<CapitalReport>>,
     get: (id: string) => ipcRenderer.invoke('capitalSimulation:get', id) as Promise<CapitalResult<CapitalReport>>,
   },
+  rollingValidation: rollingValidationApi,
   accountLedger: {
     list: () => ipcRenderer.invoke('accountLedger:list') as Promise<LedgerResult<LedgerAccount[]>>,
     get: (accountId: string) => ipcRenderer.invoke('accountLedger:get', accountId) as Promise<LedgerResult<LedgerSnapshot>>,

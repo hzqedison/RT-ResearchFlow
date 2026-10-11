@@ -74,6 +74,31 @@ test('packaged capital simulation uses the real database, shared wallet and rest
     await quit(); await launch(); panel = await open()
     await panel.getByLabel('组合资金历史报告', { exact: true }).selectOption(id)
     await expect(panel.getByTestId('capital-report')).toContainText(id); await expect(panel.getByTestId('capital-report')).toContainText('12000.00')
+    const validationKey = `${key}-rolling`
+    await app!.evaluate(({ app }, strategy) => {
+      const load = process.mainModule!.require.bind(process.mainModule!), path = load('node:path'), Database = load(path.join(app.getAppPath(), 'node_modules/better-sqlite3'))
+      const db = new Database(path.join(app.getPath('userData'), 'trade-watch.db'))
+      try { const insert = db.prepare('INSERT INTO short_term_signals(strategy,ts_code,trade_date,signal_strength,created_at) VALUES(?,?,?,1,?)'); insert.run(strategy, '600001.SH', '20260601', Date.now()); insert.run(strategy, '600002.SH', '20260604', Date.now()) } finally { db.close() }
+    }, validationKey)
+    const page = await app!.firstWindow(); await page.getByTestId('strategy-backtest-view-validation').click()
+    const validation = page.getByTestId('rolling-validation-panel')
+    await validation.getByLabel('滚动验证数据集', { exact: true }).selectOption(`short-term:${validationKey}`)
+    await validation.getByLabel('滚动验证起始日', { exact: true }).fill('2026-06-01'); await validation.getByLabel('滚动验证结束日', { exact: true }).fill('2026-06-05')
+    for (const [label, value] of [['每窗研究预算', '10000'], ['训练开市日数', '2'], ['测试开市日数', '2'], ['隔离开市日数', '1'], ['测试窗口数量', '1'], ['候选持有期（逗号分隔）', '1'], ['训练最少入场数', '1'], ['滚动最多持仓', '1'], ['滚动单股预算（%）', '100'], ['滚动现金预留（%）', '0'], ['滚动单边费率（bps）', '0']]) await validation.getByLabel(label, { exact: true }).fill(value)
+    await expect(validation.getByRole('button', { name: '保存新验证协议', exact: true })).toBeDisabled()
+    await validation.getByLabel('确认固定训练选择规则和独立测试窗口，不将研究结果作为实盘成交证明').check()
+    await validation.getByRole('button', { name: '保存新验证协议', exact: true }).click()
+    await expect(validation.getByTestId('rolling-validation-report')).toContainText('报告 0 / 2')
+    await validation.getByRole('button', { name: '运行或继续验证', exact: true }).click()
+    await expect(validation.getByTestId('rolling-validation-report')).toContainText('窗口执行完成')
+    await expect(validation.getByTestId('rolling-validation-report')).toContainText('样本外收益均值 0.00%')
+    const studies = await page.evaluate(() => window.api.rollingValidation.list()); expect(studies.ok).toBe(true); if (!studies.ok) throw Error(studies.code)
+    const studyId = studies.data[0].id
+    await quit(); await launch(); await open()
+    const restarted = await app!.firstWindow(); await restarted.getByTestId('strategy-backtest-view-validation').click()
+    await restarted.getByLabel('已保存验证', { exact: true }).selectOption(studyId)
+    await expect(restarted.getByTestId('rolling-validation-report')).toContainText(studyId)
+    await expect(restarted.getByTestId('rolling-validation-report')).toContainText('窗口执行完成')
     expect(errors).toEqual([]); await quit()
   } finally { if (app) await app.close() }
 })

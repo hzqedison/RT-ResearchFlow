@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { registerAccountLedgerHandlers } from './accountLedgerHandlers'
 import { registerCapitalSimulationHandlers } from './capitalSimulationHandlers'
+import { registerRollingValidationHandlers } from './rollingValidationHandlers'
 import { getDb } from '../database/db'
 import { addPortfolioStock, removePortfolioStock, listPortfolioStocks, updatePortfolioCostPrice } from '../database/portfolioRepository'
 import { getPortfolioDashboard } from '../services/portfolioDashboardService'
@@ -10,6 +11,7 @@ import { isPortfolioForecastRunning, runPortfolioForecastJob } from '../services
 export function registerPortfolioHandlers(getWindow: () => Electron.BrowserWindow | null): void {
   registerAccountLedgerHandlers(getWindow, getDb)
   registerCapitalSimulationHandlers(getWindow, getDb)
+  registerRollingValidationHandlers(getWindow, getDb)
   // 获取全部持仓股票列表
   ipcMain.handle('portfolio:list', (_e) => {
     try {
