@@ -4,7 +4,7 @@ on:
     inputs:
       target:
         type: choice
-        options: [all, windows, macos, installer]
+        options: [all, windows, macos, installer, probe]
         default: all
       tested_windows_run:
         type: string
@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   package:
-    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target != 'windows' && inputs.target != 'installer'
+    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target != 'windows' && inputs.target != 'installer' && inputs.target != 'probe'
     strategy:
       fail-fast: false
       matrix:
@@ -102,7 +102,7 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
   windows:
-    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target != 'macos' && inputs.target != 'installer'
+    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target != 'macos' && inputs.target != 'installer' && inputs.target != 'probe'
     runs-on: windows-latest
     timeout-minutes: 45
     env:
@@ -277,3 +277,31 @@ jobs:
           name: public-installer-lifecycle-${{ github.run_id }}
           path: installer-lifecycle-acceptance.json
           if-no-files-found: error
+  native_probe:
+    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target == 'probe'
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and execute only the production default-selector native calls
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = 'D:\rt-native-defaults-' + $env:GITHUB_RUN_ID
+          New-Item -ItemType Directory -Path $root | Out-Null
+          $env:TEMP = $root
+          $env:TMP = $root
+          node scripts/native-nsis-defaults-probe.cjs $root
+          if ($LASTEXITCODE -ne 0) { throw 'Native probe generation failed' }
+          Invoke-WebRequest 'https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-3.0.4.1/nsis-3.0.4.1.7z' -OutFile "$root\nsis.7z"
+          7z x "$root\nsis.7z" "-o$root\compiler" -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS extraction failed' }
+          $compiler = @(Get-ChildItem -LiteralPath "$root\compiler" -Filter makensis.exe -File -Recurse)
+          $compiler = @($compiler | Where-Object { $_.Directory.Name -eq 'Bin' })
+          if ($compiler.Count -ne 1) { throw 'NSIS compiler identity ambiguous' }
+          & $compiler[0].FullName /V2 "$root\native-defaults.nsi"
+          if ($LASTEXITCODE -ne 0) { throw 'Native probe compilation failed' }
+          $p = Start-Process -FilePath "$root\native-defaults.exe" -WindowStyle Hidden -Wait -PassThru
+          Get-Content -LiteralPath "$root\native-defaults.log"
+          Write-Output "NATIVE_DEFAULT_SELECTOR_EXIT=$($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { throw 'Native default selector failed' }
