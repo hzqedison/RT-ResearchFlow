@@ -20,8 +20,6 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     env:
-      ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
-      npm_config_cache: ${{ runner.temp }}/npm-cache
       USE_HARD_LINKS: 'false'
     steps:
       - uses: actions/checkout@v4
@@ -33,8 +31,12 @@ jobs:
           node-version: 20.18.0
           cache: pnpm
       - name: Install test dependencies without application setup hooks
+        env:
+          npm_config_cache: ${{ runner.temp }}/npm-cache
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Install the native Electron test host
+        env:
+          ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
         run: node node_modules/electron/install.js
       - name: Verify archive contracts and main-process types
         run: |

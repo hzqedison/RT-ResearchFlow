@@ -1,6 +1,6 @@
 import { cp, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
-import { isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
+import { isAbsolute, join, parse, relative, resolve, sep, toNamespacedPath } from 'node:path'
 import { prepareMacProductPython } from './macProductPythonRuntime'
 
 type Runner = (executable: string, args: string[], input?: string, timeout?: number, collect?: boolean) => Promise<string>
@@ -64,7 +64,7 @@ async function prepare(root: string, configuredPython: string, minimumMinor: num
       force: false,
       errorOnExist: true,
       filter: async path => {
-        const parts = relative(sourceRoot, path).split(sep)
+        const parts = relative(toNamespacedPath(sourceRoot), toNamespacedPath(path)).split(sep)
         if (parts.some(part => ['site-packages', '__pycache__', 'test', 'tests'].includes(part.toLowerCase()))
           || parts[0]?.toLowerCase() === 'scripts' || /\.py[co]$/i.test(path)) return false
         if ((await lstat(path)).isSymbolicLink()) throw Error('PRODUCT_PYTHON_SYMLINK_SOURCE_UNSUPPORTED')

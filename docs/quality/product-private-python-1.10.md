@@ -9,7 +9,8 @@ This work is unreleased. The installed Windows product is still 1.9.1.
 - Only `multi_data_source_config.preference.pythonPath` was changed; provider choices and encrypted credentials were retained.
 - Python 3.13.13, local venv, pip, SSL, SQLite and AkShare 1.19.1 import were checked successfully.
 - The new application migration unit suite passed three of four cases. Exclusion of shared pip launchers failed.
-- A separate reproduction confirmed that Windows namespaced paths cause the relative directory's first component to be empty. Fix and retest before packaging.
+- A separate reproduction confirmed that Windows namespaced paths cause the relative directory's first component to be empty. Normalize both relative-path operands into the same namespace; the regression now passes while retaining standard-library venv templates.
+- The updated local suite passed all sixteen runtime/download/integrity cases, and the main-process type check passed. Real application startup and fresh native installation remain separate release gates.
 - The public-history probe was inconclusive because its output decoder failed; do not count its exit code as successful data acceptance.
 - Shared C-drive Python and caches have not been removed. Ownership and other consumers must be checked before cleanup.
 
