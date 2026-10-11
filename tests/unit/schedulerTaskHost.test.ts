@@ -122,4 +122,18 @@ describe('pure scheduler task ownership', () => {
     await expect(host.waitForIdle(Infinity)).rejects.toThrow(RangeError)
     expect(vi.getTimerCount()).toBe(0)
   })
+
+  it('timer stop is not a global manual-work admission barrier', async () => {
+    const host = new SchedulerTaskHost()
+    host.start()
+    host.stop()
+    const task = deferred()
+    const running = host.run(() => task.promise)
+    await flush()
+    expect(host.running).toBe(false)
+    expect(await host.waitForIdle(0)).toEqual({ idle: false, timedOut: true, pendingTasks: 1 })
+    task.resolve()
+    await running
+    expect(await host.waitForIdle(0)).toEqual({ idle: true, timedOut: false, pendingTasks: 0 })
+  })
 })

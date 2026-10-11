@@ -34,6 +34,12 @@ function callsWithin(node: ts.Node, name: string): ts.CallExpression[] {
 }
 
 describe('18:00统一盘后调度契约', () => {
+  it('函数不存在时拒绝空片段验收，不依赖 async 关键字截取', () => {
+    expect(() => schedulerBody('missingSchedulerFunction')).toThrow('Missing scheduler function')
+    const concept = schedulerBody('runConceptMembersSyncForSource').getText(schedulerSyntax)
+    expect(concept).toContain('syncConceptFacts')
+    expect(concept.length).toBeGreaterThan(100)
+  })
   it('只注册一个盘后协调器且不保留17点计时器', () => {
     expect(scheduler).toContain('runUnifiedAfterCloseSyncJob')
     expect(scheduler).toContain('delayUntilBjTime(AFTER_CLOSE_SYNC_HOUR_BJ, AFTER_CLOSE_SYNC_MINUTE_BJ)')
@@ -72,30 +78,21 @@ describe('18:00统一盘后调度契约', () => {
     expect(resume).toContain('if (!_scheduler.isCurrent(scope)) return')
     expect(scheduler).toContain('if (_publicDailyResumeTimer)')
 
-    const marketTask = scheduler.slice(
-      scheduler.indexOf('export async function runTopListSyncJob'),
-      scheduler.indexOf('export async function runDailyOHLCVSyncJob'),
-    )
+    const marketTask = schedulerBody('runTopListSyncJob').getText(schedulerSyntax)
     expect(marketTask).toContain("const { runScreener } = await import('./stockScreenerService')")
     expect(marketTask).toContain('screenerCompleted = true')
     expect(marketTask).not.toContain(';(async () =>')
   })
 
   it('盘前验证作为独立子任务接入18点协调器且晚于市场日线任务', () => {
-    const coordinator = scheduler.slice(
-      scheduler.indexOf('export function runUnifiedAfterCloseSyncJob'),
-      scheduler.indexOf('function scheduleAfterCloseDailySync'),
-    )
+    const coordinator = schedulerBody('runUnifiedAfterCloseSyncJob').getText(schedulerSyntax)
     expect(coordinator).toContain("runTrackedAfterCloseTask(tradeDate, 'premarket_validation'")
     expect(coordinator.indexOf("'premarket_validation'")).toBeGreaterThan(coordinator.indexOf("'market_daily'"))
     expect(coordinator).toContain('runPremarketOutcomeValidation(db, tradeDate)')
   })
 
   it('市场共振在板块截面完成后由18点协调器固化', () => {
-    const coordinator = scheduler.slice(
-      scheduler.indexOf('export function runUnifiedAfterCloseSyncJob'),
-      scheduler.indexOf('function scheduleAfterCloseDailySync'),
-    )
+    const coordinator = schedulerBody('runUnifiedAfterCloseSyncJob').getText(schedulerSyntax)
     expect(coordinator).toContain("runTrackedAfterCloseTask(tradeDate, 'market_resonance'")
     expect(coordinator).toContain('archiveMarketResonanceSnapshot(db, tradeDate)')
     expect(coordinator.indexOf("'market_resonance'")).toBeGreaterThan(coordinator.indexOf("'sector_snapshot'"))
@@ -103,17 +100,11 @@ describe('18:00统一盘后调度契约', () => {
   })
 
   it('证券主数据独立于题材源接入18点协调器并提供启动过期补偿', () => {
-    const coordinator = scheduler.slice(
-      scheduler.indexOf('export function runUnifiedAfterCloseSyncJob'),
-      scheduler.indexOf('export function scheduleAfterCloseDailySync'),
-    )
+    const coordinator = schedulerBody('runUnifiedAfterCloseSyncJob').getText(schedulerSyntax)
     expect(coordinator).toContain("runTrackedAfterCloseTask(tradeDate, 'security_master'")
     expect(coordinator.indexOf("'security_master'")).toBeLessThan(coordinator.indexOf("'market_daily'"))
 
-    const conceptSync = scheduler.slice(
-      scheduler.indexOf('export async function runConceptMembersSyncForSource'),
-      scheduler.indexOf('export interface StockBasicSyncResult'),
-    )
+    const conceptSync = schedulerBody('runConceptMembersSyncForSource').getText(schedulerSyntax)
     expect(conceptSync).not.toContain('runStockBasicSyncJob()')
     expect(scheduler).toContain('runStartupStockBasicSyncIfStale()')
     expect(scheduler).toContain('if (_stockBasicSyncPromise) return _stockBasicSyncPromise')
