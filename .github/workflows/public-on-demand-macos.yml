@@ -4,7 +4,7 @@ on:
     inputs:
       version:
         type: string
-        default: '1.13.0'
+        default: '1.14.0'
       target:
         type: choice
         options: [all, windows, macos, installer, probe, trace]
@@ -62,6 +62,7 @@ jobs:
         run: |
           pnpm run typecheck
           node --test scripts/packaged-ai-credential-proof.test.cjs
+          pnpm exec vitest run tests/unit/initializationCapabilities.test.tsx tests/unit/initializationTaskModel.test.ts tests/unit/dataReadiness.contract.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/aiConfigStorage.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/strategyLab.publicLimitUp.test.tsx tests/unit/strategyLab.service.test.ts tests/unit/strategyLab.conditionSnapshotRun.test.ts tests/unit/tushareCredentialVerification.test.tsx tests/unit/publicLimitUpRules.test.tsx tests/unit/nativePublicLimitPool.test.ts tests/unit/verifiedPublicLimitPoolCache.test.ts tests/unit/currentPublicConceptLookup.service.test.ts tests/unit/currentPublicConceptLookup.wiring.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
@@ -91,6 +92,7 @@ jobs:
           node scripts/mac-packaged-acceptance.cjs "$RT_PACKAGED_EXE"
           pnpm exec playwright test tests/e2e/on-demand-extensions.spec.ts --workers=1 --retries=0 --reporter=line
           node scripts/verify-packaged-ai-credentials.cjs "$RT_PACKAGED_EXE"
+          RT_INITIALIZATION_FIXTURE_ALLOWED=1 pnpm exec playwright test tests/e2e/packaged-initialization-capabilities.spec.ts --workers=1 --retries=0 --reporter=line
           shasum -a 256 release/*.dmg > release/SHA256SUMS-${{ matrix.arch }}.txt
           node scripts/write-public-package-receipt.cjs
       - name: Upload only tested direct installers
@@ -144,10 +146,13 @@ jobs:
           "ELECTRON_BUILDER_CACHE=$root\builder-cache" | Add-Content $env:GITHUB_ENV
       - name: Install native dependencies and check source
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           node -e "if(require('./package.json').version !== '${{ inputs.version }}')throw Error('Requested version differs from source')"
           pnpm install --frozen-lockfile --config.side-effects-cache=false
           pnpm run typecheck
           node --test scripts/packaged-ai-credential-proof.test.cjs
+          pnpm exec vitest run tests/unit/initializationCapabilities.test.tsx tests/unit/initializationTaskModel.test.ts tests/unit/dataReadiness.contract.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/aiConfigStorage.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/strategyLab.publicLimitUp.test.tsx tests/unit/strategyLab.service.test.ts tests/unit/strategyLab.conditionSnapshotRun.test.ts tests/unit/tushareCredentialVerification.test.tsx tests/unit/publicLimitUpRules.test.tsx tests/unit/nativePublicLimitPool.test.ts tests/unit/verifiedPublicLimitPoolCache.test.ts tests/unit/currentPublicConceptLookup.service.test.ts tests/unit/currentPublicConceptLookup.wiring.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
@@ -175,6 +180,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Packaged GUI or private extension acceptance failed' }
           node scripts/verify-packaged-ai-credentials.cjs $env:RT_PACKAGED_EXE
           if ($LASTEXITCODE -ne 0) { throw 'Packaged credential persistence acceptance failed' }
+          $env:RT_INITIALIZATION_FIXTURE_ALLOWED = '1'
+          pnpm exec playwright test tests/e2e/packaged-initialization-capabilities.spec.ts --workers=1 --retries=0 --reporter=line
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged initialization capability UI acceptance failed' }
       - name: Install the exact NSIS package and verify installed startup
         shell: pwsh
         run: |

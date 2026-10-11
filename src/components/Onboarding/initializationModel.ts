@@ -1,6 +1,7 @@
 import type { ConfigDrawerTab } from '../ConfigDrawer/ConfigDrawer'
 import type { Tab } from '../../store/appStore'
 import type { DiagnosticItem, DiagnosticRunAction, DiagnosticsHealthSnapshot, OnboardingAction } from './onboardingModel'
+import { basicUseBlockers, isUsableDiagnosticFact } from './initializationCapabilityPolicy'
 
 export type InitializationStatus = 'blocked' | 'actionRequired' | 'syncing' | 'usable' | 'complete'
 export type InitializationEmptyReason = 'datasourceMissing' | 'stockBasicMissing' | 'initializing' | 'diagnosticsError' | 'readyNoSignals'
@@ -32,12 +33,8 @@ function findItem(snapshot: DiagnosticsHealthSnapshot | null, keys: string[]): D
   return allItems(snapshot).find(item => keys.includes(item.key))
 }
 
-function hasRecords(item: DiagnosticItem | undefined): boolean {
-  return (item?.recordCount ?? 0) > 0
-}
-
 function isOk(item: DiagnosticItem | undefined): boolean {
-  return item?.status === 'ok'
+  return item?.status === 'ok' && item.displayStatus !== 'neutral'
 }
 
 function actionFromOnboarding(action: OnboardingAction | undefined): InitializationAction | undefined {
@@ -65,12 +62,14 @@ export function buildInitializationModel(snapshot: DiagnosticsHealthSnapshot | n
   const items = allItems(snapshot)
   const tushare = findItem(snapshot, ['config.tushare'])
   const ai = findItem(snapshot, ['config.ai'])
-  const stockBasic = findItem(snapshot, ['freshness.stockBasic', 'stockBasic', 'sync.stockBasic'])
-  const decisionSignals = findItem(snapshot, ['freshness.decisionSignals', 'decisionSignals', 'sync.decisionBackfill'])
-  const blockers = items.filter(item => item.status === 'error')
-  const warnings = items.filter(item => item.status === 'warning')
-  const stockBasicReady = isOk(stockBasic) || hasRecords(stockBasic)
-  const decisionReady = isOk(decisionSignals) || hasRecords(decisionSignals)
+  const stockBasic = findItem(snapshot, ['freshness.stockBasic', 'stockBasic'])
+  const decisionSignals = findItem(snapshot, ['freshness.decisionSignals', 'decisionSignals'])
+  const blockers = basicUseBlockers(snapshot)
+  // Preserve original severity; these issues restrict their module, not all local use.
+  const warnings = items.filter(item => item.displayStatus !== 'neutral'
+    && (item.status === 'warning' || (item.status === 'error' && !blockers.includes(item))))
+  const stockBasicReady = isUsableDiagnosticFact(stockBasic) && (stockBasic?.recordCount ?? 0) > 0
+  const decisionReady = isUsableDiagnosticFact(decisionSignals)
   const minimumUsable = blockers.length === 0
 
   if (syncing) {
@@ -90,7 +89,7 @@ export function buildInitializationModel(snapshot: DiagnosticsHealthSnapshot | n
   if (blockers.length > 0) {
     return {
       status: 'actionRequired',
-      title: '诊断发现需要处理的问题',
+      title: '本地数据库需要处理',
       description: blockers[0]?.message ?? '部分关键数据或数据库状态异常, 建议先进入诊断页处理。',
       minimumUsable: false,
       emptyReason: 'diagnosticsError',
@@ -101,29 +100,15 @@ export function buildInitializationModel(snapshot: DiagnosticsHealthSnapshot | n
     }
   }
 
-  if (!isOk(tushare)) {
-    return {
-      status: 'usable',
-      title: '基础功能可使用，增强数据源待配置',
-      description: '资讯、本地研究和六位代码直查可继续使用；配置 Tushare 后可补齐全市场股票索引、题材和历史日线。',
-      minimumUsable: true,
-      emptyReason: 'datasourceMissing',
-      primaryAction: { type: 'config', tab: 'datasource', label: '打开数据源配置' },
-      secondaryAction: { type: 'guide', label: '查看初始化引导' },
-      blockers,
-      warnings
-    }
-  }
-
   if (!stockBasicReady) {
     return {
-      status: 'actionRequired',
+      status: isOk(tushare) ? 'actionRequired' : 'usable',
       title: '基础功能可使用，全市场索引待补齐',
-      description: stockBasic?.message ?? '六位代码直查和资讯仍可使用；同步股票基础数据后可使用名称搜索和全市场候选。',
+      description: `六位代码直查、资讯和本地研究仍可使用；股票索引可免 Key 同步。${stockBasic?.message ?? '当前股票索引尚未核验可用。'} 同步任务可启动不代表资料已补齐。`,
       minimumUsable: true,
       emptyReason: 'stockBasicMissing',
       primaryAction: { type: 'run', runAction: 'syncStockBasic', label: '同步股票基础数据' },
-      secondaryAction: { type: 'guide', label: '查看初始化引导' },
+      secondaryAction: { type: 'config', tab: 'datasource', label: '配置增强数据源（可选）' },
       blockers,
       warnings
     }
@@ -134,10 +119,10 @@ export function buildInitializationModel(snapshot: DiagnosticsHealthSnapshot | n
     return {
       status: 'usable',
       title: '基础初始化已可用',
-      description: decisionSignals?.message ?? '基础数据已具备, 今日看板可以进入; 若仍为空, 可补种今日信号或等待新的信号产生。',
+      description: '尚无已核验的本地看板信号。股票查询和本地研究可继续使用；请刷新信号并检查对应模块数据。没有信号不等于没有机会。',
       minimumUsable: true,
       emptyReason: 'readyNoSignals',
-      primaryAction: fallbackAction ?? { type: 'run', runAction: 'backfillDecisionSignals', label: '补种今日看板' },
+      primaryAction: fallbackAction?.runAction === 'backfillDecisionSignals' ? fallbackAction : { type: 'run', runAction: 'backfillDecisionSignals', label: '补种今日看板' },
       secondaryAction: isOk(ai) ? { type: 'guide', label: '查看初始化引导' } : { type: 'config', tab: 'ai-config', label: '配置 AI 模型' },
       blockers,
       warnings
@@ -146,8 +131,8 @@ export function buildInitializationModel(snapshot: DiagnosticsHealthSnapshot | n
 
   return {
     status: warnings.length > 0 ? 'usable' : 'complete',
-    title: warnings.length > 0 ? '系统已经可用' : '初始化已完成',
-    description: warnings.length > 0 ? '核心初始化条件已经满足, 仍有非阻塞诊断项可在诊断页继续优化。' : '基础数据、诊断状态和今日看板已经具备可用条件。',
+    title: warnings.length > 0 ? '基础功能可使用，部分模块待核验' : '基础初始化已完成',
+    description: warnings.length > 0 ? '股票索引和本地看板已可使用；其余数据、权限和模型问题仅限制对应模块，请在诊断页逐项核验。' : '基础股票索引和本地看板已具备可用条件；增强策略的数据依赖仍须分别核验。',
     minimumUsable: true,
     emptyReason: 'readyNoSignals',
     primaryAction: { type: 'nav', tab: 'decision-center', label: '查看今日看板' },

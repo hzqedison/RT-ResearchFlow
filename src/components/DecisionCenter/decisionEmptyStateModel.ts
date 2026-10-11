@@ -85,7 +85,7 @@ export function buildDecisionEmptyStateModel(initialization: InitializationModel
 
   return {
     title: '今日暂时没有需要处理的信号',
-    description: initialization.minimumUsable ? '核心初始化条件已经满足, 当前规则暂未发现值得处理的机会或风险。可以继续查看股票走势图、持仓趋势或资讯列表做主动复盘。' : initialization.description,
+    description: initialization.description,
     tone: 'slate',
     primaryAction: initialization.primaryAction,
     secondaryAction: initialization.secondaryAction

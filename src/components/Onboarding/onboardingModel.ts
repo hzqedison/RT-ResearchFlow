@@ -1,6 +1,7 @@
 import type { ConfigDrawerTab } from '../ConfigDrawer/ConfigDrawer'
 import type { Tab } from '../../store/appStore'
 import type { ConceptSource, DiagnosticReadiness, EvaluationCounts } from '../../../electron/shared/dataReadiness'
+import { basicUseBlockers, diagnosticFactStatus } from './initializationCapabilityPolicy'
 
 export type DiagnosticStatus = 'ok' | 'warning' | 'error'
 export type DiagnosticRunAction = 'refreshHealth' | 'refreshDataQuality' | 'syncStockBasic' | 'syncTradeCalendar' | 'syncHistoricalDaily' | 'syncMarketBenchmarks' | 'syncConceptMembers' | 'backfillDecisionSignals' | 'syncAuctionSnapshot' | 'syncLimitList'
@@ -49,6 +50,7 @@ export interface OnboardingStep {
   status: DiagnosticStatus
   item?: DiagnosticItem
   action?: OnboardingAction
+  optional?: boolean
 }
 
 export interface OnboardingModel {
@@ -92,22 +94,24 @@ function firstRunAction(item: DiagnosticItem | undefined): DiagnosticRunAction |
 
 export function buildOnboardingModel(snapshot: DiagnosticsHealthSnapshot | null): OnboardingModel {
   const datasourceItem = findItem(snapshot, ['config.tushare'])
-  const stockBasicItem = findItem(snapshot, ['freshness.stockBasic', 'stockBasic']) ?? findItem(snapshot, ['sync.stockBasic'])
-  const dailyCloseItem = findItem(snapshot, ['freshness.dailyClose', 'dailyClose']) ?? findItem(snapshot, ['sync.historicalDaily'])
-  const conceptItem = findActionableConceptItem(snapshot) ?? findItem(snapshot, ['sync.conceptMembers'])
+  const stockBasicItem = findItem(snapshot, ['freshness.stockBasic', 'stockBasic'])
+  const dailyCloseItem = findItem(snapshot, ['freshness.dailyClose', 'dailyClose'])
+  const conceptItem = findActionableConceptItem(snapshot)
   const aiConfigItem = findItem(snapshot, ['config.ai'])
-  const decisionItem = findItem(snapshot, ['freshness.decisionSignals', 'decisionSignals']) ?? findItem(snapshot, ['sync.decisionBackfill'])
+  const decisionItem = findItem(snapshot, ['freshness.decisionSignals', 'decisionSignals'])
+  const databaseBlockers = basicUseBlockers(snapshot)
 
-  const stockBasicAction = firstRunAction(stockBasicItem) ?? 'syncStockBasic'
-  const dailyCloseAction = firstRunAction(dailyCloseItem) ?? 'syncHistoricalDaily'
-  const conceptAction = firstRunAction(conceptItem) ?? 'syncConceptMembers'
-  const decisionAction = firstRunAction(decisionItem) ?? 'backfillDecisionSignals'
+  const stockBasicAction = firstRunAction(stockBasicItem ?? findItem(snapshot, ['sync.stockBasic'])) ?? 'syncStockBasic'
+  const dailyCloseAction = firstRunAction(dailyCloseItem ?? findItem(snapshot, ['sync.historicalDaily'])) ?? 'syncHistoricalDaily'
+  const conceptAction = firstRunAction(conceptItem ?? findItem(snapshot, ['sync.conceptMembers'])) ?? 'syncConceptMembers'
+  const decisionAction = firstRunAction(decisionItem ?? findItem(snapshot, ['sync.decisionBackfill'])) ?? 'backfillDecisionSignals'
 
   const steps: OnboardingStep[] = [
     {
       key: 'datasource',
       title: '配置 Tushare 数据源',
-      description: datasourceItem?.message ?? '用于股票搜索、行情缓存、题材同步和短线策略数据。',
+      description: `${datasourceItem?.message ?? '尚未绑定 Tushare Key'}。可选增强入口；基础股票索引、公开日线和资讯不要求先绑定。竞价、专业题材、筹码须单独核验接口权限。`,
+      optional: true,
       status: itemStatus(datasourceItem),
       item: datasourceItem,
       action: { type: 'config', tab: 'datasource', label: '打开数据源' }
@@ -116,28 +120,31 @@ export function buildOnboardingModel(snapshot: DiagnosticsHealthSnapshot | null)
       key: 'stock-basic',
       title: '同步股票基础数据',
       description: stockBasicItem?.message ?? '初始化名称和代码索引, 让走势图搜索可以直接使用。',
-      status: itemStatus(stockBasicItem),
+      status: diagnosticFactStatus(stockBasicItem),
       item: stockBasicItem,
       action: { type: 'run', action: stockBasicAction, label: '同步股票基础数据' }
     },
     {
       key: 'historical-daily',
+      optional: true,
       title: '同步全市场历史日线',
       description: dailyCloseItem?.message ?? '准备近 2 年全市场日线底座, 支撑策略扫描和回测。',
-      status: itemStatus(dailyCloseItem),
+      status: diagnosticFactStatus(dailyCloseItem),
       item: dailyCloseItem,
       action: { type: 'run', action: dailyCloseAction, label: '同步历史日线' }
     },
     {
       key: 'concept-members',
+      optional: true,
       title: '同步题材成分',
       description: conceptItem?.message ?? '为短线策略、产业链归因和板块资金流向准备本地题材关系。',
-      status: itemStatus(conceptItem),
+      status: diagnosticFactStatus(conceptItem),
       item: conceptItem,
       action: { type: 'run', action: conceptAction, label: '同步题材成分' }
     },
     {
       key: 'ai-config',
+      optional: true,
       title: '配置 AI 模型',
       description: aiConfigItem?.message ?? '配置至少一个可用模型后, AI 分析和走势预测才能执行。',
       status: itemStatus(aiConfigItem),
@@ -148,24 +155,27 @@ export function buildOnboardingModel(snapshot: DiagnosticsHealthSnapshot | null)
       key: 'decision-signals',
       title: '补种今日看板信号',
       description: decisionItem?.message ?? '基于已有本地数据生成今日看板的初始信号。',
-      status: itemStatus(decisionItem),
+      status: diagnosticFactStatus(decisionItem),
       item: decisionItem,
       action: { type: 'run', action: decisionAction, label: '补种今日看板' }
     },
     {
       key: 'enter-home',
       title: '进入今日看板',
-      description: '完成初始化后, 从今日看板开始查看持仓、市场、资讯、策略和风险分区。',
-      status: snapshot?.status === 'error' ? 'warning' : 'ok',
-      action: { type: 'nav', tab: 'decision-center', label: '进入今日看板' }
+      description: databaseBlockers[0]?.message ?? '基础入口可独立使用；增强配置不阻断本地研究，策略数据仍需按模块核验。',
+      status: databaseBlockers.length > 0 ? 'error' : snapshot ? 'ok' : 'warning',
+      action: databaseBlockers.length > 0
+        ? { type: 'config', tab: 'diagnostics', label: '打开诊断页' }
+        : { type: 'nav', tab: 'decision-center', label: '进入今日看板' }
     }
   ]
 
   const completedCount = steps.filter(step => step.status === 'ok').length
   const totalCount = steps.length
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
-  const nextStep = steps.find(step => step.status !== 'ok') ?? steps[steps.length - 1] ?? null
-  const shouldPrompt = steps.slice(0, -1).some(step => step.status !== 'ok')
+  const nextStep = databaseBlockers.length > 0 ? steps[steps.length - 1]
+    : steps.find(step => !step.optional && step.status !== 'ok') ?? steps[steps.length - 1] ?? null
+  const shouldPrompt = databaseBlockers.length > 0 || steps.slice(0, -1).some(step => !step.optional && step.status !== 'ok')
 
   return { steps, completedCount, totalCount, progressPct, shouldPrompt, nextStep }
 }

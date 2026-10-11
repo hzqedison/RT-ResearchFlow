@@ -271,3 +271,7 @@ Windows 构建：`pnpm run dist:win`。Mac 构建在对应架构上执行 `node 
 欢迎通过 [Issues](https://github.com/hzqedison/RT-ResearchFlow/issues) 反馈问题，只分享去敏结果，不公开账户资料或密钥。
 
 </details>
+
+## 1.14.0 候选进展
+
+当前正式下载仍为 1.13.0。下一候选优先免费初始化、保留明确的 Tushare/AI 绑定入口，并按数据事实与模块能力展示可用状态；详见 [候选说明](docs/releases/v1.14.0.md) 与 [本地验收记录](docs/quality/initialization-capabilities-1.14-candidate.md)。三端候选安装包验收完成前不会替换正式下载。

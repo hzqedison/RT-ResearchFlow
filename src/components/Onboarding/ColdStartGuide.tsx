@@ -45,7 +45,7 @@ export function ColdStartGuide({ snapshot, loading = false, flow, onRefresh, onO
   const [actionStates, setActionStates] = useState<Partial<Record<DiagnosticRunAction, ActionRunState>>>({})
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const initialization = useMemo(() => buildInitializationModel(snapshot, model.nextStep?.action, runningAction !== null || loading), [snapshot, model.nextStep?.action, runningAction, loading])
+  const initialization = useMemo(() => buildInitializationModel(snapshot, model.nextStep?.action, flow.running || runningAction !== null || loading), [snapshot, model.nextStep?.action, flow.running, runningAction, loading])
 
   async function runDiagnosticAction(action: DiagnosticRunAction) {
     setRunningAction(action)
@@ -102,7 +102,7 @@ export function ColdStartGuide({ snapshot, loading = false, flow, onRefresh, onO
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">首次启动引导</h2>
             <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[11px] text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300">{model.progressPct}%</span>
-            <span className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[11px] text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">{statusText}</span>
+            <span data-testid="initialization-status" className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[11px] text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">{statusText}</span>
           </div>
           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{initialization.description}</p>
         </div>
@@ -172,13 +172,14 @@ export function ColdStartGuide({ snapshot, loading = false, flow, onRefresh, onO
             const runState = step.action?.type === 'run' ? (actionStates[step.action.action] ?? 'idle') : 'idle'
             const actionStateLabel = runState === 'success' ? '成功' : runState === 'error' ? '可重试' : runState === 'running' ? '执行中' : null
             return (
-              <div key={step.key} className={`rounded border p-3 ${isPrimary ? meta.border : 'border-gray-100 dark:border-gray-800'} bg-gray-50/60 dark:bg-gray-950/30`}>
+              <div key={step.key} data-testid={`onboarding-step-${step.key}`} className={`rounded border p-3 ${isPrimary ? meta.border : 'border-gray-100 dark:border-gray-800'} bg-gray-50/60 dark:bg-gray-950/30`}>
                 <div className="flex items-start gap-2">
                   <span className={`mt-1 h-2 w-2 rounded-full ${meta.dot}`} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs text-gray-400 dark:text-gray-500">{index + 1}</span>
                       <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{step.title}</div>
+                      {step.optional && <span className="text-[11px] text-gray-500 dark:text-gray-400">可选增强</span>}
                       <span className={`text-[11px] ${meta.text}`}>{meta.label}</span>
                       {actionStateLabel && <span className="text-[11px] text-blue-600 dark:text-blue-300">{actionStateLabel}</span>}
                     </div>
