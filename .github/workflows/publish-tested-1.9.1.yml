@@ -83,9 +83,9 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REPOSITORY: hzqedison/RT-ResearchFlow
       MAC_COMMIT: 066d0299cae99c5b4709a5705376fa87373b7f9b
-      WINDOWS_COMMIT: 066d0299cae99c5b4709a5705376fa87373b7f9b
+      WINDOWS_COMMIT: 88849a16e665fa2b39c2b18e9b7f042075bad4e8
       MAC_RUN: '38151538487'
-      WINDOWS_RUN: '38151418862'
+      WINDOWS_RUN: '38153236375'
       LIFECYCLE_RUN: ${{ inputs.lifecycle_run }}
       RELEASE_TAG: v1.10.0
     steps:
@@ -94,7 +94,6 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$LIFECYCLE_RUN" =~ ^[0-9]+$ ]]
-          test "$MAC_COMMIT" = "$WINDOWS_COMMIT"
           for run in "$MAC_RUN" "$WINDOWS_RUN" "$LIFECYCLE_RUN"; do
             gh api "repos/$REPOSITORY/actions/runs/$run" > "run-$run.json"
             gh api "repos/$REPOSITORY/actions/runs/$run/jobs" > "jobs-$run.json"
@@ -106,6 +105,12 @@ jobs:
           jq -e '[.jobs[] | select(.name == "package (macos-15, arm64)" or .name == "package (macos-15-intel, x64)")] | length == 2 and all(.conclusion == "success")' "jobs-$MAC_RUN.json"
           jq -e '[.jobs[] | select(.name == "windows")] | length == 1 and all(.conclusion == "success")' "jobs-$WINDOWS_RUN.json"
           jq -e '[.jobs[] | select(.name == "installer_lifecycle")] | length == 1 and all(.conclusion == "success")' "jobs-$LIFECYCLE_RUN.json"
+          gh api "repos/$REPOSITORY/compare/$MAC_COMMIT...$WINDOWS_COMMIT" > source-difference.json
+          node <<'NODE'
+          const fs = require('node:fs'), d = JSON.parse(fs.readFileSync('source-difference.json', 'utf8'))
+          const allowed = new Set(['.github/workflows/public-on-demand-macos.yml', '.github/workflows/publish-tested-1.9.1.yml', 'resources/installer.nsh', 'scripts/native-nsis-defaults-probe.cjs', 'tests/unit/nsisInstallPath.contract.test.ts', 'tests/unit/nsisNativeRegisterOutputs.contract.test.ts'])
+          if (d.status !== 'ahead' || !Array.isArray(d.files) || d.files.length !== allowed.size || d.files.some(file => !allowed.has(file.filename))) throw Error('SHARED_APPLICATION_OR_DEPENDENCY_SOURCES_CHANGED')
+          NODE
           gh api "repos/$REPOSITORY/releases?per_page=100" | jq -e '[.[] | select(.tag_name == "v1.10.0")] | if length == 1 then .[0] else error("draft identity missing or ambiguous") end' > release.json
           jq -e --arg sha "$WINDOWS_COMMIT" '.draft == true and .target_commitish == $sha' release.json
       - name: Retrieve only already-tested installers and lifecycle receipt
