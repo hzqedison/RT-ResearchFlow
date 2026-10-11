@@ -4,7 +4,7 @@ on:
     inputs:
       target:
         type: choice
-        options: [all, windows, macos]
+        options: [all, windows, macos, installer]
         default: all
 permissions:
   contents: read
@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   package:
-    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target != 'windows'
+    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target != 'windows' && inputs.target != 'installer'
     strategy:
       fail-fast: false
       matrix:
@@ -96,7 +96,7 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
   windows:
-    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target != 'macos'
+    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target != 'macos' && inputs.target != 'installer'
     runs-on: windows-latest
     timeout-minutes: 45
     env:
@@ -201,3 +201,72 @@ jobs:
           name: public-windows-evidence-x64-${{ github.sha }}
           path: test-results/
           if-no-files-found: ignore
+  installer_lifecycle:
+    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target == 'installer'
+    runs-on: windows-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          repository: hzqedison/RT-ResearchFlow
+          run-id: '38149298676'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          name: public-windows-x64-26f6853b8f39d2d135df3f648df30617cdac508e
+          path: tested-installer
+      - name: Test default path, same-directory upgrade and data-preserving uninstall
+        shell: pwsh
+        env:
+          SHARED_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:TEMP = 'D:\rt-lifecycle-1.10-' + $env:GITHUB_RUN_ID
+          $env:TMP = $env:TEMP
+          New-Item -ItemType Directory -Path $env:TEMP | Out-Null
+          $target = 'D:\Program Files\RT-ResearchFlow'
+          if (Test-Path -LiteralPath $target) { throw 'Fresh fixture target already exists' }
+          $installer = (Resolve-Path 'tested-installer/RT-ResearchFlow-Setup-1.10.0-x64.exe').Path
+          $receipt = Get-Content -Raw 'tested-installer/acceptance-win32-x64.json' | ConvertFrom-Json
+          $sha = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($receipt.version -ne '1.10.0' -or $receipt.sourceCommit -ne '26f6853b8f39d2d135df3f648df30617cdac508e' -or $receipt.sha256 -ne $sha) { throw 'Tested installer identity mismatch' }
+          $sharedHash = (Get-FileHash -LiteralPath $env:SHARED_PYTHON -Algorithm SHA256).Hash
+          $p = Start-Process -FilePath $installer -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Default NSIS install failed: $($p.ExitCode)" }
+          $exe = Join-Path $target 'RT-ResearchFlow.exe'
+          if (-not (Test-Path -LiteralPath $exe)) { throw 'Default installation did not use D Program Files' }
+          $data = Join-Path $target 'data'
+          $fixtures = @('runtime\python\retention-fixture.txt','data-source-extensions\fixture\retention-fixture.txt','data-source-cache\pip\retention-fixture.txt','preferences-fixture.json')
+          $before = @{}
+          foreach ($relative in $fixtures) {
+            $file = Join-Path $data $relative
+            New-Item -ItemType Directory -Path (Split-Path -Parent $file) -Force | Out-Null
+            'isolated synthetic retention fixture; no account or API key' | Set-Content -LiteralPath $file -Encoding ascii
+            $before[$relative] = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
+          }
+          $p = Start-Process -FilePath $installer -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Same-directory upgrade failed: $($p.ExitCode)" }
+          if (-not (Test-Path -LiteralPath $exe)) { throw 'Upgraded executable missing' }
+          foreach ($relative in $fixtures) {
+            if ((Get-FileHash -LiteralPath (Join-Path $data $relative) -Algorithm SHA256).Hash -ne $before[$relative]) { throw 'Upgrade changed retained fixture data' }
+          }
+          $uninstallers = @(Get-ChildItem -LiteralPath $target -Filter '*Uninstall*.exe' -File)
+          if ($uninstallers.Count -ne 1) { throw 'Uninstaller identity is ambiguous' }
+          $p = Start-Process -FilePath $uninstallers[0].FullName -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Silent uninstall failed: $($p.ExitCode)" }
+          if (Test-Path -LiteralPath $exe) { throw 'Application executable remains after uninstall' }
+          foreach ($relative in $fixtures) {
+            if ((Get-FileHash -LiteralPath (Join-Path $data $relative) -Algorithm SHA256).Hash -ne $before[$relative]) { throw 'Uninstall changed retained fixture data' }
+          }
+          if ((Get-FileHash -LiteralPath $env:SHARED_PYTHON -Algorithm SHA256).Hash -ne $sharedHash) { throw 'Shared Python changed' }
+          @{version='1.10.0';sourceCommit=$receipt.sourceCommit;installerSha256=$sha;defaultNonSystemPathPassed=$true;sameDirectoryUpgradePreservesData=$true;silentUninstallPreservesData=$true;sharedPythonUnchanged=$true;usesSyntheticData=$true;brokerOrdersSubmitted=$false} | ConvertTo-Json | Set-Content 'installer-lifecycle-acceptance.json' -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-installer-lifecycle-${{ github.run_id }}
+          path: installer-lifecycle-acceptance.json
+          if-no-files-found: error
