@@ -6,7 +6,7 @@ const resource = path.join(__dirname, '..', 'resources', 'installer.nsh')
 const template = path.join(path.dirname(require.resolve('app-builder-lib/package.json')), 'templates', 'nsis', 'multiUser.nsh')
 const helper = `
 !macro defineRTNativeTrace PREFIX
-Function ${PREFIX}rtNativeTrace
+Function ${'${PREFIX}'}rtNativeTrace
   Exch $9
   Push $8
   Push $7
@@ -35,7 +35,7 @@ FunctionEnd
   !insertmacro defineRTNativeTrace ""
 !endif
 !macro rtNativeTrace LABEL
-  Push "${LABEL}"
+  Push "${'${LABEL}'}"
   !ifdef BUILD_UNINSTALLER
     Call un.rtNativeTrace
   !else
