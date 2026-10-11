@@ -21,7 +21,8 @@
       "9 isolated crypto-scope tests passed including built-in module identity, exact interpreter carrier byte binding and missing-file rejection; run 38082087511 failed the added probe and is not successful evidence",
       "Retained local staging driver edits as explicitly requested by human; changed only fresh origin bindings; 8 isolated stage-origin tests passed",
       "29 Windows-only isolated reviewed-version-lock fixtures passed; not Mac-executed tests",
-      "Actual version-frozen preparation run 38086414260 succeeded on all three native targets; structural merge run 38086904113 succeeded with formal lock 030b7a5200052ecdf3cef0a2611b61e40f0dfa71adf1b018898f1cb137144cc2; structural-only evidence does not authorize distribution"
+      "Actual version-frozen preparation run 38086414260 succeeded on all three native targets; structural merge run 38086904113 succeeded with formal lock 030b7a5200052ecdf3cef0a2611b61e40f0dfa71adf1b018898f1cb137144cc2; structural-only evidence does not authorize distribution",
+      "3 actual isolated bootstrap-order regression tests passed: seal-only protected bootstrap succeeds, unverified and changed recipient reader execution remains rejected; native-source execution still requires fresh native staging"
     ],
     "notClaimed": [
       "Human license approval",
@@ -42,9 +43,9 @@
   "trustedContext": {
     "repositoryId": 1408465497,
     "repositoryFullName": "hzqedison/RT-ResearchFlow",
-    "approvedSourceCommit": "f3ec469bf90193395ac710b249bbf465234bee91",
+    "approvedSourceCommit": "3a8010408613eebd7654fdc70a89a74f8dc3e65e",
     "approvedPolicySha256": "82efe2a0287f505e0acfe526177a39db1c58c84026fa34e2493875350c960ecb",
-    "approvedSealImplementationSha256": "7c78b3c65be39a960e2b63703c9dc7b25e7d8ba21ab14bd01d86f3f7f82ce013",
+    "approvedSealImplementationSha256": "b55e1782fcbe01135e0fc6e5872851918ed254aa221c91f1b346c44f9e0114c6",
     "sourceSnapshotSha256": "593395f234e1682edd6b22d0da3e69d62153670fa85cb0f1ada650108e5837c3",
     "requiredSourceFiles": [
       ".github/workflows/private-runtime-stage-native.yml",
@@ -84,7 +85,7 @@
     "producers": []
   },
   "entrypoints": {
-    "scripts/seal-private-python-runtime.cjs": "7c78b3c65be39a960e2b63703c9dc7b25e7d8ba21ab14bd01d86f3f7f82ce013",
+    "scripts/seal-private-python-runtime.cjs": "b55e1782fcbe01135e0fc6e5872851918ed254aa221c91f1b346c44f9e0114c6",
     "scripts/seal-private-python-runtime-producer.cjs": "418b36abc6609dd7744dde1ac014529b6a610f29a7a8134778162980b55b6c6b",
     "scripts/private-runtime-release-verifiers.cjs": "db4f7b3fb051f9c0a760b79e6a3ba56ae7d9932b68a36e41d0aac19275caeb8e"
   },
