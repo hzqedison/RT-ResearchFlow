@@ -45,9 +45,9 @@ FunctionEnd
 `
 function instrument(file, label) {
   let counter = 0
-  const content = fs.readFileSync(file, 'utf8').split('\n').map(line => line.includes('System::Call')
+  const content = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '').split('\n').map(line => line.includes('System::Call')
     ? `  !insertmacro rtNativeTrace "${label}-${++counter}"\n${line}\n  !insertmacro rtNativeTrace "${label}-${counter}-returned"` : line).join('\n')
-  fs.writeFileSync(file, (file === resource ? helper : '') + content)
+  fs.writeFileSync(file, '\uFEFF' + (file === resource ? helper : '') + content.replace(/^\uFEFF/, ''))
 }
 instrument(resource, 'resource')
 instrument(template, 'multi-user')
