@@ -1,6 +1,11 @@
 name: Public on-demand Windows and Mac packages
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        type: choice
+        options: [all, windows, macos]
+        default: all
 permissions:
   contents: read
 concurrency:
@@ -8,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   package:
-    if: github.repository == 'hzqedison/RT-ResearchFlow'
+    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target != 'windows'
     strategy:
       fail-fast: false
       matrix:
@@ -91,7 +96,7 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
   windows:
-    if: github.repository == 'hzqedison/RT-ResearchFlow'
+    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.target != 'macos'
     runs-on: windows-latest
     timeout-minutes: 45
     env:
@@ -148,8 +153,21 @@ jobs:
         run: |
           $installer = (Resolve-Path 'release/RT-ResearchFlow-Setup-1.10.0-x64.exe').Path
           $install = Join-Path $env:TEMP 'installed-product'
+          $started = Get-Date
           $p = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$install") -WindowStyle Hidden -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "NSIS failed: $($p.ExitCode)" }
+          if ($p.ExitCode -ne 0) {
+            Start-Sleep -Seconds 5
+            $faults = @(Get-WinEvent -FilterHashtable @{LogName='Application';Id=1000;StartTime=$started} -ErrorAction SilentlyContinue | ForEach-Object {
+              $xml = [xml]$_.ToXml()
+              $data = @{}
+              foreach ($entry in $xml.Event.EventData.Data) {
+                if ($entry.Name -in @('AppName','AppVersion','ModuleName','ModuleVersion','ExceptionCode','FaultingOffset')) { $data[$entry.Name] = $entry.'#text' }
+              }
+              $data
+            })
+            @{exitCode=$p.ExitCode;sourceCommit=$env:GITHUB_SHA;faults=$faults;accepted=$false} | ConvertTo-Json -Depth 5 | Tee-Object -FilePath 'release/nsis-diagnostic.json'
+            throw "NSIS failed: $($p.ExitCode)"
+          }
           $env:RT_PACKAGED_EXE = Join-Path $install 'RT-ResearchFlow.exe'
           $env:RT_PACKAGED_VERSION = '1.10.0'
           $env:RT_PACKAGED_ALLOW_EXISTING_DATA = '1'
@@ -167,6 +185,15 @@ jobs:
             release/SHA256SUMS-win32-x64.txt
             release/acceptance-win32-x64.json
           if-no-files-found: error
+      - name: Preserve failed installer for diagnosis only
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unaccepted-windows-diagnostic-${{ github.sha }}
+          path: |
+            release/RT-ResearchFlow-Setup-1.10.0-x64.exe
+            release/nsis-diagnostic.json
+          if-no-files-found: warn
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@v4
