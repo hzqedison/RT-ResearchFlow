@@ -1,3 +1,4 @@
+import { runPublicLimitUpStrategy } from './strategyLabPublicLimitUp'
 import type { WebContents } from 'electron'
 import type Database from 'better-sqlite3'
 import {
@@ -177,6 +178,8 @@ function parseEvidenceJson(value: string): Record<string, unknown> {
 }
 
 function insertBacktestSignals(db: Database.Database, strategy: StrategyLabStrategyDetail, matches: Array<{ tsCode: string; stockName: string | null; tradeDate: string; score: number; evidenceJson: string }>): number {
+  if (strategy.ruleDraft.publicLimitUpProfile) return 0
+
   const strategyKey = signalStrategyKey(strategy)
   const rows: ShortTermSignalInsert[] = matches.map(match => ({
     strategy: strategyKey,
@@ -194,7 +197,7 @@ function insertBacktestSignals(db: Database.Database, strategy: StrategyLabStrat
   return insertSignalsBatch(db, rows)
 }
 
-async function runScreenerStrategy(db: Database.Database, strategy: StrategyLabStrategyDetail, runId: number, webContents?: WebContents): Promise<{ summary: StrategyLabRunSummary; matches: ReturnType<typeof mapScreenerMatches> }> {
+async function runLegacyScreenerStrategy(db: Database.Database, strategy: StrategyLabStrategyDetail, runId: number, webContents?: WebContents): Promise<{ summary: StrategyLabRunSummary; matches: ReturnType<typeof mapScreenerMatches> }> {
   const runConfig = parseRunConfig(strategy)
   const tradeDate = runConfig.dateEnd ?? latestTradeDate(db)
   emit(webContents, { runId, strategyId: strategy.id, stage: 'screener', current: 1, total: 2, message: '运行个性选股白盒扫描' })
@@ -325,12 +328,15 @@ export async function runStrategyLabStrategy(db: Database.Database, strategyId: 
       ? await runConditionStrategy(db, strategy, runId, controller, webContents)
       : await runScreenerStrategy(db, strategy, runId, webContents)
     emit(webContents, { runId, strategyId: strategy.id, stage: 'save', current: 1, total: 1, message: '保存统一命中结果' })
-    completeRun(db, {
+    db.transaction(() => {
+      if (runningController?.signal.aborted) throw new Error('RUN_CANCELLED')
+      completeRun(db, {
       runId,
       summaryJson: JSON.stringify(result.summary),
       matches: result.matches,
     })
-    insertBacktestSignals(db, strategy, result.matches)
+      insertBacktestSignals(db, strategy, result.matches)
+    })()
     emit(webContents, { runId, strategyId: strategy.id, stage: 'done', current: 1, total: 1, message: '策略运行完成' })
     return { runId, summary: result.summary, matchedCount: result.matches.length }
   } catch (err) {
@@ -377,7 +383,7 @@ export function getStrategyLabMatchEvidence(db: Database.Database, matchId: numb
   return { match, evidence, action }
 }
 
-export function createBacktestFromStrategyLabRun(db: Database.Database, runId: number, plan?: Partial<TradePlan>): { backtestRunId: number; strategyKey: string } {
+export function createLegacyBacktestFromStrategyLabRun(db: Database.Database, runId: number, plan?: Partial<TradePlan>): { backtestRunId: number; strategyKey: string } {
   const run = getRun(db, runId)
   if (!run) throw new Error('RUN_NOT_FOUND')
   if (run.status !== 'completed') throw new Error('RUN_NOT_COMPLETED')
@@ -403,4 +409,15 @@ export function createBacktestFromStrategyLabRun(db: Database.Database, runId: n
   })
   markRunBacktest(db, runId, result.runId)
   return { backtestRunId: result.runId, strategyKey }
+}
+
+async function runScreenerStrategy(db: Database.Database, strategy: StrategyLabStrategyDetail, runId: number, webContents?: WebContents): Promise<{ summary: StrategyLabRunSummary; matches: ReturnType<typeof mapScreenerMatches> }> {
+  if (strategy.ruleDraft.publicLimitUpProfile) return runPublicLimitUpStrategy(db, strategy)
+  return runLegacyScreenerStrategy(db, strategy, runId, webContents)
+}
+
+export function createBacktestFromStrategyLabRun(db: Database.Database, runId: number, plan?: Partial<TradePlan>): { backtestRunId: number; strategyKey: string } {
+  const run = getStrategyLabRun(db, runId)
+  if (run?.summaryJson && JSON.parse(run.summaryJson).engine === 'publicLimitUp') throw new Error('PUBLIC_LIMIT_BACKTEST_UNAVAILABLE')
+  return createLegacyBacktestFromStrategyLabRun(db, runId, plan)
 }

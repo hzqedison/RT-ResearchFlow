@@ -6,7 +6,7 @@ const crypto = require('node:crypto')
 const version = require('../package.json').version
 const commit = process.env.GITHUB_SHA
 const root = path.resolve(__dirname, '..', 'release')
-if (version !== '1.11.0' || !/^[a-f0-9]{40}$/.test(commit || '')) throw Error('INVALID_RELEASE_CONTEXT')
+if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version) || process.env.RT_PACKAGED_VERSION !== version || !/^[a-f0-9]{40}$/.test(commit || '')) throw Error('INVALID_RELEASE_CONTEXT')
 const name = process.platform === 'darwin'
   ? `RT-ResearchFlow-macOS-${version}-${process.arch}.dmg`
   : `RT-ResearchFlow-Setup-${version}-${process.arch}.exe`

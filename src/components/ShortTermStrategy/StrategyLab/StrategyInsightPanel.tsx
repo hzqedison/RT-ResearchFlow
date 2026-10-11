@@ -61,6 +61,7 @@ function formatTradeDate(tradeDate: string): string {
 }
 
 function formatMatchedSource(match: StrategyLabMatchRow): string {
+  if (match.matchedFrom.startsWith('publicLimitUp.')) return '免费盘后涨停规则'
   if (match.matchedFrom === 'screener' || match.source === 'screener') return '个性选股白盒'
   if (match.matchedFrom === 'conditionBlock.intraday_amount_surge_hold') return '条件积木 · 盘中放量拉升后站稳'
   if (match.matchedFrom.startsWith('conditionBlock.') || match.source === 'conditionBlocks') return '条件积木 · 分钟形态验证'
@@ -78,6 +79,14 @@ function tabButtonClass(active: boolean): string {
 
 function buildRuleRows(match: StrategyLabMatchRow | null | undefined, activeView: StrategyLabView): Array<[string, string]> {
   if (!match) return buildInsightItems(activeView).map(item => [item.title, item.body])
+  if (match.matchedFrom.startsWith('publicLimitUp.')) {
+    try {
+      const evidence = JSON.parse(match.evidenceJson) as Record<string, unknown>
+      return [['执行规则', String(evidence.ruleDescription ?? '以本次运行记录的规则快照为准。')],
+        ['分数含义', '通过表示规则条件满足，不是相对排名、胜率或收益预测。'],
+        ['事实边界', '仅使用来源明确的盘后涨停池；不表示已验证竞价、筹码或全市场覆盖。']]
+    } catch { return [['规则快照', '本次记录缺少可读规则快照，请重新运行。']] }
+  }
   if (match.source === 'conditionBlocks') {
     try {
       const evidence = JSON.parse(match.evidenceJson) as Record<string, unknown>
@@ -114,6 +123,11 @@ function buildRuleRows(match: StrategyLabMatchRow | null | undefined, activeView
 }
 
 function buildGapRows(match: StrategyLabMatchRow | null | undefined): Array<[string, string]> {
+  if (match?.matchedFrom.startsWith('publicLimitUp.')) return [
+    ['历史时点', '当前缓存仅能证明盘后筛选事实，不能重建过去可见的数据或生成收益回测。'],
+    ['价格核对', '查看本次证据中的价格核对状态；本地完整日线缺失时不代表价格已交叉验证。'],
+    ['策略边界', '免费涨停池不是全市场涨跌停、竞价快照或筹码结构。请结合走势图进一步研究。'],
+  ]
   if (!match) {
     return [
       ['等待命中', '先运行策略并在统一命中表点击“证据”, 这里会列出还需要补看的验证点。'],
@@ -183,6 +197,13 @@ function parseEvidence(match: StrategyLabMatchRow | null | undefined): Array<[st
   try {
     const evidence = JSON.parse(match.evidenceJson) as Record<string, unknown>
     const rows: Array<[string, string]> = []
+    if (match.matchedFrom.startsWith('publicLimitUp.')) return [
+      ['实际条件', asStringArray(evidence.conditionsMet).join('；')],
+      ['数据来源', `${String(evidence.source)}，来源日期 ${String(evidence.sourceDate)}；仅涨停池。`],
+      ['采集时间', typeof evidence.observedAt === 'number' ? new Date(evidence.observedAt).toLocaleString() : '未知'],
+      ['价格核对', evidence.priceCheck === 'matched-local-closes' ? '已与本地收盘价核对' : '本地日线不完整或未核对，不代表已交叉验证'],
+      ['规则版本', isRecord(evidence.ruleProfile) ? String(evidence.ruleProfile.ruleVersion) : '未知'],
+    ]
     const conditionsMet = asStringArray(evidence.conditionsMet)
     const concepts = asStringArray(evidence.concepts)
     const signalScore = asNumber(evidence.rawSignalScore ?? evidence.signalScore)

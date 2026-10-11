@@ -108,9 +108,9 @@ export function StrategyResultTable({ matches, selectedMatchId, onSelectMatch, o
                 <td className="px-4 py-3 font-mono text-slate-500 dark:text-slate-400">{row.tsCode.replace(/\.(SH|SZ|BJ)$/i, '')}</td>
                 <td className="px-4 py-3 font-semibold text-slate-900 dark:text-slate-100">{row.stockName ?? row.tsCode}</td>
                 <td className="px-4 py-3 font-mono text-slate-400">{row.tradeDate}</td>
-                <td className="px-4 py-3 font-mono font-bold text-rose-600 dark:text-rose-300">{row.score.toFixed(1)}</td>
+                <td className="px-4 py-3 font-mono font-bold text-rose-600 dark:text-rose-300">{row.matchedFrom.startsWith('publicLimitUp.') ? '通过' : row.score.toFixed(1)}</td>
                 <td className="px-4 py-3">
-                  <span className="rounded bg-cyan-50 px-1.5 py-0.5 text-[11px] font-medium text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-200">{sourceText(row.source)}</span>
+                  <span className="rounded bg-cyan-50 px-1.5 py-0.5 text-[11px] font-medium text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-200">{row.matchedFrom.startsWith('publicLimitUp.') ? '免费涨停规则' : sourceText(row.source)}</span>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1.5">

@@ -1,3 +1,5 @@
+import { ensurePublicLimitUpStrategies, validatePublicLimitUpDraft } from './strategyLabPublicLimitUp'
+import type { PublicLimitUpStrategyProfile } from '../../shared/publicLimitUpStrategy'
 import type Database from 'better-sqlite3'
 import {
   duplicateStrategy,
@@ -25,6 +27,8 @@ export type StrategyLabStockPoolSource = 'allMarket' | 'portfolio' | 'trendWatch
 export type StrategyLabScanMode = 'quick' | 'complete' | 'twoPhase'
 
 export interface StrategyLabRuleDraft {
+  publicLimitUpProfile?: PublicLimitUpStrategyProfile
+
   schemaVersion: 1
   source: StrategyLabStrategySource
   stockPool: {
@@ -241,7 +245,7 @@ function normalizeRunConfig(value: StrategyLabRunConfig): StrategyLabRunConfig {
     scanMode: value.scanMode === 'quick' || value.scanMode === 'twoPhase' ? value.scanMode : 'complete',
     lookbackDays: Math.max(1, Math.min(60, Math.round(Number(value.lookbackDays) || 5))),
     dailyPrefilterLimit: Math.max(1, Math.min(1000, Math.round(Number(value.dailyPrefilterLimit) || 200))),
-    autoFetchMinuteLimit: Math.max(0, Math.min(500, Math.round(Number(value.autoFetchMinuteLimit) || 80))),
+    autoFetchMinuteLimit: Math.max(0, Math.min(500, Math.round(value.autoFetchMinuteLimit == null || !Number.isFinite(Number(value.autoFetchMinuteLimit)) ? 80 : Number(value.autoFetchMinuteLimit)))),
     userTier: value.userTier === 'pro' ? 'pro' : 'free',
     dateStart: typeof value.dateStart === 'string' && /^\d{8}$/.test(value.dateStart) ? value.dateStart : null,
     dateEnd: typeof value.dateEnd === 'string' && /^\d{8}$/.test(value.dateEnd) ? value.dateEnd : null,
@@ -349,7 +353,7 @@ function normalizeTemplateSnapshot(value: BlockStrategyTemplate): BlockStrategyT
   }
 }
 
-export function validateStrategyLabRuleDraft(value: StrategyLabRuleDraft, source: StrategyLabStrategySource): StrategyLabRuleDraft {
+export function validateLegacyStrategyLabRuleDraft(value: StrategyLabRuleDraft, source: StrategyLabStrategySource): StrategyLabRuleDraft {
   if (!value || value.schemaVersion !== 1) throw new Error('INVALID_RULE_DRAFT')
   if (value.source !== source) throw new Error('RULE_SOURCE_MISMATCH')
   const sources = Array.isArray(value.stockPool?.sources)
@@ -512,7 +516,7 @@ export function toDetail(row: StrategyLabStrategyRow, db?: Database.Database): S
   }
 }
 
-export function ensureDefaultStrategyLabStrategies(db: Database.Database): void {
+export function ensureLegacyStrategyLabStrategies(db: Database.Database): void {
   for (const strategy of BUILTIN_STRATEGIES) {
     const key = strategy.name === '个性选股白盒模板'
       ? 'builtin-screener'
@@ -597,4 +601,13 @@ export function deleteStrategyLabStrategy(db: Database.Database, id: number): vo
 export function setStrategyLabStrategyEnabled(db: Database.Database, id: number, enabled: boolean): StrategyLabStrategyDetail {
   const saved = setStrategyEnabled(db, id, enabled)
   return toDetail(saved, db)
+}
+
+export function validateStrategyLabRuleDraft(value: StrategyLabRuleDraft, source: StrategyLabStrategySource): StrategyLabRuleDraft {
+  return validatePublicLimitUpDraft(value, source) ?? validateLegacyStrategyLabRuleDraft(value, source)
+}
+
+export function ensureDefaultStrategyLabStrategies(db: Database.Database): void {
+  ensureLegacyStrategyLabStrategies(db)
+  ensurePublicLimitUpStrategies(db)
 }

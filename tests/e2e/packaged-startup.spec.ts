@@ -31,6 +31,24 @@ test('actual packaged application displays workbench, settings and exits cleanly
     if (process.platform === 'win32') expect(resolve(runtime.dataPath)).toBe(resolve(dirname(executable), 'data'))
     else expect(resolve(runtime.dataPath)).toBe(profile)
     const guide = page.getByTestId('cold-start-guide')
+    await expect(async () => {
+      if (await guide.isVisible()) await guide.getByLabel('关闭引导').click({ timeout: 2000 })
+      if (!await page.getByText('策略实验室', { exact: true }).first().isVisible()) await page.getByText('短线策略', { exact: true }).first().click({ timeout: 2000 })
+      await page.getByText('策略实验室', { exact: true }).first().click({ timeout: 2000 })
+      await expect(page.getByTestId('strategy-lab-main')).toBeVisible({ timeout: 2000 })
+    }).toPass({ timeout: 45000 })
+    const templates = await page.evaluate(() => window.api.strategyLab.listStrategies())
+    expect(templates.ok).toBe(true)
+    if (!templates.ok) throw new Error(templates.error)
+    expect(templates.strategies.filter(item => item.strategyKey.startsWith('builtin-public-limit-'))).toHaveLength(3)
+    await page.getByText('免费 · 早封首板', { exact: true }).first().click()
+    await expect(page.getByTestId('public-limit-lab-guide')).toContainText('无需 Tushare Key 或 Python')
+    await expect(page.getByTestId('public-limit-run-plan')).toContainText('收益回测不可用')
+    await page.getByRole('button', { name: '配置', exact: true }).click()
+    await expect(page.getByTestId('public-limit-strategy-editor')).toBeVisible()
+    await expect(page.getByTestId('public-limit-strategy-editor')).toContainText('免费盘后涨停规则')
+    await page.getByRole('button', { name: '关闭配置', exact: true }).click()
+    await page.getByTestId('nav-tab-feed').click()
     // Existing profiles can finish initialization after the first window appears.
     // Retry the user navigation, not the application assertions or IPC responses.
     await expect(async () => {

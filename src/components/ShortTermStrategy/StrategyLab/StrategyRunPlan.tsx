@@ -1,8 +1,11 @@
 import type { StrategyLabView } from './strategyLabModel'
 import type { StrategyLabRunRow, StrategyLabRunSummary } from './strategyLabModel'
 import { buildRunPlan, viewTitle } from './strategyLabModel'
+import { PUBLIC_LIMIT_UP_RULES, type PublicLimitUpRuleId } from '../../../../electron/shared/publicLimitUpRules'
+import { publicLimitUpRuleDescription } from '../../../../electron/shared/publicLimitUpStrategy'
 
 interface StrategyRunPlanProps {
+  publicRuleId?: PublicLimitUpRuleId
   activeView: StrategyLabView
   latestRun?: StrategyLabRunRow | null
   latestSummary?: StrategyLabRunSummary | null
@@ -18,7 +21,15 @@ function statusText(status?: StrategyLabRunRow['status']): string {
   return '未运行'
 }
 
-export function StrategyRunPlan({ activeView, latestRun, latestSummary, onCreateBacktest }: StrategyRunPlanProps): JSX.Element {
+export function StrategyRunPlan({ activeView, publicRuleId, latestRun, latestSummary, onCreateBacktest }: StrategyRunPlanProps): JSX.Element {
+  if (publicRuleId) return <section data-testid="public-limit-run-plan" className="space-y-3 text-xs leading-6 text-slate-700 dark:text-slate-200">
+    <h3 className="text-sm font-semibold">免费 · {PUBLIC_LIMIT_UP_RULES[publicRuleId].label}</h3>
+    <p>{publicLimitUpRuleDescription(publicRuleId)}</p>
+    <p>运行状态：{statusText(latestRun?.status)}；缓存日期：{latestSummary?.dateEnd ?? '运行后确认'}。</p>
+    <p>原池 {latestSummary?.totalStocks ?? '—'} 只；命中 {latestSummary?.matchedCount ?? '—'} 只。</p>
+    <p>来源：东方财富原生涨停池。采集时间：{typeof latestSummary?.coverage?.observedAt === 'number' ? new Date(latestSummary.coverage.observedAt).toLocaleString() : '运行后确认'}。</p>
+    <p>全市场覆盖未知；仅保存筛选事实，不补拉分钟、竞价或筹码。没有历史时点数据，收益回测不可用。</p>
+  </section>
   const items = buildRunPlan(activeView)
   return (
     <div className="flex min-h-0 flex-col">

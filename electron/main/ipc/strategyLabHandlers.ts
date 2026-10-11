@@ -21,6 +21,7 @@ import {
 } from '../services/strategyLabRunService'
 import type { StrategyLabStrategySource } from '../database/types'
 import type { TradePlan } from '../services/backtest/types'
+import { PUBLIC_LIMIT_UP_STRATEGY_ERRORS } from '../../shared/publicLimitUpStrategy'
 
 function parsePositiveInt(value: unknown): number | null {
   const num = typeof value === 'number' ? value : Number(value)
@@ -33,7 +34,7 @@ function parseSource(value: unknown): StrategyLabStrategySource | undefined {
 
 function errorPayload(err: unknown, fallback: string): { ok: false; error: string; code: string } {
   const message = err instanceof Error ? err.message : String(err)
-  return { ok: false, error: message, code: message || fallback }
+  return { ok: false, error: PUBLIC_LIMIT_UP_STRATEGY_ERRORS[message] ?? message, code: message || fallback }
 }
 
 export function registerStrategyLabHandlers(getMainWindow?: () => Electron.BrowserWindow | null): void {

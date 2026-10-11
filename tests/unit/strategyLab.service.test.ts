@@ -40,7 +40,7 @@ function createDb(): Database.Database {
 }
 
 describe('strategyLabService', () => {
-  it('初始化三个内置策略模板', () => {
+  it('初始化原有模板与三个免费盘后规则模板', () => {
     const db = createDb()
     ensureDefaultStrategyLabStrategies(db)
 
@@ -48,6 +48,9 @@ describe('strategyLabService', () => {
     expect(strategies.map(item => item.strategyKey).sort()).toEqual([
       'builtin-condition-blocks',
       'builtin-new-rule',
+      'builtin-public-limit-continuous',
+      'builtin-public-limit-earlyFirst',
+      'builtin-public-limit-secondBoard',
       'builtin-screener',
     ])
     expect(strategies.every(item => item.isBuiltin)).toBe(true)

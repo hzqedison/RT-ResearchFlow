@@ -7,6 +7,7 @@ import type {
 } from '../../../../electron/main/services/strategyLabService'
 import type { BlockStrategyTemplate } from '../../../../electron/main/services/conditionBlocks/types'
 import { ConditionRuleEditor } from './ConditionRuleEditor'
+import { PublicLimitUpStrategyEditor } from './PublicLimitUpStrategyEditor'
 import {
   cloneConditionTemplate,
   createDefaultMinuteTemplate,
@@ -95,6 +96,7 @@ export function StrategyRuleBuilder({ strategyId, onSaved, onClose, onDirtyChang
   const [editingId, setEditingId] = useState<number | null>(null)
   const [isBuiltinSource, setIsBuiltinSource] = useState(false)
   const [unsupportedScreener, setUnsupportedScreener] = useState(false)
+  const [publicStrategy, setPublicStrategy] = useState<StrategyLabStrategyDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -111,6 +113,7 @@ export function StrategyRuleBuilder({ strategyId, onSaved, onClose, onDirtyChang
       setMessage(null)
       setDirty(false)
       setUnsupportedScreener(false)
+      setPublicStrategy(null)
       if (!strategyId) {
         setEditingId(null)
         setIsBuiltinSource(false)
@@ -126,6 +129,10 @@ export function StrategyRuleBuilder({ strategyId, onSaved, onClose, onDirtyChang
           return
         }
         const detail = res.strategy
+        if (detail.ruleDraft.publicLimitUpProfile) {
+          setPublicStrategy(detail)
+          return
+        }
         if (detail.source === 'screener') {
           setUnsupportedScreener(true)
           setEditingId(null)
@@ -287,6 +294,8 @@ export function StrategyRuleBuilder({ strategyId, onSaved, onClose, onDirtyChang
   }
 
   if (loading) return <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">正在读取策略配置...</div>
+
+  if (publicStrategy) return <PublicLimitUpStrategyEditor key={publicStrategy.id} strategy={publicStrategy} onSaved={onSaved} onClose={onClose} onDirtyChange={onDirtyChange} />
 
   return (
     <div data-testid="strategy-rule-builder" className="bg-white dark:bg-slate-900">

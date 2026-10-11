@@ -1,10 +1,12 @@
 import { StrategyInsightPanel } from './StrategyInsightPanel'
 import { StrategyRunPlan } from './StrategyRunPlan'
+import type { PublicLimitUpRuleId } from '../../../../electron/shared/publicLimitUpRules'
 import type { StrategyLabMatchRow, StrategyLabRunRow, StrategyLabRunSummary, StrategyLabView } from './strategyLabModel'
 
 export type StrategySideTab = 'run' | 'insight'
 
 interface StrategySidePanelProps {
+  publicRuleId?: PublicLimitUpRuleId
   activeView: StrategyLabView
   latestRun?: StrategyLabRunRow | null
   latestSummary?: StrategyLabRunSummary | null
@@ -14,7 +16,7 @@ interface StrategySidePanelProps {
   onCreateBacktest?: () => void
 }
 
-export function StrategySidePanel({ activeView, latestRun, latestSummary, match, activeTab, onActiveTabChange, onCreateBacktest }: StrategySidePanelProps): JSX.Element {
+export function StrategySidePanel({ activeView, publicRuleId, latestRun, latestSummary, match, activeTab, onActiveTabChange, onCreateBacktest }: StrategySidePanelProps): JSX.Element {
   const runCount = latestRun ? 1 : 0
   const insightCount = match ? 1 : 0
 
@@ -54,7 +56,7 @@ export function StrategySidePanel({ activeView, latestRun, latestSummary, match,
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {activeTab === 'run' ? (
-          <StrategyRunPlan activeView={activeView} latestRun={latestRun} latestSummary={latestSummary} onCreateBacktest={onCreateBacktest} />
+          <StrategyRunPlan activeView={activeView} publicRuleId={publicRuleId} latestRun={latestRun} latestSummary={latestSummary} onCreateBacktest={onCreateBacktest} />
         ) : (
           <StrategyInsightPanel activeView={activeView} match={match} />
         )}

@@ -53,7 +53,8 @@ export function StrategyLab({ initialView = 'overview' }: StrategyLabProps): JSX
 
   const latestRun = runs[0] ?? null
   const latestSummary = useMemo(() => parseRunSummary(latestRun), [latestRun])
-  const canCreateBacktest = selectedStrategy?.actions.createBacktest === true
+  const publicProfile = selectedStrategy?.ruleDraft.publicLimitUpProfile
+  const canCreateBacktest = !publicProfile && selectedStrategy?.actions.createBacktest === true
   const selectedTemplate = useMemo(() => {
     return templates.find(template => template.strategyId && template.strategyId === selectedStrategyId)
       ?? templates.find(template => template.id === activeView)
@@ -67,7 +68,7 @@ export function StrategyLab({ initialView = 'overview' }: StrategyLabProps): JSX
       { label: '日线预筛', value: String((coverage.dailyPrefilteredStocks as number | undefined) ?? (coverage.dailyCandidateStocks as number | undefined) ?? '—'), note: '条件积木运行时展示真实预筛数', tone: 'slate' },
       { label: '分钟完整', value: String((coverage.minuteCompleteStocks as number | undefined) ?? '—'), note: '分钟覆盖完整股票数', tone: 'indigo' },
       { label: '实际评估', value: String((coverage.evaluatedStocks as number | undefined) ?? latestSummary?.totalStocks ?? '—'), note: '进入策略求值的样本数', tone: 'emerald' },
-      { label: '当前命中', value: String(matches.length || latestSummary?.matchedCount || '—'), note: latestRun ? `来自 run #${latestRun.id}` : '尚未运行统一策略', tone: 'rose' },
+      { label: '当前命中', value: String(latestRun ? latestSummary?.matchedCount ?? matches.length : '—'), note: latestRun ? `来自 run #${latestRun.id}` : '尚未运行统一策略', tone: 'rose' },
     ]
   }, [latestRun, latestSummary, matches.length])
 
@@ -156,7 +157,7 @@ export function StrategyLab({ initialView = 'overview' }: StrategyLabProps): JSX
     setBuilderDirty(false)
     if (template.strategyId) setSelectedStrategyId(template.strategyId)
     setActiveView(template.id)
-    setShowBuilder(template.id === 'newRule' || template.source === 'custom')
+    setShowBuilder(false)
   }, [guardBuilderClose, showBuilder])
 
   const handleDuplicate = useCallback(async (template: StrategyTemplateCard) => {
@@ -224,7 +225,7 @@ export function StrategyLab({ initialView = 'overview' }: StrategyLabProps): JSX
     setCreatingNew(false)
     setSelectedStrategyId(strategy.id)
     setSelectedStrategy(strategy)
-    setActiveView('conditionBlocks')
+    setActiveView(strategy.ruleDraft.publicLimitUpProfile ? 'overview' : 'conditionBlocks')
     await loadStrategyLabData(undefined, strategy.id)
     if (runAfterSave) {
       setShowBuilder(false)
@@ -274,7 +275,7 @@ export function StrategyLab({ initialView = 'overview' }: StrategyLabProps): JSX
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
             <span className="inline-flex min-h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-3 font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              {selectedStrategy ? (selectedStrategy.runConfig.scanMode === 'quick' ? '快速扫描' : selectedStrategy.runConfig.scanMode === 'complete' ? '完整扫描' : '两阶段（待实现）') : '尚未保存'}
+              {publicProfile ? '免费盘后规则' : selectedStrategy ? (selectedStrategy.runConfig.scanMode === 'quick' ? '快速扫描' : selectedStrategy.runConfig.scanMode === 'complete' ? '完整扫描' : '两阶段（待实现）') : '尚未保存'}
             </span>
             <button type="button" onClick={() => setShowBuilder(true)} disabled={showBuilder} aria-expanded={showBuilder} className="min-h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:cursor-default disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:disabled:bg-slate-800 dark:disabled:text-slate-500">
               {showBuilder ? '配置已打开' : '配置'}
@@ -290,6 +291,10 @@ export function StrategyLab({ initialView = 'overview' }: StrategyLabProps): JSX
 
         <div className="min-h-0 flex-1 overflow-hidden">
           <div data-testid="strategy-lab-scroll" className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto bg-slate-100 p-3 dark:bg-slate-950">
+            {publicProfile && <section data-testid="public-limit-lab-guide" className="rounded-md border border-cyan-200 bg-cyan-50 px-4 py-3 text-xs leading-6 text-cyan-900 dark:border-cyan-900 dark:bg-cyan-950/30 dark:text-cyan-100">
+              免费链路：配置中心 → 数据源 → 同步免费涨停池 → 返回本页运行扫描 → 查看命中证据和走势图。无需 Tushare Key 或 Python。
+              <p>仅筛选已核验缓存日的涨停池，不代表全市场或竞价。命中分数表示规则通过，不是收益预测；历史收益回测暂不可用。</p>
+            </section>}
             {runProgress && (running || runProgress.stage === 'failed' || runProgress.stage === 'cancelled') && (
               <section aria-live="polite" className="rounded-md border border-cyan-200 bg-cyan-50 px-4 py-3 dark:border-cyan-900/60 dark:bg-cyan-950/25">
                 <div className="flex items-center justify-between gap-3 text-xs"><span className="font-medium text-cyan-900 dark:text-cyan-100">{runProgress.message}</span><span className="font-mono text-cyan-700 dark:text-cyan-300">{runProgress.total > 0 ? `${runProgress.current}/${runProgress.total}` : '处理中'}</span></div>
@@ -327,6 +332,7 @@ export function StrategyLab({ initialView = 'overview' }: StrategyLabProps): JSX
       <aside data-testid="strategy-evidence-sidebar" className="hidden min-h-0 w-[300px] shrink-0 flex-col border-l border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950/60 xl:flex">
           <StrategySidePanel
             activeView={selectedTemplate?.id ?? activeView}
+            publicRuleId={publicProfile?.ruleId}
             latestRun={latestRun}
             latestSummary={latestSummary}
             match={matches.find(item => item.id === selectedMatchId) ?? null}
@@ -389,6 +395,7 @@ export function StrategyLab({ initialView = 'overview' }: StrategyLabProps): JSX
             <div className="min-h-0 flex-1">
               <StrategySidePanel
                 activeView={selectedTemplate?.id ?? activeView}
+                publicRuleId={publicProfile?.ruleId}
                 latestRun={latestRun}
                 latestSummary={latestSummary}
                 match={matches.find(item => item.id === selectedMatchId) ?? null}
