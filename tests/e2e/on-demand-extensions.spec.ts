@@ -1,6 +1,6 @@
 import { expect, test, _electron as electron } from '@playwright/test'
-import { mkdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { existsSync, mkdirSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 
 test('actual public package installs AKShare on explicit request and persists an isolated interpreter', async () => {
   test.setTimeout(900_000)
@@ -43,11 +43,8 @@ test('actual public package installs AKShare on explicit request and persists an
     const status = await page.evaluate(() => window.api.datasource.bridgeStatus())
     expect(status.ok).toBe(true)
     if (status.ok) expect((status.data as { packages: Record<string, unknown> }).packages.akshare).toEqual(expect.any(String))
-    const noBundledRuntime = await app.evaluate(async () => {
-      const fs = await import('node:fs')
-      const path = await import('node:path')
-      return !fs.existsSync(path.join(process.resourcesPath, 'private-python-runtime'))
-    })
-    expect(noBundledRuntime).toBe(true)
+    const resources = process.platform === 'darwin' ? join(dirname(dirname(executable)), 'Resources')
+      : join(dirname(executable), 'resources')
+    expect(existsSync(join(resources, 'private-python-runtime'))).toBe(false)
   } finally { await app.close() }
 })
