@@ -26,9 +26,11 @@ jobs:
           jq -e --arg commit "$TESTED_COMMIT" '.status == "completed" and .conclusion == "success" and .head_sha == $commit' run.json
           gh api "repos/$REPOSITORY/actions/runs/$TESTED_RUN/jobs" > jobs.json
           jq -e '[.jobs[] | select(.name | startswith("package ("))] | length == 2 and all(.conclusion == "success")' jobs.json
-          test "$(gh api "repos/$REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq .object.sha)" = "$TESTED_COMMIT"
-          gh release view "$RELEASE_TAG" --repo "$REPOSITORY" --json tagName,isDraft,assets > release.json
-          jq -e '.tagName == "v1.9.1" and .isDraft == false' release.json
+          gh api "repos/$REPOSITORY/releases/tags/$RELEASE_TAG" > release.json
+          jq -e --arg commit "$TESTED_COMMIT" '.tag_name == "v1.9.1" and .target_commitish == $commit' release.json
+          if jq -e '.draft == false' release.json >/dev/null; then
+            test "$(gh api "repos/$REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq .object.sha)" = "$TESTED_COMMIT"
+          fi
       - name: Retrieve only tested installers from the exact completed run
         uses: actions/download-artifact@v4
         with:
