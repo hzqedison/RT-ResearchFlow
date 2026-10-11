@@ -9,6 +9,7 @@ import { BacktestDeleteDialog } from './BacktestDeleteDialog'
 import { BacktestEquityChart } from './BacktestEquityChart'
 import { BacktestCredibilityBand, type BacktestCredibilityAssessmentView } from './BacktestCredibilityBand'
 import { StrategyEffectivenessWorkbench } from './StrategyEffectivenessWorkbench'
+import { CapitalSimulationPanel } from './CapitalSimulationPanel'
 
 type EntryRule = 'nextOpen' | 'signalClose'
 type SignalSource = 'shortTerm' | 'trendAlerts' | 'decisionSignals'
@@ -1040,16 +1041,18 @@ export function StrategyBacktestPanel({
   initialStrategyKey,
   onInitialEntryApplied,
 }: StrategyBacktestPanelProps = {}): JSX.Element {
-  const [view, setView] = useState<'effectiveness' | 'history'>(initialView)
+  const [view, setView] = useState<'effectiveness' | 'history' | 'capital'>(initialView)
+  const [capitalVisited, setCapitalVisited] = useState(false)
   const [historyVisited, setHistoryVisited] = useState(initialView === 'history')
 
   useEffect(() => {
     onInitialEntryApplied?.()
   }, [onInitialEntryApplied])
 
-  const selectView = (next: 'effectiveness' | 'history'): void => {
+  const selectView = (next: 'effectiveness' | 'history' | 'capital'): void => {
     setView(next)
     if (next === 'history') setHistoryVisited(true)
+    if (next === 'capital') setCapitalVisited(true)
   }
 
   return (
@@ -1075,7 +1078,8 @@ export function StrategyBacktestPanel({
         >
           历史报告
         </button>
-        <span className="ml-auto hidden min-h-11 items-center text-xs text-slate-400 md:flex">历史报告保留原资金净值模型；效果评估不创建新记录</span>
+        <button type="button" role="tab" aria-selected={view === 'capital'} data-testid="strategy-backtest-view-capital" onClick={() => selectView('capital')} className={`min-h-11 border-b-2 px-4 text-sm font-medium ${view === 'capital' ? 'border-cyan-600 text-cyan-800 dark:text-cyan-200' : 'border-transparent text-slate-500'}`}>组合资金回测</button>
+        <span className="ml-auto hidden min-h-11 items-center text-xs text-slate-400 md:flex">旧报告保留原口径；组合资金回测单独记录资金与仓位假设</span>
       </div>
       <div className={view === 'effectiveness' ? 'min-h-0 flex-1' : 'hidden'} role="tabpanel" aria-label="策略效果评估">
         <StrategyEffectivenessWorkbench />
@@ -1085,6 +1089,7 @@ export function StrategyBacktestPanel({
           <LegacyStrategyBacktestPanel initialStrategyKey={initialStrategyKey} />
         </div>
       )}
+      {capitalVisited && <div className={view === 'capital' ? 'min-h-0 flex-1' : 'hidden'} role="tabpanel" aria-label="组合资金回测"><CapitalSimulationPanel /></div>}
     </div>
   )
 }

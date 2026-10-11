@@ -15,6 +15,7 @@ const name = process.platform === 'darwin'
 const filename = path.join(root, name)
 async function main() {
   if (Number(version.split('.')[1]) >= 16 && process.env.RT_PACKAGED_LEDGER_VERIFIED !== '1') throw Error('PACKAGED_LEDGER_ACCEPTANCE_REQUIRED')
+  if (Number(version.split('.')[1]) >= 17 && process.env.RT_PACKAGED_CAPITAL_VERIFIED !== '1') throw Error('PACKAGED_CAPITAL_ACCEPTANCE_REQUIRED')
   const executable = process.env.RT_PACKAGED_EXE
   if (!executable || !path.isAbsolute(executable)) throw Error('PACKAGED_EXECUTABLE_REQUIRED')
   const proof = JSON.parse(fs.readFileSync(path.join(root, `packaged-ai-credentials-proof-${process.platform}-${process.arch}.json`), 'utf8'))
@@ -32,6 +33,7 @@ async function main() {
     packagedStartupAndExit: true, packagedPdfCanvasSqlite: true, actualPrivateAkshareInstall: true,
     localCredentialPersistenceVerified: true, credentialFixture: 'synthetic-loopback',
     localAccountLedgerPersistenceVerified: process.env.RT_PACKAGED_LEDGER_VERIFIED === '1',
+    localPortfolioSimulationPersistenceVerified: process.env.RT_PACKAGED_CAPITAL_VERIFIED === '1',
     liveMarketDataAccepted: false, brokerOrdersSubmitted: false, published: false }
   fs.writeFileSync(path.join(root, `acceptance-${label}.json`), JSON.stringify(receipt, null, 2) + '\n')
   console.log(JSON.stringify(receipt))

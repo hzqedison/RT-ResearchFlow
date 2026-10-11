@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { AppendLedgerEvent, CreateLedgerAccount, LedgerAccount, LedgerRecord, LedgerResult, LedgerSnapshot } from '../shared/accountLedger'
+import type { CapitalCatalog, CapitalReport, CapitalRequest, CapitalResult } from '../shared/capitalSimulation'
 import type { HistoricalDailyProgressResult } from '../shared/historicalDailyProgress'
 import type { ConceptSource, DiagnosticReadiness, EvaluationCounts, FactSyncReceipt } from '../shared/dataReadiness'
 import type { SupportDiagnosticPreview, SupportFeedbackResult, SupportFeedbackSaveOutcome } from '../shared/supportDiagnostics'
@@ -3637,6 +3638,11 @@ const api = {
   },
 
   // ── FR-168: 持仓批量 AI 预测 ────────────────────────
+  capitalSimulation: {
+    catalog: () => ipcRenderer.invoke('capitalSimulation:catalog') as Promise<CapitalResult<CapitalCatalog>>,
+    run: (request: CapitalRequest) => ipcRenderer.invoke('capitalSimulation:run', request) as Promise<CapitalResult<CapitalReport>>,
+    get: (id: string) => ipcRenderer.invoke('capitalSimulation:get', id) as Promise<CapitalResult<CapitalReport>>,
+  },
   accountLedger: {
     list: () => ipcRenderer.invoke('accountLedger:list') as Promise<LedgerResult<LedgerAccount[]>>,
     get: (accountId: string) => ipcRenderer.invoke('accountLedger:get', accountId) as Promise<LedgerResult<LedgerSnapshot>>,
