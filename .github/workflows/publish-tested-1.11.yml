@@ -50,11 +50,13 @@ jobs:
           test "$MAC_COMMIT" = "$WINDOWS_COMMIT"
           [[ "$WINDOWS_COMMIT" =~ ^[a-f0-9]{40}$ ]]
           [[ "$MAC_RUN" =~ ^[0-9]+$ ]]
-          if ! gh release view "$RELEASE_TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
+          if existing_url="$(gh release view "$RELEASE_TAG" --repo "$REPOSITORY" --json apiUrl --jq .apiUrl 2>/dev/null)"; then
+            gh api "$existing_url" > release.json
+          else
             gh api "repos/$REPOSITORY/contents/docs/releases/v1.11.0.md?ref=$WINDOWS_COMMIT" --jq .content | base64 --decode > release-notes.md
-            gh release create "$RELEASE_TAG" --repo "$REPOSITORY" --target "$WINDOWS_COMMIT" --draft --title 'RT-ResearchFlow 1.11' --notes-file release-notes.md
+            gh api --method POST "repos/$REPOSITORY/releases" -f tag_name="$RELEASE_TAG" -f target_commitish="$WINDOWS_COMMIT" -F draft=true -f name='RT-ResearchFlow 1.11' -f body="$(cat release-notes.md)" > release.json
           fi
-          gh api "repos/$REPOSITORY/releases?per_page=100" | jq -e '[.[] | select(.tag_name == "v1.11.0")] | if length == 1 then .[0] else error("draft identity missing or ambiguous") end' > release.json
+          jq -e --arg tag "$RELEASE_TAG" '.tag_name == $tag' release.json
           jq -e --arg sha "$WINDOWS_COMMIT" '.draft == true and .target_commitish == $sha' release.json
       - name: Retrieve only already-tested installers and lifecycle receipt
         shell: bash

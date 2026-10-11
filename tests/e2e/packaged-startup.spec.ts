@@ -31,10 +31,15 @@ test('actual packaged application displays workbench, settings and exits cleanly
     if (process.platform === 'win32') expect(resolve(runtime.dataPath)).toBe(resolve(dirname(executable), 'data'))
     else expect(resolve(runtime.dataPath)).toBe(profile)
     const guide = page.getByTestId('cold-start-guide')
-    if (await guide.isVisible()) await guide.getByLabel('关闭引导').click()
-    await page.getByTestId('open-config-drawer-btn').click()
-    await page.getByTestId('config-tab-diagnostics').click()
-    await expect(page.getByTestId('support-generate-preview')).toBeVisible()
+    // Existing profiles can finish initialization after the first window appears.
+    // Retry the user navigation, not the application assertions or IPC responses.
+    await expect(async () => {
+      if (await guide.isVisible()) await guide.getByLabel('关闭引导').click({ timeout: 2000 })
+      const diagnostics = page.getByTestId('config-tab-diagnostics')
+      if (!await diagnostics.isVisible()) await page.getByTestId('open-config-drawer-btn').click({ timeout: 2000 })
+      await diagnostics.click({ timeout: 2000 })
+      await expect(page.getByTestId('support-generate-preview')).toBeVisible({ timeout: 2000 })
+    }).toPass({ timeout: 45000 })
     await page.getByRole('button', { name: '数据源', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Tushare Key 绑定与验证' })).toBeVisible()
     await expect(page.getByRole('heading', { name: '行情来源（日线，可多选）' })).toBeVisible()
