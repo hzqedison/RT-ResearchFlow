@@ -134,20 +134,23 @@ export function registerShortTermHandlers(): void {
     if (!payload || !(ALLOWED_TASKS as readonly string[]).includes(payload.task)) {
       return { ok: false as const, error: 'INVALID_PARAM' as const }
     }
-    // Tushare 配置校验：未启用直接报错；cron job 内部也有同样校验
-    const dsConfig = getDataSourceConfig(getDb())
-    if (!dsConfig.tushareEnabled || !dsConfig.tushareTokenEncrypted) {
-      return { ok: false as const, error: 'TUSHARE_DISABLED' as const }
-    }
-    // FR-176: 股票走势图冷启动同步需要等待 stock_basic 写库完成, 以便前端立即重试搜索。
+    // 基础资料服务支持公开源兜底；先等待实际写入，不能被付费接口配置检查拦截。
     if (payload.task === 'stockBasic') {
       try {
-        await runStockBasicSyncJob()
+        const result = await runStockBasicSyncJob()
+        if (!result || !Number.isSafeInteger(result.rowCount) || result.rowCount <= 0) {
+          return { ok: false as const, error: 'SYNC_FAILED' as const }
+        }
       } catch (err) {
         console.error('[shortTerm:syncDataNow] task=stockBasic error:', err)
         return { ok: false as const, error: 'SYNC_FAILED' as const }
       }
       return { ok: true as const }
+    }
+    // 其余任务当前仍依赖 Tushare；配置就绪不代表接口权限或数据写入已确认。
+    const dsConfig = getDataSourceConfig(getDb())
+    if (!dsConfig.tushareEnabled || !dsConfig.tushareTokenEncrypted) {
+      return { ok: false as const, error: 'TUSHARE_DISABLED' as const }
     }
     // 异步触发，不阻塞 IPC 返回；错误在 cron job 内部记录日志
     void (async () => {

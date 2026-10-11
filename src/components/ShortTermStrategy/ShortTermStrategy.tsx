@@ -293,7 +293,6 @@ export function ShortTermStrategy(): JSX.Element {
     }
   }
 
-
   // 当前 THS/DC 源持续订阅，兼容后台同步；进度不代表成功回执。
   useEffect(() => {
     setThsSyncProgress(null)

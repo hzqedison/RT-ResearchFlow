@@ -58,3 +58,4 @@ jobs:
             gh release upload "$TAG" prepare-11681863167.zip --repo "$GITHUB_REPOSITORY"
           fi
           test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" = true
+

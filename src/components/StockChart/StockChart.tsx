@@ -628,12 +628,12 @@ export function StockChart() {
     try {
       const result = await window.api.shortTerm.syncDataNow("stockBasic");
       if (!result.ok) {
-        setSearchError(result.error === "TUSHARE_DISABLED" ? "请先在数据源页启用 Tushare" : "股票基础数据同步失败");
+        setSearchError("股票基础资料同步未完成，请检查网络或稍后重试。公开源同步无需 Tushare Token。");
         return;
       }
       await querySearchCandidates(keyword);
-    } catch (err) {
-      setSearchError(err instanceof Error ? err.message : "股票基础数据同步失败");
+    } catch {
+      setSearchError("股票基础资料同步未完成，请检查网络或稍后重试。公开源同步无需 Tushare Token。");
     } finally {
       setStockBasicSyncing(false);
     }

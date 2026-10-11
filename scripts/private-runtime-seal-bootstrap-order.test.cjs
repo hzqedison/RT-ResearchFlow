@@ -22,3 +22,4 @@ test('recipient evidence still rejects a changed reader digest', async () => {
   const seal = bootstrap()
   await assert.rejects(seal.verifyObligationCoverage({trust: {}, repositoryRoot: root, sourceMembers: new Map([['scripts/private-runtime-recipient-materials.cjs', '0'.repeat(64)]])}), /EXECUTED_MODULE_CHANGED/)
 })
+

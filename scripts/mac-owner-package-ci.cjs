@@ -12,6 +12,7 @@ const assembler = require('./bundle-private-python-runtime.cjs')
 const sourceDelivery = require('./mac-owner-source-delivery.cjs')
 const materialDelivery = require('./mac-distribution-materials.cjs')
 const ROOT = path.resolve(__dirname, '..')
+const VERSION = require('../package.json').version
 const REPO = 'hzqedison/RT-ResearchFlow'
 const REPO_ID = 1408465497
 const BRANCH = 'refs/heads/codex/runtime-owner-cache-1.7'
@@ -28,7 +29,7 @@ const hash = b => crypto.createHash('sha256').update(b).digest('hex')
 function fail(s) { throw Error(s) }
 function context() {
  const target = process.platform + '-' + process.arch
- if (!PINS[target] || process.env.GITHUB_REPOSITORY !== REPO || process.env.GITHUB_REF !== BRANCH ||
+ if (!/^1\.(7|8)\.0$/.test(VERSION) || !PINS[target] || process.env.GITHUB_REPOSITORY !== REPO || process.env.GITHUB_REF !== BRANCH ||
      process.env.RUNNER_ENVIRONMENT !== 'github-hosted' || !/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA || '') ||
      !process.env.GITHUB_TOKEN || !path.isAbsolute(process.env.RUNNER_TEMP || '')) fail('OWNER_CONTEXT_INVALID')
  const temp = fs.realpathSync(process.env.RUNNER_TEMP)
@@ -57,7 +58,7 @@ function responseFor(url, depth=0) {
    u.hostname==='release-assets.githubusercontent.com' || u.hostname.endsWith('.blob.core.windows.net') ||
    u.hostname.endsWith('.actions.githubusercontent.com')
   if (u.protocol!=='https:' || u.username || u.password || !allowed || depth>5) return reject(Error('OWNER_DOWNLOAD_HOST'))
-  const headers={'User-Agent':'rt-owner-package-1.7',Accept:'application/vnd.github+json'}
+  const headers={'User-Agent':'rt-owner-package-'+VERSION,Accept:'application/vnd.github+json'}
   if (u.hostname==='api.github.com') headers.Authorization='Bearer ' + process.env.GITHUB_TOKEN
   const req=https.get(u,{headers,agent:false},res=>{
    if ([301,302,303,307,308].includes(res.statusCode)) {
@@ -185,7 +186,7 @@ async function prepare() {
  if(fs.existsSync(path.join(outputRoot,c.target))) fail('OWNER_BUNDLE_ALREADY_EXISTS')
  const result=assembler.assemble({lockPath,preparedRoot,assetsRoot,outputRoot,target:c.target})
  write(path.join(c.work,'ordinary-assembly-receipt.json'),{...result,formalLockSha256:FORMAL_SHA,
-  sourceCommit:c.sha,purpose:'owner-draft-package',releaseEligible:false,finalReleaseAuthorized:false})
+  version:VERSION,sourceCommit:c.sha,purpose:'owner-draft-package',releaseEligible:false,finalReleaseAuthorized:false})
  console.log('ORDINARY_ASSEMBLY_OK ' + JSON.stringify(result))
  const sourceRoot=path.join(c.work,'source');fs.mkdirSync(sourceRoot)
  const archive=await download('/zipball/' + c.sha,path.join(sourceRoot,'application-source.zip'),null,null,128*1024**2)
@@ -193,39 +194,54 @@ async function prepare() {
  const development=fs.readFileSync(developmentPath)
  if(development.length!==9907 || hash(development)!==sourceDelivery.development) fail('OWNER_DEVELOPMENT_BYTES')
  fs.writeFileSync(path.join(sourceRoot,'DEVELOPMENT-RUNTIME.txt'),development,{flag:'wx'})
- const notice='RT-ResearchFlow 1.7.0 owner draft corresponding source\nRepository: '+REPO+'\nSource commit: '+c.sha+
+ const notice='RT-ResearchFlow '+VERSION+' owner draft corresponding source\nRepository: '+REPO+'\nSource commit: '+c.sha+
   '\nFull source included here: application-source.zip\nArchive bytes: '+archive.size+'\nArchive SHA256: '+archive.sha256+
   '\nOfficial immutable source endpoint: https://api.github.com/repos/'+REPO+'/zipball/'+c.sha+
   '\nSource contains the application and committed build scripts/lockfile used for this package.\n'+
   'Developer runtime replacement instructions: DEVELOPMENT-RUNTIME.txt\n'+
   'Retained runtime sources/recipes/notices: ../../private-python-runtime/licenses/\n'+
-  'Mac supplemental notices/source: ../mac-final-obligations-1.7-20261011/\n'+
+  'Mac supplemental notices/source: ../python-runtime-mac/START-HERE.txt\n'+
   'No publisher private key is needed for an owned source fork. Official protections remain unchanged.\n'+
   'Source delivery is not evidence that a recipient relink was executed or final release was authorized.\n'
  fs.writeFileSync(path.join(sourceRoot,'SOURCE-ACCESS.txt'),notice,{flag:'wx'})
  const files=[];for(const name of sourceDelivery.names) files.push(await identity(path.join(sourceRoot,name)))
- write(path.join(sourceRoot,'source-receipt.json'),{kind:'rt-mac-owner-source-plan-v1',version:'1.7.0',repository:REPO,
+ write(path.join(sourceRoot,'source-receipt.json'),{kind:'rt-mac-owner-source-plan-v1',version:VERSION,repository:REPO,
   sourceCommit:c.sha,formalLockSha256:FORMAL_SHA,releaseEligible:false,files})
- sourceDelivery.load(sourceRoot)
+ sourceDelivery.load(sourceRoot,{version:VERSION,sourceCommit:c.sha})
  fs.appendFileSync(process.env.GITHUB_ENV,'RT_MAC_OWNER_SOURCE_ROOT='+sourceRoot+'\nRT_MAC_OWNER_WORK_ROOT='+c.work+'\n')
  console.log(JSON.stringify({target:c.target,ordinaryAssembly:result,sourceRoot,sourceArchive:archive,releaseEligible:false}))
 }
 async function finish() {
  const c=context(),release=path.join(ROOT,'release')
  const dmgs=fs.readdirSync(release).filter(n=>n.endsWith('.dmg'))
- if(dmgs.length!==1 || !dmgs[0].includes('1.7.0-'+process.arch)) fail('OWNER_DMG_OUTPUT')
+ if(dmgs.length!==1 || !dmgs[0].endsWith('-'+VERSION+'-'+process.arch+'.dmg')) fail('OWNER_DMG_OUTPUT')
  const apps=[]
  for(const e of fs.readdirSync(release,{withFileTypes:true})) if(e.isDirectory())
   for(const a of fs.readdirSync(path.join(release,e.name),{withFileTypes:true})) if(a.isDirectory() && a.name.endsWith('.app')) apps.push(path.join(release,e.name,a.name))
  if(apps.length!==1) fail('OWNER_APP_OUTPUT')
- const app=apps[0],product=path.basename(app,'.app'),resources=path.join(app,'Contents/Resources')
+ const product=path.basename(apps[0],'.app'),mount=path.join(c.work,'dmg-mount'),installed=path.join(c.work,'dmg-installed')
+ fs.mkdirSync(mount);fs.mkdirSync(installed)
+ function command(executable,args) {
+  const r=spawnSync(executable,args,{encoding:'utf8',timeout:120000,maxBuffer:1024*1024})
+  if(r.error || r.status!==0) { if(r.stderr) console.error(r.stderr);fail('OWNER_NATIVE_COMMAND_FAILED:'+executable) }
+  return r
+ }
+ command('hdiutil',['attach',path.join(release,dmgs[0]),'-nobrowse','-readonly','-mountpoint',mount])
+ const app=path.join(installed,product+'.app')
+ try { command('ditto',[path.join(mount,product+'.app'),app]) }
+ finally { command('hdiutil',['detach',mount]) }
+ const resources=path.join(app,'Contents/Resources')
+ const installedVersion=command('/usr/libexec/PlistBuddy',['-c','Print :CFBundleShortVersionString',path.join(app,'Contents/Info.plist')]).stdout.trim()
+ if(installedVersion!==VERSION) fail('OWNER_INSTALLED_VERSION_MISMATCH')
  const manifest=core.readValidatedRuntime(path.join(resources,'private-python-runtime'),c.target)
  if(manifest.manifest.sourceLockSha256!==FORMAL_SHA) fail('OWNER_PACKAGED_FORMAL_BINDING')
- const source=sourceDelivery.load(path.join(resources,'third-party/application-source'))
- if(source.plan.sourceCommit!==c.sha || !source.raw.equals(sourceDelivery.load(process.env.RT_MAC_OWNER_SOURCE_ROOT).raw)) fail('OWNER_PACKAGED_SOURCE_BINDING')
+ const source=sourceDelivery.load(path.join(resources,'third-party/application-source'),{version:VERSION,sourceCommit:c.sha})
+ if(!source.raw.equals(sourceDelivery.load(process.env.RT_MAC_OWNER_SOURCE_ROOT,{version:VERSION,sourceCommit:c.sha}).raw)) fail('OWNER_PACKAGED_SOURCE_BINDING')
  materialDelivery.checkDelivery({appOutDir:path.dirname(app),electronPlatformName:'darwin',arch:process.arch,packager:{appInfo:{productFilename:product}}})
  const verify=spawnSync('codesign',['--verify','--deep','--strict',app],{stdio:'inherit'})
  if(verify.error || verify.status!==0) fail('OWNER_SIGNATURE_VERIFY_FAILED')
+ const signature=command('codesign',['-d','--verbose=4',app])
+ if(!/^Signature=adhoc$/m.test(signature.stderr)) fail('OWNER_SIGNATURE_NOT_ADHOC')
  const smokeCode="const {createRequire}=require('node:module');const r=createRequire(process.argv[1]+'/package.json');const D=r('better-sqlite3');const db=new D(':memory:');if(db.prepare('SELECT 1 AS ok').get().ok!==1)throw Error('SQLITE_SMOKE');db.close();console.log(JSON.stringify({electron:process.versions.electron,modules:process.versions.modules,arch:process.arch,inMemory:true}));"
  const smoke=spawnSync(path.join(app,'Contents/MacOS',product),['-e',smokeCode,path.join(resources,'app.asar')],
   {env:{...stage.childEnvironment(process.env,c.work),ELECTRON_RUN_AS_NODE:'1'},encoding:'utf8',timeout:60000,maxBuffer:1024*1024})
@@ -233,11 +249,13 @@ async function finish() {
  console.log(smoke.stdout)
  const abi=JSON.parse(smoke.stdout.trim())
  if(!abi.electron || abi.arch!==process.arch || abi.inMemory!==true) fail('OWNER_SQLITE_ABI_SMOKE_IDENTITY')
- const receipt={kind:'rt-mac-owner-package-receipt-v1',target:c.target,version:'1.7.0',sourceCommit:c.sha,
+ const receipt={kind:'rt-mac-owner-package-receipt-v1',target:c.target,version:VERSION,sourceCommit:c.sha,
   formalLockSha256:FORMAL_SHA,runId:Number(process.env.GITHUB_RUN_ID),runAttempt:Number(process.env.GITHUB_RUN_ATTEMPT),
-  actualCopyVerified:true,sourcePlan:source.plan,sqliteAbiSmoke:abi,signatureVerified:true,
+  actualCopyVerified:true,installedFromDmg:true,installedVersion,sourcePlan:source.plan,sqliteAbiSmoke:abi,signatureVerified:true,
+  signing:'ad-hoc',developerIdSigned:false,notarizationVerified:false,
   releaseEligible:false,finalReleaseAuthorized:false,files:[await identity(path.join(release,dmgs[0]))]}
- write(path.join(release,'mac-owner-package-receipt-'+c.target+'.json'),receipt)
+ write(path.join(release,'mac-owner-package-receipt-'+VERSION+'-'+c.target+'.json'),receipt)
+ fs.writeFileSync(path.join(release,'SHA256SUMS-'+c.target+'.txt'),receipt.files.map(f=>f.sha256+'  '+f.path).join('\n')+'\n',{flag:'wx'})
  console.log(JSON.stringify(receipt))
 }
 async function upload(filename,name) {
@@ -245,7 +263,7 @@ async function upload(filename,name) {
  const u=new URL('https://uploads.github.com/repos/'+REPO+'/releases/'+DRAFT_ID+'/assets?name='+encodeURIComponent(name))
  await new Promise((resolve,reject)=>{
   const req=https.request(u,{method:'POST',headers:{Authorization:'Bearer '+process.env.GITHUB_TOKEN,
-   'User-Agent':'rt-owner-package-1.7','Content-Type':'application/octet-stream','Content-Length':stat.size}},res=>{
+   'User-Agent':'rt-owner-package-'+VERSION,'Content-Type':'application/octet-stream','Content-Length':stat.size}},res=>{
     let raw='';res.on('data',b=>{raw+=b;if(raw.length>1024*1024)res.destroy(Error('OWNER_UPLOAD_RESPONSE_BUDGET'))})
     res.on('error',reject);res.on('end',()=>{
      if(res.statusCode!==201)return reject(Error('OWNER_DRAFT_UPLOAD_'+res.statusCode))
@@ -257,8 +275,8 @@ async function upload(filename,name) {
 async function publish() {
  const c=context(),release=path.join(ROOT,'release'),before=await api('/releases/'+DRAFT_ID)
  if(before.id!==DRAFT_ID || before.tag_name!==TAG || before.draft!==true) fail('OWNER_RELEASE_NOT_DRAFT')
- const receiptPath=path.join(release,'mac-owner-package-receipt-'+c.target+'.json'),receipt=json(receiptPath)
- if(receipt.sourceCommit!==c.sha || receipt.target!==c.target || receipt.actualCopyVerified!==true || receipt.finalReleaseAuthorized!==false) fail('OWNER_PUBLISH_RECEIPT')
+ const receiptPath=path.join(release,'mac-owner-package-receipt-'+VERSION+'-'+c.target+'.json'),receipt=json(receiptPath)
+ if(receipt.version!==VERSION || receipt.sourceCommit!==c.sha || receipt.target!==c.target || receipt.actualCopyVerified!==true || receipt.installedFromDmg!==true || receipt.finalReleaseAuthorized!==false) fail('OWNER_PUBLISH_RECEIPT')
  for(const row of [...receipt.files,await identity(receiptPath)]) {
   const filename=path.join(release,row.path),actual=await identity(filename)
   if(actual.sha256!==row.sha256 || actual.size!==row.size) fail('OWNER_PUBLISH_BYTES_CHANGED')

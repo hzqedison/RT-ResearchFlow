@@ -9,7 +9,9 @@ const config = {
   files: [
     'out/**/*',
     '!out/**/*.map',
-    'node_modules/better-sqlite3/build/Release/*.node'
+    'node_modules/better-sqlite3/build/Release/*.node',
+    'node_modules/bindings/**/*',
+    'node_modules/file-uri-to-path/**/*'
   ],
   extraResources: [
     {

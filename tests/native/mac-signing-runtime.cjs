@@ -123,4 +123,3 @@ main().catch(error => {
     message: message.slice(0, 1024), productInstallerTested: false }))
   process.exitCode = 1
 })
-

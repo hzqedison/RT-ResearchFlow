@@ -301,11 +301,13 @@ FunctionEnd
     !else
       Goto rt_explicit_repair_refused
     !endif
+    !ifdef RT_REPAIR_ENABLE_CHANNEL
     rt_explicit_repair_completed:
     !insertmacro restoreExplicitRepairRegisters
     ClearErrors
     SetErrorLevel 0
     Quit
+    !endif
     rt_explicit_repair_refused:
     !insertmacro restoreExplicitRepairRegisters
     SetErrorLevel 23
@@ -328,6 +330,7 @@ FunctionEnd
   ${EndIf}
 !macroend
 
+!macro customHeader
 !ifndef BUILD_UNINSTALLER
 Function rtProbeFreshInstallDefault
   Exch $R0
@@ -497,6 +500,8 @@ Function rtSelectFreshInstallDirectory
 FunctionEnd
 !endif
 
+!macroend
+
 !macro customSelectFreshInstallDirectory
   !ifndef BUILD_UNINSTALLER
     Call rtSelectFreshInstallDirectory
@@ -506,6 +511,11 @@ FunctionEnd
 !macro customInit
   Push "$INSTDIR"
   Call AssertSafeInstallDirectory
+!macroend
+
+!macro customUnInit
+  Push "$INSTDIR"
+  Call un.AssertSafeExistingInstallDirectory
 !macroend
 
 !macro customValidateInstallTarget
@@ -595,5 +605,4 @@ FunctionEnd
     ${endif}
   ${endif}
 !macroend
-
 

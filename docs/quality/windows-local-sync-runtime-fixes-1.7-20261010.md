@@ -25,7 +25,6 @@ Date: 2026-10-10. Scope: isolated local engineering checks, not final release ac
 
 The release version remains 1.7.0 within this unreleased iteration. This record must not be used as a final acceptance certificate.
 
-
 ## Full live current-concept sync: 2026-10-10
 
 - Scope: isolated Windows Electron/SQLite, read-only public sources, not the installed profile.

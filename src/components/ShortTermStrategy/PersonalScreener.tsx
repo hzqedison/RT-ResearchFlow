@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../store/appStore'
 import { StockKlineChipDrawer } from '../shared/StockMiniChart'
 import { publishAppToast } from '../shared/appToastBus'
+import { describeScreenerEmptyResult, STOCK_BASIC_SYNC_FAILURE_MESSAGE } from './screenerDataPresentation'
 
 type ScreenerSignalKey = 'crossUp' | 'volAmplified' | 'bullTrend' | 'macdBull' | 'hasTurnover' | 'moneyInflow'
 type ScreenerTieBreaker = 'pctChg' | 'turnoverRate' | 'amount'
@@ -178,6 +179,7 @@ export function PersonalScreener() {
   const [loading, setLoading] = useState(false)
   const [running, setRunning] = useState(false)
   const [syncingBasic, setSyncingBasic] = useState(false)
+  const [stockBasicSyncError, setStockBasicSyncError] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [panelOpen, setPanelOpen] = useState(true)
   const [rankConfigOpen, setRankConfigOpen] = useState(false)
@@ -209,14 +211,32 @@ export function PersonalScreener() {
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; tsCode: string; status: string } | null>(null)
   const [selectedInsightCodes, setSelectedInsightCodes] = useState<string[]>([])
   const [trendAddBusy, setTrendAddBusy] = useState(false)
+  const mountedRef = useRef(true)
+  const snapshotRequestRef = useRef(0)
+  const stockBasicRequestRef = useRef(0)
+  const stockBasicSyncRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      ++snapshotRequestRef.current
+      ++stockBasicRequestRef.current
+      stockBasicSyncRef.current = false
+    }
+  }, [])
 
   const loadSnapshot = useCallback(async (force = false) => {
+    if (!mountedRef.current) return
+    const request = ++snapshotRequestRef.current
+    const isCurrent = (): boolean => mountedRef.current && request === snapshotRequestRef.current
     setLoading(true)
     setErrorMsg('')
     try {
       const res = force
         ? await window.api.shortTerm.screener.run()
         : await window.api.shortTerm.screener.get()
+      if (!isCurrent()) return
       if (res.ok) {
         setSnapshot(res.snapshot)
       } else {
@@ -230,12 +250,40 @@ export function PersonalScreener() {
         }
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : '未知错误')
+      if (isCurrent()) setErrorMsg(err instanceof Error ? err.message : '未知错误')
     } finally {
-      setLoading(false)
-      setRunning(false)
+      if (isCurrent()) {
+        setLoading(false)
+        setRunning(false)
+      }
     }
   }, [])
+
+  const handleSyncStockBasic = useCallback(async (): Promise<void> => {
+    if (!mountedRef.current || stockBasicSyncRef.current) return
+    stockBasicSyncRef.current = true
+    const request = ++stockBasicRequestRef.current
+    const isCurrent = (): boolean => mountedRef.current && request === stockBasicRequestRef.current
+    setSyncingBasic(true)
+    setStockBasicSyncError('')
+    try {
+      const reply = await window.api.shortTerm.syncDataNow('stockBasic')
+      if (!isCurrent()) return
+      if (!reply.ok) {
+        setStockBasicSyncError(STOCK_BASIC_SYNC_FAILURE_MESSAGE)
+        return
+      }
+      // The IPC waits for the identity write; await the refreshed result too.
+      await loadSnapshot(false)
+    } catch {
+      if (isCurrent()) setStockBasicSyncError(STOCK_BASIC_SYNC_FAILURE_MESSAGE)
+    } finally {
+      if (isCurrent()) {
+        stockBasicSyncRef.current = false
+        setSyncingBasic(false)
+      }
+    }
+  }, [loadSnapshot])
 
   useEffect(() => {
     void loadSnapshot(false)
@@ -325,7 +373,7 @@ export function PersonalScreener() {
   }, [])
 
   // 前端动态过滤（纯 JS，无 IPC）
-  const displayedStocks = snapshot
+  const displayedStocks = useMemo(() => snapshot && !errorMsg
     ? [...snapshot.stocks].sort((a, b) => {
         const tieA = rankConfig.tieBreaker === 'turnoverRate' ? (a.turnoverRate ?? -Infinity) : rankConfig.tieBreaker === 'amount' ? a.amount : a.pctChg
         const tieB = rankConfig.tieBreaker === 'turnoverRate' ? (b.turnoverRate ?? -Infinity) : rankConfig.tieBreaker === 'amount' ? b.amount : b.pctChg
@@ -335,7 +383,13 @@ export function PersonalScreener() {
         if (requireTurnover && !s.conditionsMet.includes('有效换手')) return false
         return true
       })
-    : []
+    : [], [snapshot, errorMsg, rankConfig, minSignal, requireTurnover])
+  const emptyResult = snapshot ? describeScreenerEmptyResult({
+    totalScanned: snapshot.totalScanned,
+    totalSignals: snapshot.stocks.length,
+    minSignal,
+    requireTurnover,
+  }) : null
   const displayedCodeSet = useMemo(() => new Set(displayedStocks.map(stock => stock.tsCode)), [displayedStocks])
   const selectedVisibleStocks = useMemo(
     () => displayedStocks.filter(stock => selectedInsightCodes.includes(stock.tsCode)),
@@ -345,7 +399,10 @@ export function PersonalScreener() {
   const someVisibleSelected = displayedStocks.some(stock => selectedInsightCodes.includes(stock.tsCode))
 
   useEffect(() => {
-    setSelectedInsightCodes(prev => prev.filter(code => displayedCodeSet.has(code)))
+    setSelectedInsightCodes(prev => {
+      const kept = prev.filter(code => displayedCodeSet.has(code))
+      return kept.length === prev.length ? prev : kept
+    })
   }, [displayedCodeSet])
 
   const handleToggleSelectAllInsights = useCallback(() => {
@@ -546,6 +603,7 @@ export function PersonalScreener() {
             <div>
               <div className="font-bold text-gray-800 dark:text-gray-200 mb-1">📊 历史数据需求</div>
               <p className="text-gray-500 dark:text-gray-400">≥ 65 个交易日（EMA42 稳定需约 84 天）</p>
+              <p className="mt-1 text-gray-500 dark:text-gray-400">股票池和题材来自当前缓存；历史日期计算不等于完整历史股票池回测。</p>
             </div>
           </div>
         )}
@@ -763,31 +821,14 @@ export function PersonalScreener() {
             <span>⚠</span>
             {errorMsg === 'STOCK_BASIC_NOT_READY' ? (
               <>
-                <span className="flex-1">
-                  stock_basic 尚未初始化（全市场股票基础信息缓存为空），每周一 04:00 自动同步，或点击右侧按钮立即同步。
-                </span>
+                <div className="flex-1">
+                  <p>本地股票基础资料尚未就绪，可立即同步。公开源无需 Tushare Token；资料同步不等于历史日线已补齐。</p>
+                  {stockBasicSyncError && <p role="alert" className="mt-1">{stockBasicSyncError}</p>}
+                </div>
                 <button
-                  onClick={async () => {
-                    setSyncingBasic(true)
-                    setErrorMsg('')
-                    try {
-                      const r = await window.api.shortTerm.syncDataNow('stockBasic')
-                      if (!r.ok) {
-                        setErrorMsg((r as { error: string }).error === 'TUSHARE_DISABLED'
-                          ? 'Tushare 未配置，无法同步'
-                          : '同步失败，请检查 Tushare 配置')
-                        return
-                      }
-                      // 同步成功后延迟 2s 等待写库完成，再重新运行选股
-                      await new Promise(res => setTimeout(res, 2000))
-                      void loadSnapshot(false)
-                    } catch (err) {
-                      setErrorMsg(err instanceof Error ? err.message : '同步失败')
-                    } finally {
-                      setSyncingBasic(false)
-                    }
-                  }}
-                  disabled={syncingBasic}
+                  onClick={() => void handleSyncStockBasic()}
+                  disabled={syncingBasic || loading || running}
+                  data-testid="screener-sync-stock-basic"
                   className="flex-shrink-0 px-2 py-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded text-xs"
                 >
                   {syncingBasic ? '同步中…' : '立即同步'}
@@ -873,11 +914,8 @@ export function PersonalScreener() {
         {!loading && !errorMsg && snapshot && displayedStocks.length === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 text-sm gap-2">
             <span className="text-4xl">🔍</span>
-            {snapshot.stocks.length === 0
-              ? <p>当日未找到满足任何信号的股票</p>
-              : <p>当前过滤条件（信号 ≥ {minSignal}{requireTurnover ? ' + 有效换手' : ''}）无匹配股票</p>
-            }
-            <p className="text-xs">可尝试降低信号强度门槛或关闭换手要求</p>
+            <p>{emptyResult?.title}</p>
+            <p className="text-xs">{emptyResult?.detail}</p>
           </div>
         )}
 

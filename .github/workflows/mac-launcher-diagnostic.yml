@@ -1,0 +1,98 @@
+name: Mac launcher T1 diagnostic only (no product execution)
+
+on:
+  push:
+    branches: [codex/diagnose-mac-launcher-1.0]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-launcher-t1-diagnostic
+  cancel-in-progress: false
+
+env:
+  GIT_CONFIG_COUNT: '2'
+  GIT_CONFIG_KEY_0: core.autocrlf
+  GIT_CONFIG_VALUE_0: 'false'
+  GIT_CONFIG_KEY_1: core.eol
+  GIT_CONFIG_VALUE_1: lf
+  NA_T1_DELETED: ${{ github.event.deleted }}
+  DEBUG: ''
+  PWDEBUG: ''
+
+# The operator must first bind Astra READY to this exact candidate/freeze,
+# inspect candidate AND default trigger chains, exclude an open main PR for
+# this head, and consume exactly one atomic ref authorization. An attempt=1
+# guard or fresh runner marker does NOT authorize a second run.
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      combined_sha256: ${{ steps.frozen.outputs.combined_sha256 }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: '20'
+      - name: Reject other branch, event, repository, deleted ref or repeat attempt
+        run: node tools/native-acceptance/evidence.mjs t1-guard
+      - name: Verify complete frozen set against exact commit blobs
+        id: frozen
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/native-acceptance/evidence.mjs prepare
+
+  diagnostic:
+    needs: prepare
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: '20'
+          architecture: ${{ matrix.arch }}
+      - name: Create independent hosted Mac diagnostic-only case
+        id: initialize
+        run: node tools/native-acceptance/evidence.mjs init-t1 macOS ${{ matrix.arch }}
+      - name: Verify every frozen byte and same-commit freeze before the probe
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NA_EXPECTED_COMBINED_SHA256: ${{ needs.prepare.outputs.combined_sha256 }}
+        run: node tools/native-acceptance/evidence.mjs verify
+      - name: Run exactly one original-profile wrapper with system true
+        run: node tools/native-acceptance/evidence.mjs t1-run
+      - name: Record owned process completion; Keychain operations are not needed
+        if: ${{ always() && steps.initialize.outcome == 'success' }}
+        run: node tools/native-acceptance/evidence.mjs t1-cleanup
+      - name: Stage only the four scanned JSON basenames
+        if: ${{ always() && steps.initialize.outcome == 'success' }}
+        run: node tools/native-acceptance/evidence.mjs publish
+      - name: Upload T1 only; product and Windows not executed
+        if: ${{ always() && steps.initialize.outcome == 'success' }}
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: mac-launcher-T1-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ env.NA_PUBLIC_EVIDENCE }}/input-manifest.json
+            ${{ env.NA_PUBLIC_EVIDENCE }}/acceptance-result.json
+            ${{ env.NA_PUBLIC_EVIDENCE }}/network-isolation.json
+            ${{ env.NA_PUBLIC_EVIDENCE }}/installer-events.json

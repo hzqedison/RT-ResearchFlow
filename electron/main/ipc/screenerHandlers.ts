@@ -9,8 +9,8 @@
 
 import { ipcMain } from 'electron'
 import { getDb } from '../database/db'
-import { getByDate, deleteByDate } from '../database/stockScreenerResultsRepository'
-import { runScreener, type ScreenerSnapshot } from '../services/stockScreenerService'
+import { getByDate, deleteByDate, getCachedScreenerRun, type ScreenerRunMetadata } from '../database/stockScreenerResultsRepository'
+import { runScreener, validateScreenerTradeDate, type ScreenerSnapshot } from '../services/stockScreenerService'
 import { runDailyOHLCVSyncJob, runInitialDailyDataSync } from '../services/schedulerService'
 import { queryAllActive } from '../database/stockBasicCacheRepository'
 import { insertConceptMembersIfAbsent } from '../database/kplConceptMembersRepository'
@@ -28,7 +28,7 @@ import {
 } from '../database/screenerRankConfigRepository'
 
 // singleflight：防止并发重算
-let _screenerInflight: Promise<ScreenerSnapshot> | null = null
+const _screenerInflight = new Map<string, Promise<ScreenerSnapshot>>()
 
 // 防重入：初始化历史日线数据同一时间只允许一个进行
 let _initDailyDataInFlight = false
@@ -53,8 +53,8 @@ function getBjTodayYmd(): string {
 function getLatestTradeDateYmd(db: ReturnType<typeof getDb>): string {
   try {
     const row = db
-      .prepare('SELECT MAX(trade_date) AS d FROM limit_list_daily')
-      .get() as { d: string | null } | undefined
+      .prepare('SELECT MAX(trade_date) AS d FROM daily_close_cache WHERE trade_date <= ?')
+      .get(getBjTodayYmd()) as { d: string | null } | undefined
     return row?.d ?? getBjTodayYmd()
   } catch {
     return getBjTodayYmd()
@@ -71,16 +71,18 @@ function isInTradingHoursBj(): boolean {
 }
 
 async function computeScreener(tradeDate: string): Promise<ScreenerSnapshot> {
-  if (_screenerInflight) return _screenerInflight
-  _screenerInflight = (async () => {
+  const existing = _screenerInflight.get(tradeDate)
+  if (existing) return existing
+  const job = (async () => {
     const db = getDb()
     await maybeSyncMoneyFlow(tradeDate)
     return runScreener(db, tradeDate)
   })()
+  _screenerInflight.set(tradeDate, job)
   try {
-    return await _screenerInflight
+    return await job
   } finally {
-    _screenerInflight = null
+    if (_screenerInflight.get(tradeDate) === job) _screenerInflight.delete(tradeDate)
   }
 }
 
@@ -123,7 +125,8 @@ async function maybeBackfillTurnover(tradeDate: string, inTrading: boolean): Pro
   if (!isTradeDateTurnoverEmpty(db, tradeDate, inTrading)) return false
   console.warn('[Screener] turnover_rate missing for', tradeDate, ', backfilling via daily_basic...')
   try {
-    await runDailyOHLCVSyncJob(tradeDate)
+    const completed = await runDailyOHLCVSyncJob(tradeDate)
+    if (!completed) return false
     // 旧 screener 缓存是在 turnover 为空时算出来的，必须清除强制重算
     deleteByDate(db, tradeDate)
     return true
@@ -135,14 +138,15 @@ async function maybeBackfillTurnover(tradeDate: string, inTrading: boolean): Pro
 
 function dbRowsToSnapshot(
   rows: ReturnType<typeof getByDate>,
-  tradeDate: string
+  tradeDate: string,
+  metadata: ScreenerRunMetadata,
 ): ScreenerSnapshot {
   return {
     tradeDate,
-    calculatedAt: new Date().toISOString(),
+    calculatedAt: metadata.calculatedAt,
     isCached: true,
     mode: 'eod',
-    totalScanned: 0,
+    totalScanned: metadata.totalScanned,
     stocks: rows.map(r => ({
       tsCode: r.tsCode,
       stockName: r.stockName ?? r.tsCode,
@@ -202,18 +206,20 @@ export function registerScreenerHandlers(): void {
     async (_event, payload?: { tradeDate?: string }) => {
       try {
         const db = getDb()
-        const inTrading = isInTradingHoursBj()
+        const tradingHours = isInTradingHoursBj()
         // 盘中 limit_list_daily 尚未同步当日数据，强制用今日日期；盘后从 limit_list_daily 取最新交易日
-        const tradeDate = payload?.tradeDate?.trim() || (inTrading ? getBjTodayYmd() : getLatestTradeDateYmd(db))
+        const tradeDate = payload?.tradeDate?.trim() || (tradingHours ? getBjTodayYmd() : getLatestTradeDateYmd(db))
+        validateScreenerTradeDate(tradeDate)
+        const inTrading = tradingHours && tradeDate === getBjTodayYmd()
         await maybeBackfillTurnover(tradeDate, inTrading)
         // 盘中强制走实时计算，不读取昨日缓存
         if (inTrading) {
           const snapshot = await computeScreener(tradeDate)
           return { ok: true, snapshot }
         }
-        const cached = getByDate(db, tradeDate)
-        if (cached.length > 0) {
-          const snapshot = dbRowsToSnapshot(cached, tradeDate)
+        const cachedRun = getCachedScreenerRun(db, tradeDate, getScreenerRankConfig(db).updatedAt)
+        if (cachedRun) {
+          const snapshot = dbRowsToSnapshot(getByDate(db, tradeDate), tradeDate, cachedRun)
           return { ok: true, snapshot }
         }
         // 缓存未命中，执行计算
@@ -237,8 +243,10 @@ export function registerScreenerHandlers(): void {
     async (_event, payload?: { tradeDate?: string }) => {
       try {
         const db = getDb()
-        const inTrading = isInTradingHoursBj()
-        const tradeDate = payload?.tradeDate?.trim() || (inTrading ? getBjTodayYmd() : getLatestTradeDateYmd(db))
+        const tradingHours = isInTradingHoursBj()
+        const tradeDate = payload?.tradeDate?.trim() || (tradingHours ? getBjTodayYmd() : getLatestTradeDateYmd(db))
+        validateScreenerTradeDate(tradeDate)
+        const inTrading = tradingHours && tradeDate === getBjTodayYmd()
         await maybeBackfillTurnover(tradeDate, inTrading)
         const snapshot = await computeScreener(tradeDate)
         return { ok: true, snapshot }

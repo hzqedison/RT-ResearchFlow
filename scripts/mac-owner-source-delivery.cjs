@@ -14,10 +14,11 @@ function read(root, name, cap = 128 * 1024 * 1024) {
   if (raw.length !== stat.size) throw Error('MAC_SOURCE_FILE_CHANGED')
   return raw
 }
-function load(root) {
+function load(root, { version = require('../package.json').version, sourceCommit } = {}) {
   const raw = read(root, 'source-receipt.json', 65536), plan = JSON.parse(raw)
-  if (plan.kind !== 'rt-mac-owner-source-plan-v1' || plan.version !== '1.7.0' || plan.repository !== 'hzqedison/RT-ResearchFlow' ||
+  if (!/^\d+\.\d+\.\d+$/.test(version || '') || plan.kind !== 'rt-mac-owner-source-plan-v1' || plan.version !== version || plan.repository !== 'hzqedison/RT-ResearchFlow' ||
       !/^[a-f0-9]{40}$/.test(plan.sourceCommit || '') || plan.formalLockSha256 !== formal || plan.releaseEligible !== false ||
+      (sourceCommit !== undefined && plan.sourceCommit !== sourceCommit) ||
       !Array.isArray(plan.files) || plan.files.length !== names.length || new Set(plan.files.map(f => f.path)).size !== names.length ||
       names.some(n => !plan.files.some(f => f.path === n))) throw Error('MAC_SOURCE_PLAN_INVALID')
   for (const file of plan.files) {
@@ -34,17 +35,17 @@ function withMacSourceDelivery(base) {
   if (!root) return base
   const extras = base.mac?.extraResources == null ? [] : Array.isArray(base.mac.extraResources) ? base.mac.extraResources : [base.mac.extraResources]
   function verify(context) {
-    const expected = load(root), app = path.join(context.appOutDir, context.packager.appInfo.productFilename + '.app')
+    const binding = { version: context.packager.appInfo.version, sourceCommit: process.env.GITHUB_SHA }
+    const expected = load(root, binding), app = path.join(context.appOutDir, context.packager.appInfo.productFilename + '.app')
     const dest = path.join(app, 'Contents', 'Resources', 'third-party', 'application-source')
-    const actual = load(dest)
+    const actual = load(dest, binding)
     if (!actual.raw.equals(expected.raw)) throw Error('MAC_SOURCE_RECEIPT_CHANGED')
-    return { target: context.electronPlatformName, sourceCommit: actual.plan.sourceCommit, copiedFiles: names.length + 1, copyVerified: true, releaseEligible: false }
+    return { target: context.electronPlatformName, version: actual.plan.version, sourceCommit: actual.plan.sourceCommit, copiedFiles: names.length + 1, copyVerified: true, releaseEligible: false }
   }
   return { ...base, mac: { ...base.mac, extraResources: [...extras, { from: root, to: 'third-party/application-source', filter: [...names, 'source-receipt.json'] }] },
-    async beforePack(context) { if (context.electronPlatformName === 'darwin') load(root); if (base.beforePack) await base.beforePack(context) },
+    async beforePack(context) { if (context.electronPlatformName === 'darwin') load(root, { version: context.packager.appInfo.version, sourceCommit: process.env.GITHUB_SHA }); if (base.beforePack) await base.beforePack(context) },
     async afterPack(context) { if (base.afterPack) await base.afterPack(context); if (context.electronPlatformName === 'darwin') console.log('Mac source delivery: ' + JSON.stringify(verify(context))) },
     async afterSign(context) { if (base.afterSign) await base.afterSign(context); if (context.electronPlatformName === 'darwin') verify(context) },
   }
 }
 module.exports = { withMacSourceDelivery, load, read, names, formal, development }
-
