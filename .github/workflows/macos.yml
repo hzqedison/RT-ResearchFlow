@@ -24,6 +24,7 @@ jobs:
     env:
       NODE_OPTIONS: ''
       NODE_PATH: ''
+      USE_HARD_LINKS: 'false'
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
