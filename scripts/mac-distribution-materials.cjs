@@ -9,7 +9,7 @@ const ROOT = path.resolve(__dirname, '..')
 const SOURCE = 'resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011'
 const DESTINATION = 'third-party/python-runtime-mac'
 const MANIFEST_SHA256 = 'edfece95f3e668a1f8d6bfafc888f391d174a24b09e9127e209253376e73813d'
-const FORMAL_LOCK_SHA256 = 'c20a1a327b91d4022746d2fc18b4a8045c31767134b14fdfae866ba2f06cd6ea'
+const FORMAL_LOCK_SHA256 = '030b7a5200052ecdf3cef0a2611b61e40f0dfa71adf1b018898f1cb137144cc2'
 const PYTHON_ASSETS = {
   arm64: 'd8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933',
   x64: '8e9cb087305bfb8969f68a905f79f41469d4aa5220c1aa71ada7fc9953bdba0f',

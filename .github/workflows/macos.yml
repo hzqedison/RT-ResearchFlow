@@ -1,95 +1,74 @@
-name: macOS build and smoke test
-
+name: Mac owner draft package 1.7
 on:
-  push:
-    branches: [main, codex/macos-support, codex/verify-1.6]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
-
 permissions:
-  contents: read
-
+  contents: write
+  actions: read
 concurrency:
-  group: macos-${{ github.ref }}
-  cancel-in-progress: true
-
+  group: mac-owner-package-1.7
+  cancel-in-progress: false
 jobs:
-  build:
+  package:
+    if: github.repository == 'hzqedison/RT-ResearchFlow' && github.actor == 'hzqedison' && github.ref == 'refs/heads/codex/runtime-owner-cache-1.7'
+    name: owner-dmg-${{ matrix.target }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+          - target: darwin-arm64
+            os: macos-15
+          - target: darwin-x64
+            os: macos-15-intel
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 100
     env:
+      NODE_OPTIONS: ''
+      NODE_PATH: ''
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
-      npm_config_electron_mirror: https://github.com/electron/electron/releases/download/
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.14.0
+        env:
+          GIT_CONFIG_COUNT: '1'
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: pnpm
-      - name: Set up native Python for offline bridge verification
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        id: python
         with:
           python-version: '3.13'
-          architecture: ${{ matrix.arch }}
-
-      - name: Confirm native architecture
-        run: test "$(node -p process.arch)" = '${{ matrix.arch }}'
-      - name: Install and rebuild native dependencies
+      - name: Install pinned pnpm
+        run: npm install --global pnpm@10.14.0
+      - name: Owner guard and exact ordinary runtime assembly/source delivery
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STAGE_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: node scripts/mac-owner-package-ci.cjs prepare
+      - name: Install exact application dependencies
         run: pnpm install --frozen-lockfile --config.side-effects-cache=false
-      - name: Verify source and safe upstream merging
-        run: |
-          pnpm run verify
-          node --test macos/sync-upstream.test.mjs
-      - name: Build DMG and ZIP
+      - name: Build native Mac owner DMG, never publish automatically
         run: node macos/build.mjs
-      - name: Install from DMG and test the installed application
-        shell: bash
-        run: |
-          set -euo pipefail
-          mount="$RUNNER_TEMP/rt-dmg"
-          install="$RUNNER_TEMP/rt-release-installed"
-          mkdir -p "$mount" "$install"
-          dmg="$(find release -maxdepth 1 -name '*-${{ matrix.arch }}.dmg' -print -quit)"
-          test -n "$dmg"
-          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount"
-          trap 'hdiutil detach "$mount" || true' EXIT
-          ditto "$mount/RT-ResearchFlow.app" "$install/RT-ResearchFlow.app"
-          hdiutil detach "$mount"
-          trap - EXIT
-          codesign --verify --deep --strict "$install/RT-ResearchFlow.app"
-          export TRADE_WATCH_PACKAGED_EXECUTABLE="$install/RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow"
-          pnpm exec playwright test tests/e2e/macos-app-smoke.spec.ts tests/e2e/quant-trading-onboarding.spec.ts tests/e2e/mac-ths-experiment.spec.ts --workers=1 --reporter=line
-          shasum -a 256 release/*.dmg release/*.zip > release/SHA256SUMS.txt
-      - name: Upload tested packages
-        uses: actions/upload-artifact@v4
+      - name: Verify final copied bytes, signature and actual Electron SQLite ABI
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/mac-owner-package-ci.cjs finish
+      - name: Verify existing owner draft before and after asset upload
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/mac-owner-package-ci.cjs publish
+      - name: Preserve DMG and exact receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: RT-ResearchFlow-macOS-${{ matrix.arch }}-${{ github.sha }}
+          name: mac-owner-package-${{ matrix.target }}
           path: |
             release/*.dmg
-            release/*.zip
-            release/SHA256SUMS.txt
-          if-no-files-found: error
+            release/mac-owner-package-receipt-*.json
+            ${{ runner.temp }}/rt-mac-owner-${{ matrix.target }}/ordinary-assembly-receipt.json
+            ${{ runner.temp }}/rt-mac-owner-${{ matrix.target }}/source/source-receipt.json
+            ${{ runner.temp }}/rt-mac-owner-${{ matrix.target }}/source/SOURCE-ACCESS.txt
+          if-no-files-found: warn
           retention-days: 30
-      - name: Upload smoke-test evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: macOS-smoke-evidence-${{ matrix.arch }}
-          path: test-results/
-          if-no-files-found: ignore
-          retention-days: 14

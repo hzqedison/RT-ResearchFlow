@@ -38,6 +38,7 @@ module.exports = {
   electronDist: path.join(path.dirname(require.resolve('electron/package.json')), 'dist'),
   asarUnpack: ['**/*.node'],
   mac: {
+    ...base.mac,
     category: 'public.app-category.finance',
     target: ['dmg', 'zip'],
     artifactName: '${productName}-macOS-${version}-${arch}.${ext}',
@@ -52,6 +53,7 @@ module.exports = {
   // Personal builds need an ad-hoc signature on Apple Silicon. This is NOT
   // Developer ID signing or notarization and does not bypass Gatekeeper.
   async afterPack(context) {
+    if (base.afterPack) await base.afterPack(context)
     if (context.electronPlatformName !== 'darwin') return
     const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
     try {
@@ -69,3 +71,5 @@ module.exports = {
 
 // Preserve the native Mac signing hook, then verify the installed runtime ledger.
 module.exports = require("../scripts/private-python-runtime-builder.cjs").withPrivatePythonPostPackValidation(module.exports)
+
+module.exports = require('../scripts/mac-owner-source-delivery.cjs').withMacSourceDelivery(module.exports)
