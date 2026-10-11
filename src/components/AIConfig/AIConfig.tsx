@@ -12,6 +12,7 @@ interface ProviderConfigData {
   trendForecastPrompt: string | null
   trendForecastMorrowPrompt: string | null
   hasApiKey: boolean
+  credentialStatus: 'unconfigured' | 'available' | 'storage-unavailable' | 'unreadable'
 }
 
 interface SkillMeta {
@@ -32,6 +33,7 @@ interface AIConfigData {
   provider: AIProvider | null
   model: string | null
   hasApiKey: boolean
+  hasUsableApiKey: boolean
   providerHasApiKey: Record<string, boolean>
   providerConfigs: Record<string, ProviderConfigData>
   baseUrl: string
@@ -71,6 +73,7 @@ interface ProviderRowForm {
   baseUrl: string
   maxTokens: number
   showApiKey: boolean
+  clearApiKey: boolean
 }
 
 export function AIConfig() {
@@ -106,7 +109,7 @@ export function AIConfig() {
   const [skillError, setSkillError] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
 
-  const loadConfig = useCallback(async () => {
+  const loadConfig = useCallback(async (resetDrafts = true, savedProvider?: AIProvider) => {
     const data: AIConfigData = await window.api.ai.getConfig()
     setConfig(data)
     // Initialize row forms from providerConfigs
@@ -118,10 +121,19 @@ export function AIConfig() {
         apiKey: '',
         baseUrl: pc?.baseUrl ?? data.providerDefaultBaseUrls[p] ?? '',
         maxTokens: pc?.maxTokens ?? 4096,
-        showApiKey: false
+        showApiKey: false,
+        clearApiKey: false
       }
     }
-    setRowForms(rows)
+    if (resetDrafts) setRowForms(rows)
+    else if (savedProvider) {
+      setRowForms(prev => ({ ...prev, [savedProvider]: rows[savedProvider] }))
+      setPriority(prev => data.providerConfigs[savedProvider]?.hasApiKey
+        ? [...new Set([...prev, ...(data.providerPriority ?? [])])]
+        : prev.filter(provider => provider !== savedProvider))
+      if (!data.providerConfigs[savedProvider]?.hasApiKey) setMultiModel(prev => prev.filter(provider => provider !== savedProvider))
+    }
+    if (resetDrafts) {
     setForm({
       triggerRating: data.triggerRating,
       maxArticlesPerBatch: data.maxArticlesPerBatch,
@@ -136,6 +148,7 @@ export function AIConfig() {
     setSelectedSkills(data.selectedSkills ?? [])
     setSkillsForTrend(data.skillsForTrend ?? false)
     setMaxSkillChars(data.maxSkillChars ?? 30000)
+    }
     // Load skills list
     try {
       const list: SkillMeta[] = await window.api.skill.list()
@@ -176,7 +189,7 @@ export function AIConfig() {
         }
       })
       setPromptProvider(null)
-      await loadConfig()
+      await loadConfig(false)
       loadAIConfig()
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败')
@@ -194,13 +207,14 @@ export function AIConfig() {
       await window.api.ai.saveConfig({
         providerConfig: {
           provider,
-          model: row.model || undefined,
-          apiKey: row.apiKey || undefined,
-          baseUrl: row.baseUrl || undefined,
-          maxTokens: row.maxTokens || 4096
+          model: row.model,
+          apiKey: row.clearApiKey ? undefined : row.apiKey || undefined,
+          clearApiKey: row.clearApiKey,
+          baseUrl: row.baseUrl,
+          maxTokens: row.maxTokens
         }
       })
-      await loadConfig()
+      await loadConfig(false, provider)
       loadAIConfig()
       updateRow(provider, { apiKey: '' })
       setSaved(true)
@@ -247,7 +261,7 @@ export function AIConfig() {
         skillsForTrend,
         maxSkillChars
       })
-      await loadConfig()
+      await loadConfig(false)
       loadAIConfig()
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -266,8 +280,10 @@ export function AIConfig() {
       <div className="flex-1 overflow-y-auto p-6">
       <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-5">AI 配置</h2>
       <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300">
-        {config.hasApiKey ? (
-          <div>已检测到至少一个已配置的 API Key。请先保存基础厂商设置，再执行 AI 分析功能。</div>
+        {config.hasUsableApiKey ? (
+          <div>至少一家厂商的密钥已保存且本机可读取。这不代表服务权限、额度或网络连接已验证。</div>
+        ) : config.hasApiKey ? (
+          <div className="text-amber-700 dark:text-amber-200">密钥已保存，但本机暂时无法读取。请检查系统安全存储或钥匙串权限；未修改的密钥会保留。</div>
         ) : (
           <div className="text-amber-700 dark:text-amber-200">当前未检测到已配置的 API Key。AI 分析功能将无法启动，请先配置并保存厂商 API 密钥。</div>
         )}
@@ -299,12 +315,13 @@ export function AIConfig() {
                 const models = config.providerModels[p] ?? []
                 if (!row) return null
                 return (
-                  <tr key={p} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-800/50">
+                  <tr key={p} data-testid={`ai-provider-row-${p}`} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-800/50">
                     <td className="px-3 py-2.5 font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap">
                       {config.providerLabels[p]}
                     </td>
                     <td className="px-3 py-2.5">
                       <select
+                        aria-label={`${config.providerLabels[p]} 模型`}
                         value={row.model}
                         onChange={(e) => updateRow(p, { model: e.target.value })}
                         className="w-full min-w-[160px] border border-gray-200 dark:border-gray-700 rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-300"
@@ -323,13 +340,17 @@ export function AIConfig() {
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2">
-                        {pc?.hasApiKey ? (
-                          <span className="text-xs text-green-600 whitespace-nowrap">✓ 已配置</span>
+                        {pc?.credentialStatus === 'available' ? (
+                          <span className="text-xs text-green-600 whitespace-nowrap">本机可读取</span>
+                        ) : pc?.hasApiKey ? (
+                          <span className="text-xs text-amber-700 whitespace-nowrap">已保存 · 无法读取</span>
                         ) : (
                           <span className="text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">未配置</span>
                         )}
                         <div className="relative flex-1 min-w-[120px]">
                           <input
+                            aria-label={`${config.providerLabels[p]} API Key`}
+                            disabled={row.clearApiKey}
                             type={row.showApiKey ? 'text' : 'password'}
                             value={row.apiKey}
                             onChange={(e) => updateRow(p, { apiKey: e.target.value })}
@@ -373,6 +394,12 @@ export function AIConfig() {
                       </button>
                     </td>
                     <td className="sticky right-0 z-10 bg-white dark:bg-gray-900 px-3 py-2.5">
+                      {pc?.hasApiKey && (
+                        <label className="mb-2 flex items-center gap-1 text-xs text-gray-500" title="勾选后点击本行保存，仅移除本机保存的这家密钥；不影响其他厂商。">
+                          <input type="checkbox" checked={row.clearApiKey} onChange={event => updateRow(p, { clearApiKey: event.target.checked })} />
+                          移除本机密钥
+                        </label>
+                      )}
                       <button
                         onClick={() => handleSaveRow(p)}
                         disabled={saving}

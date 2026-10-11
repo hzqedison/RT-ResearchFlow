@@ -3,7 +3,7 @@ import { BrowserWindow } from 'electron'
 import { registerTrustedIpcHandler, type TrustedWindowGetter } from '../security/trustedIpc'
 import type Database from 'better-sqlite3'
 import { getDb } from '../database/db'
-import { getAIConfig, updateAIConfig, getProviderConfig, setProviderConfig, getAllProviderConfigs, getConfiguredProviders } from '../database/aiConfigRepository'
+import { getAIConfig, getProviderConfig, getAllProviderConfigs, getConfiguredProviders } from '../database/aiConfigRepository'
 import {
   createSession,
   updateSessionResponse,
@@ -20,7 +20,8 @@ import { getDataSourceConfig, updateDataSourceConfig, getMultiSourcePreference, 
 import { registerMultiSourceHandlers } from './multiSourceHandlers'
 import { fetchSelectedStockDaily } from '../services/multiSourceMarketService'
 import type { DailyDataProvider, SaveDataSourcePreference } from '../../shared/dataSourceTypes'
-import { encryptRequiredApiKey, decryptApiKey } from '../utils/apiKeyEncryption'
+import { encryptRequiredApiKey, decryptApiKey, inspectApiKeyStatus, type ApiKeyStatus } from '../utils/apiKeyEncryption'
+import { saveAIConfiguration } from '../services/aiConfigurationService'
 import { callAIProvider, PROVIDER_MODELS, PROVIDER_LABELS, PROVIDER_DEFAULT_BASE_URLS } from '../services/aiProvider'
 import type { AIProviderUsage } from '../services/aiProvider'
 import {
@@ -55,7 +56,7 @@ import { detailContentToText, extractDetailContent } from '../services/detailCon
 import { getStockMinuteByDate, upsertStockMinute } from '../database/stockMinuteCacheRepository'
 import { runStockBasicSyncJob, subscribeStockMinute, unsubscribeStockMinute } from '../services/schedulerService'
 import { searchByNameOrCode, countAll as countStockBasic } from '../database/stockBasicCacheRepository'
-import type { AIProvider, ImpactRating, BriefingRow, SourceRow, StockPriceCacheRow } from '../database/types'
+import type { AIProvider, BriefingRow, SourceRow, StockPriceCacheRow } from '../database/types'
 // FR-163: 数据增强辅助模块
 import { queryLatestFactor } from '../database/stkFactorCacheRepository'
 import { getStockLimitHistory } from '../database/limitListDailyRepository'
@@ -924,6 +925,7 @@ export function registerAIHandlers(getWindow: TrustedWindowGetter): void {
       trendForecastPrompt: string | null
       trendForecastMorrowPrompt: string | null
       hasApiKey: boolean
+      credentialStatus: ApiKeyStatus
     }> = {}
     for (const [p, cfg] of Object.entries(allConfigs)) {
       providerConfigs[p] = {
@@ -933,13 +935,15 @@ export function registerAIHandlers(getWindow: TrustedWindowGetter): void {
         presetPrompt: cfg.presetPrompt,
         trendForecastPrompt: cfg.trendForecastPrompt,
         trendForecastMorrowPrompt: cfg.trendForecastMorrowPrompt,
-        hasApiKey: !!(cfg.apiKeyEncrypted && cfg.apiKeyEncrypted.length > 0)
+        hasApiKey: !!(cfg.apiKeyEncrypted && cfg.apiKeyEncrypted.length > 0),
+        credentialStatus: inspectApiKeyStatus(cfg.apiKeyEncrypted)
       }
     }
     return {
       provider: row.provider,
       model: row.model,
       hasApiKey: configured.length > 0,
+      hasUsableApiKey: Object.values(providerConfigs).some(config => config.credentialStatus === 'available'),
       providerHasApiKey,
       providerConfigs,
       baseUrl: row.baseUrl ?? '',
@@ -973,106 +977,7 @@ export function registerAIHandlers(getWindow: TrustedWindowGetter): void {
   })
 
   // ── ai:saveConfig ─────────────────────────────────────────────────────────────
-  registerTrustedIpcHandler('ai:saveConfig', getWindow, (_e, data: {
-    provider?: AIProvider
-    model?: string
-    apiKey?: string // empty string = keep existing
-    baseUrl?: string
-    presetPrompt?: string
-    triggerRating?: ImpactRating
-    maxArticlesPerBatch?: number
-    maxContentCharsPerArticle?: number
-    maxArticleAgeDays?: number | null
-    autoCleanupDays?: number | null
-    trendForecastPrompt?: string
-    trendForecastMorrowPrompt?: string
-    maxForecastsPerStock?: number
-    providerPriority?: string[]
-    multiModelProviders?: string[]
-    maxForecastComparison?: number
-    selectedSkills?: string[]
-    skillsForTrend?: boolean
-    maxSkillChars?: number
-    // FR-079: per-provider config update
-    providerConfig?: {
-      provider: string
-      model?: string
-      apiKey?: string
-      baseUrl?: string
-      maxTokens?: number
-      presetPrompt?: string
-      trendForecastPrompt?: string
-      trendForecastMorrowPrompt?: string
-    }
-  }) => {
-    const db = getDb()
-    return db.transaction(() => {
-      const update: Parameters<typeof updateAIConfig>[1] = {}
-
-      if (data.provider !== undefined) update.provider = data.provider
-      if (data.model !== undefined) update.model = data.model
-      if (data.baseUrl !== undefined) update.baseUrl = data.baseUrl || null
-      if (data.presetPrompt !== undefined) update.presetPrompt = data.presetPrompt || null
-      if (data.triggerRating !== undefined) update.triggerRating = data.triggerRating
-      if (data.maxArticlesPerBatch !== undefined) update.maxArticlesPerBatch = data.maxArticlesPerBatch
-      if (data.maxContentCharsPerArticle !== undefined) update.maxContentCharsPerArticle = data.maxContentCharsPerArticle
-      if ('maxArticleAgeDays' in data) update.maxArticleAgeDays = data.maxArticleAgeDays ?? null
-      if ('autoCleanupDays' in data) update.autoCleanupDays = data.autoCleanupDays ?? null
-      if (data.trendForecastPrompt !== undefined) update.trendForecastPrompt = data.trendForecastPrompt || null
-      if (data.trendForecastMorrowPrompt !== undefined) update.trendForecastMorrowPrompt = data.trendForecastMorrowPrompt || null
-      if (data.maxForecastsPerStock !== undefined) update.maxForecastsPerStock = Math.min(100, Math.max(1, data.maxForecastsPerStock))
-      if (data.providerPriority !== undefined) update.providerPriority = JSON.stringify(data.providerPriority)
-      if (data.multiModelProviders !== undefined) update.multiModelProviders = JSON.stringify(data.multiModelProviders)
-      if (data.maxForecastComparison !== undefined) update.maxForecastComparison = Math.min(10, Math.max(1, data.maxForecastComparison))
-      if (data.selectedSkills !== undefined) update.selectedSkills = JSON.stringify(data.selectedSkills)
-      if (data.skillsForTrend !== undefined) update.skillsForTrend = data.skillsForTrend ? 1 : 0
-      if (data.maxSkillChars !== undefined) update.maxSkillChars = Math.min(100000, Math.max(1000, data.maxSkillChars))
-
-      // Only update API key if a non-empty string was provided (legacy flat path)
-      if (data.apiKey) {
-        const encrypted = encryptRequiredApiKey(data.apiKey)
-        if (encrypted) {
-          const targetProvider = data.provider ?? getAIConfig(db).provider
-          if (targetProvider) {
-            setProviderConfig(db, targetProvider, { apiKeyEncrypted: encrypted })
-          }
-          update.apiKeyEncrypted = encrypted
-        }
-      }
-
-      // FR-079: per-provider config upsert
-      if (data.providerConfig) {
-        const pc = data.providerConfig
-        const pcUpdate: Record<string, unknown> = {}
-        if (pc.model !== undefined) pcUpdate.model = pc.model || null
-        if (pc.baseUrl !== undefined) pcUpdate.baseUrl = pc.baseUrl || null
-        if (pc.maxTokens !== undefined) pcUpdate.maxTokens = Math.max(1, Math.floor(pc.maxTokens))
-        if (pc.presetPrompt !== undefined) pcUpdate.presetPrompt = pc.presetPrompt || null
-        if (pc.trendForecastPrompt !== undefined) pcUpdate.trendForecastPrompt = pc.trendForecastPrompt || null
-        if (pc.trendForecastMorrowPrompt !== undefined) pcUpdate.trendForecastMorrowPrompt = pc.trendForecastMorrowPrompt || null
-        if (pc.apiKey) {
-          const encrypted = encryptRequiredApiKey(pc.apiKey)
-          if (encrypted) pcUpdate.apiKeyEncrypted = encrypted
-        }
-        setProviderConfig(db, pc.provider, pcUpdate)
-
-        // Auto-add provider to providerPriority when it has a valid API key
-        if ((getProviderConfig(db, pc.provider)?.apiKeyEncrypted?.length ?? 0) > 0) {
-          const current = getAIConfig(db)
-          const currentPriority: string[] = current.providerPriority
-            ? JSON.parse(current.providerPriority)
-            : []
-          if (!currentPriority.includes(pc.provider)) {
-            currentPriority.push(pc.provider)
-            update.providerPriority = JSON.stringify(currentPriority)
-          }
-        }
-      }
-
-      updateAIConfig(db, update)
-      return { ok: true }
-    })()
-  })
+  registerTrustedIpcHandler('ai:saveConfig', getWindow, (_e, data: unknown) => saveAIConfiguration(getDb(), data))
 
   // ── ai:analyze ────────────────────────────────────────────────────────────────
   // Accepts briefingIds (FR-048: content-first) OR articleUrls (legacy single-article fallback)

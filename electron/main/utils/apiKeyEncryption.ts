@@ -1,5 +1,16 @@
 import { safeStorage } from 'electron'
 
+export type ApiKeyStatus = 'unconfigured' | 'available' | 'storage-unavailable' | 'unreadable'
+
+/** Local readability is not remote authorization. No plaintext is returned. */
+export function inspectApiKeyStatus(encrypted: Buffer | null): ApiKeyStatus {
+  if (!encrypted || encrypted.length === 0) return 'unconfigured'
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return 'storage-unavailable'
+    return safeStorage.decryptString(encrypted).trim() ? 'available' : 'unreadable'
+  } catch { return 'unreadable' }
+}
+
 /**
  * Encrypts a plaintext API key using Electron's safeStorage (OS-level encryption).
  * Returns null if safeStorage is not available on this platform.

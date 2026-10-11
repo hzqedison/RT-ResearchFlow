@@ -1780,6 +1780,7 @@ const api = {
         provider: string
         model?: string
         apiKey?: string
+        clearApiKey?: boolean
         baseUrl?: string
         maxTokens?: number
         presetPrompt?: string
