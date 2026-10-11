@@ -30,7 +30,7 @@ const hash = b => crypto.createHash('sha256').update(b).digest('hex')
 function fail(s) { throw Error(s) }
 function context() {
  const target = process.platform + '-' + process.arch
- if (!/^1\.(7|8|9)\.0$/.test(VERSION) || !PINS[target] || process.env.GITHUB_REPOSITORY !== REPO || process.env.GITHUB_REF !== BRANCH ||
+ if (!/^1\.(7|8|9|10)\.0$/.test(VERSION) || !PINS[target] || process.env.GITHUB_REPOSITORY !== REPO || process.env.GITHUB_REF !== BRANCH ||
      process.env.RUNNER_ENVIRONMENT !== 'github-hosted' || !/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA || '') ||
      !process.env.GITHUB_TOKEN || !path.isAbsolute(process.env.RUNNER_TEMP || '')) fail('OWNER_CONTEXT_INVALID')
  const temp = fs.realpathSync(process.env.RUNNER_TEMP)

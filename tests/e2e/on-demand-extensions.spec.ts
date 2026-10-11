@@ -1,6 +1,7 @@
 import { expect, test, _electron as electron } from '@playwright/test'
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { execFileSync } from 'node:child_process'
 
 test('actual public package installs AKShare on explicit request and persists an isolated interpreter', async () => {
   test.setTimeout(900_000)
@@ -20,6 +21,7 @@ test('actual public package installs AKShare on explicit request and persists an
   const app = await electron.launch({ executablePath: executable, args: [`--user-data-dir=${join(root, 'profile')}`], env })
   try {
     expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true)
+    expect(await app.evaluate(({ app }) => app.getVersion())).toBe(process.env.RT_PACKAGED_VERSION)
     const page = await app.firstWindow()
     await expect(page.getByTestId('nav-tab-feed')).toBeVisible({ timeout: 30_000 })
     const guide = page.getByTestId('cold-start-guide')
@@ -43,6 +45,17 @@ test('actual public package installs AKShare on explicit request and persists an
     const status = await page.evaluate(() => window.api.datasource.bridgeStatus())
     expect(status.ok).toBe(true)
     if (status.ok) expect((status.data as { packages: Record<string, unknown> }).packages.akshare).toEqual(expect.any(String))
+    const privateRoot = join(userData, 'runtime', 'python')
+    const privatePython = process.platform === 'win32' ? join(privateRoot, 'python.exe') : join(privateRoot, 'bin', 'python3')
+    expect(existsSync(privatePython)).toBe(true)
+    const probe = JSON.parse(execFileSync(config.pythonPath, ['-I', '-B', '-c',
+      'import sys,json,ssl,sqlite3,akshare; print(json.dumps({"base":sys.base_prefix,"prefix":sys.prefix,"akshare":akshare.__version__,"package":akshare.__file__}))'],
+      { encoding: 'utf8', timeout: 30_000, env }).trim())
+    expect(resolve(probe.base)).toBe(resolve(privateRoot))
+    expect(resolve(probe.prefix)).toBe(resolve(dirname(dirname(config.pythonPath))))
+    expect(probe.akshare).toBe('1.19.1')
+    expect(resolve(probe.package).startsWith(resolve(probe.prefix))).toBe(true)
+    await page.screenshot({ path: test.info().outputPath('installed-private-extension.png'), fullPage: true })
     const resources = process.platform === 'darwin' ? join(dirname(dirname(executable)), 'Resources')
       : join(dirname(executable), 'resources')
     expect(existsSync(join(resources, 'private-python-runtime'))).toBe(false)

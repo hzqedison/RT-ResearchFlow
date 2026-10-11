@@ -1,4 +1,4 @@
-name: Public on-demand Mac packages
+name: Public on-demand Windows and Mac packages
 on:
   workflow_dispatch:
 permissions:
@@ -45,13 +45,13 @@ jobs:
       - name: Type checks and extension contracts
         run: |
           pnpm run typecheck
-          pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts
+          pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
       - name: Build same-product native installer
         run: node macos/build.mjs
       - name: Actual DMG install, startup and first-use online extension test
         shell: bash
         env:
-          RT_ONDEMAND_PYTHON: ${{ steps.python.outputs.python-path }}
+          RT_ONDEMAND_PYTHON: /missing-system-python-for-private-runtime-acceptance
           RT_ONDEMAND_ALLOW_NETWORK: '1'
         run: |
           set -euo pipefail
@@ -72,6 +72,7 @@ jobs:
           node scripts/mac-packaged-acceptance.cjs "$RT_PACKAGED_EXE"
           pnpm exec playwright test tests/e2e/on-demand-extensions.spec.ts --workers=1 --reporter=line
           shasum -a 256 release/*.dmg > release/SHA256SUMS-${{ matrix.arch }}.txt
+          node scripts/write-public-package-receipt.cjs
       - name: Upload only tested direct installers
         uses: actions/upload-artifact@v4
         with:
@@ -79,11 +80,97 @@ jobs:
           path: |
             release/*.dmg
             release/SHA256SUMS-${{ matrix.arch }}.txt
+            release/SHA256SUMS-darwin-${{ matrix.arch }}.txt
+            release/acceptance-darwin-${{ matrix.arch }}.json
           if-no-files-found: error
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: public-mac-evidence-${{ matrix.arch }}
+          path: test-results/
+          if-no-files-found: ignore
+  windows:
+    if: github.repository == 'hzqedison/RT-ResearchFlow'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      RT_EXTENSION_DELIVERY: on-demand
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      USE_HARD_LINKS: 'false'
+      NODE_OPTIONS: ''
+      NODE_PATH: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.13'
+      - name: Isolate application and build caches on D drive
+        shell: pwsh
+        run: |
+          $root = 'D:\rt-public-1.10-' + $env:GITHUB_RUN_ID
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          "TEMP=$root" | Add-Content $env:GITHUB_ENV
+          "TMP=$root" | Add-Content $env:GITHUB_ENV
+          "ELECTRON_CACHE=$root\electron-cache" | Add-Content $env:GITHUB_ENV
+          "ELECTRON_BUILDER_CACHE=$root\builder-cache" | Add-Content $env:GITHUB_ENV
+      - name: Install native dependencies and check source
+        run: |
+          pnpm install --frozen-lockfile --config.side-effects-cache=false
+          pnpm run typecheck
+          pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
+          pnpm run build
+      - name: Build the actual Windows installer
+        run: pnpm exec electron-builder --win --x64 --config electron-builder.js --config.nsis.runAfterFinish=false --publish never
+      - name: Verify packaged runtime and first-use private extension
+        shell: pwsh
+        env:
+          RT_ONDEMAND_PYTHON: ${{ steps.python.outputs.python-path }}
+          RT_ONDEMAND_ALLOW_NETWORK: '1'
+        run: |
+          $env:RT_PACKAGED_EXE = (Resolve-Path 'release/win-unpacked/RT-ResearchFlow.exe').Path
+          $env:RT_PACKAGED_VERSION = '1.10.0'
+          $env:RT_PACKAGED_TEST_ROOT = Join-Path $env:TEMP 'acceptance'
+          node scripts/verify-packaged-runtime.cjs $env:RT_PACKAGED_EXE
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged runtime acceptance failed' }
+          pnpm exec playwright test tests/e2e/packaged-startup.spec.ts tests/e2e/on-demand-extensions.spec.ts --workers=1 --retries=0 --reporter=line
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged GUI or private extension acceptance failed' }
+      - name: Install the exact NSIS package and verify installed startup
+        shell: pwsh
+        run: |
+          $installer = (Resolve-Path 'release/RT-ResearchFlow-Setup-1.10.0-x64.exe').Path
+          $install = Join-Path $env:TEMP 'installed-product'
+          $p = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$install") -WindowStyle Hidden -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "NSIS failed: $($p.ExitCode)" }
+          $env:RT_PACKAGED_EXE = Join-Path $install 'RT-ResearchFlow.exe'
+          $env:RT_PACKAGED_VERSION = '1.10.0'
+          $env:RT_PACKAGED_ALLOW_EXISTING_DATA = '1'
+          $env:RT_PACKAGED_TEST_ROOT = Join-Path $env:TEMP 'installed-acceptance'
+          pnpm exec playwright test tests/e2e/packaged-startup.spec.ts --workers=1 --retries=0 --reporter=line
+          if ($LASTEXITCODE -ne 0) { throw 'Installed package startup failed' }
+          node scripts/write-public-package-receipt.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Package receipt failed' }
+      - name: Upload tested direct Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-windows-x64-${{ github.sha }}
+          path: |
+            release/RT-ResearchFlow-Setup-1.10.0-x64.exe
+            release/SHA256SUMS-win32-x64.txt
+            release/acceptance-win32-x64.json
+          if-no-files-found: error
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-windows-evidence-x64-${{ github.sha }}
           path: test-results/
           if-no-files-found: ignore

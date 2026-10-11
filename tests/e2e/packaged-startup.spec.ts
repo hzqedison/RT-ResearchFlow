@@ -1,5 +1,5 @@
 import { expect, test, _electron as electron } from '@playwright/test'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 
 test('actual packaged application displays workbench, settings and exits cleanly', async () => {
@@ -27,7 +27,7 @@ test('actual packaged application displays workbench, settings and exits cleanly
     await expect(page.getByTestId('nav-tab-feed')).toBeVisible({ timeout: 30_000 })
     const runtime = await app.evaluate(({ app }) => ({ packaged: app.isPackaged, version: app.getVersion(), dataPath: app.getPath('userData') }))
     expect(runtime.packaged).toBe(true)
-    expect(runtime.version).toBe(process.env.RT_PACKAGED_VERSION ?? '1.9.0')
+    expect(runtime.version).toBe(process.env.RT_PACKAGED_VERSION ?? JSON.parse(readFileSync(resolve('package.json'), 'utf8')).version)
     if (process.platform === 'win32') expect(resolve(runtime.dataPath)).toBe(resolve(dirname(executable), 'data'))
     else expect(resolve(runtime.dataPath)).toBe(profile)
     const guide = page.getByTestId('cold-start-guide')

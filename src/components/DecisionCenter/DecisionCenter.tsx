@@ -38,6 +38,8 @@ import { JudgmentHistoryPanel, type DecisionJudgmentSummaryItem } from './Judgme
 import { JudgmentFollowUpPanel, type DecisionJudgmentFollowUpTaskItem } from './JudgmentFollowUpPanel'
 import { useResearchDiscussionNavigation } from '../ResearchDiscussion/useResearchDiscussionNavigation'
 import { PremarketScenarioDrawer } from './PremarketScenarioDrawer'
+import { decisionDateCaption } from './decisionDateCaption'
+import './DecisionCenter.css'
 
 type ReviewReportSaveState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -85,7 +87,7 @@ function createRequestId(): string {
 type DecisionStatus = 'NEW' | 'READ' | 'WATCHING' | 'DISMISSED' | 'EXPIRED'
 type DecisionType = 'ALERT' | 'OPPORTUNITY' | 'RISK' | 'INFO'
 type DecisionSource = 'news' | 'ai' | 'short_term' | 'trend' | 'market' | 'sector_flow' | 'manual'
-type WorkspaceTab = 'priority' | DecisionSection['key'] | 'history'
+type WorkspaceTab = 'queue' | 'priority' | DecisionSection['key'] | 'history'
 type ReviewHintsTab = 'noise' | 'repeated' | 'pending'
 type ReviewSideTab = 'portfolio' | 'review' | 'outcome'
 
@@ -167,7 +169,7 @@ export function DecisionCenter({ initialization = null, initializationFlow, onOp
   const [outcomeLoading, setOutcomeLoading] = useState(false)
   const [outcomeError, setOutcomeError] = useState<string | null>(null)
   // FR-231: 组合模式默认进入持仓分区, 市场模式保持重点
-  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(isPortfolioView ? 'portfolio' : 'priority')
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('queue')
   const [reviewHintsOpen, setReviewHintsOpen] = useState(false)
   const [premarketScenarioOpen, setPremarketScenarioOpen] = useState(false)
 
@@ -745,11 +747,12 @@ export function DecisionCenter({ initialization = null, initializationFlow, onOp
   const workspaceTabs = useMemo(() => {
     const sectionTabs = homeModel.sections.map(section => ({ key: section.key as WorkspaceTab, label: section.title, count: section.signals.length }))
     return [
+      { key: 'queue' as WorkspaceTab, label: '待处理', count: actionQueue.length },
       { key: 'priority' as WorkspaceTab, label: '重点', count: homeModel.prioritySignals.length },
       ...sectionTabs,
       { key: 'history' as WorkspaceTab, label: '历史回看', count: historyData?.items?.length ?? 0 }
     ]
-  }, [historyData?.items?.length, homeModel.prioritySignals.length, homeModel.sections])
+  }, [actionQueue.length, historyData?.items?.length, homeModel.prioritySignals.length, homeModel.sections])
 
   function handleInitializationAction(action: InitializationAction) {
     if (action.type === 'guide') {
@@ -778,8 +781,8 @@ export function DecisionCenter({ initialization = null, initializationFlow, onOp
   }
 
   return (
-    <div data-testid="decision-center-root" className="grid h-full min-h-0 grid-rows-[166px_minmax(0,1fr)] gap-4 overflow-hidden bg-[linear-gradient(120deg,rgba(22,138,159,0.08),transparent_34%),linear-gradient(0deg,rgba(216,72,62,0.04),transparent_50%),#edf2f5] px-[22px] pb-[22px] pt-[18px] text-slate-900 dark:bg-[linear-gradient(120deg,rgba(20,184,166,0.08),transparent_34%),linear-gradient(0deg,rgba(239,68,68,0.05),transparent_52%),#020617] dark:text-slate-100">
-      <section className="grid min-h-0 gap-[14px] xl:grid-cols-[1.15fr_1.45fr_360px]">
+    <div data-testid="decision-center-root" className="decision-dashboard h-full min-h-0 bg-[linear-gradient(120deg,rgba(22,138,159,0.08),transparent_34%),linear-gradient(0deg,rgba(216,72,62,0.04),transparent_50%),#edf2f5] text-slate-900 dark:bg-[linear-gradient(120deg,rgba(20,184,166,0.08),transparent_34%),linear-gradient(0deg,rgba(239,68,68,0.05),transparent_52%),#020617] dark:text-slate-100">
+      <section data-testid="decision-command-header" className="decision-command-header">
         <div className="relative flex min-w-0 flex-col justify-between overflow-hidden rounded-[10px] border border-slate-200/90 bg-white/90 px-4 py-3.5 shadow-sm shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-none">
           <div className="pointer-events-none absolute -right-10 -top-16 h-40 w-40 rounded-full bg-red-400/10 blur-sm dark:bg-red-500/10" />
           <div className="relative pr-24">
@@ -797,9 +800,7 @@ export function DecisionCenter({ initialization = null, initializationFlow, onOp
             <h1 className="mt-1 text-[25px] font-semibold leading-tight tracking-tight text-slate-950 dark:text-slate-50">今日看板</h1>
             {signalDateContext && (!signalDateContext.isTradingDay || signalDateContext.isFallback) && (
               <div data-testid="decision-signal-date-context" className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/35 dark:text-amber-200">
-                <span>{signalDateContext.isTradingDay ? '今日暂无新信号' : '今日休市'}</span>
-                <span aria-hidden="true">·</span>
-                <span className="truncate">当前展示最近交易日 {formatCompactDate(signalDateContext.displayDate)}</span>
+                <span>{decisionDateCaption(signalDateContext)}</span>
               </div>
             )}
             <p className="mt-1.5 max-w-xl text-[13px] leading-5 text-slate-500 dark:text-slate-400">
@@ -896,7 +897,7 @@ export function DecisionCenter({ initialization = null, initializationFlow, onOp
         </div>
       </section>
 
-      <div className="min-h-0 overflow-hidden">
+      <div className="min-w-0 space-y-3">
         {(error || discussionError) && (
           <div className="border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 rounded-md px-3 py-2 text-sm">
             {error || discussionError}
@@ -931,10 +932,17 @@ export function DecisionCenter({ initialization = null, initializationFlow, onOp
         )}
 
         {(signals.length > 0 || (historyData?.items.length ?? 0) > 0 || (isPortfolioView && actionQueue.length > 0) || (isPortfolioView && hasDueJudgmentFollowUps)) && !(isPortfolioView && hasNoHoldings && !hasDueJudgmentFollowUps) && (
-          <div className="grid h-full min-h-0 grid-cols-[330px_minmax(0,1fr)_364px] gap-4">
-            <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
+          <div data-testid="decision-command-body" className="decision-command-body">
+            <WorkspacePanel
+              tabs={workspaceTabs}
+              activeTab={workspaceTab}
+              onTabChange={setWorkspaceTab}
+              scrollRef={workspaceScrollRef}
+            >
+              {workspaceTab === 'queue' && <div className="space-y-3">
               {isPortfolioView && <JudgmentFollowUpPanel items={judgmentFollowUps} loading={judgmentFollowUpsLoading} error={judgmentFollowUpsError} onCompleted={() => { void loadJudgmentFollowUps(); void loadReviewStats(); void loadOutcomeMemory() }} />}
               <ActionQueuePanel
+                embedded
                 items={actionQueue}
                 progress={progressModel}
                 title={isPortfolioView ? `组合待办 (${actionQueue.length})` : undefined}
@@ -955,15 +963,9 @@ export function DecisionCenter({ initialization = null, initializationFlow, onOp
                 onNavigateStock={handleNavigateStock}
                 onChainAnalysis={text => { setSupplyChainText(text); setShowSupplyChain(true) }}
               />
-            </div>
-            <WorkspacePanel
-              tabs={workspaceTabs}
-              activeTab={workspaceTab}
-              onTabChange={setWorkspaceTab}
-              scrollRef={workspaceScrollRef}
-            >
+              </div>}
                 {workspaceTab === 'priority' && <PriorityPanel signals={homeModel.prioritySignals} renderSignal={renderSignal} />}
-                {workspaceTab !== 'priority' && workspaceTab !== 'history' && sectionByKey.has(workspaceTab) && (
+                {workspaceTab !== 'queue' && workspaceTab !== 'priority' && workspaceTab !== 'history' && sectionByKey.has(workspaceTab) && (
                   <DecisionSectionPanel section={sectionByKey.get(workspaceTab)!} renderSignal={renderSignal} compact={false} />
                 )}
                 {workspaceTab === 'history' && (
@@ -983,7 +985,7 @@ export function DecisionCenter({ initialization = null, initializationFlow, onOp
                   />
                 )}
             </WorkspacePanel>
-            <aside className="grid min-h-0 grid-rows-[174px_minmax(0,1fr)] gap-3 overflow-hidden">
+            <aside data-testid="decision-review-sidebar" className="decision-review-sidebar">
               <DecisionProgressPanel progress={progressModel} />
               <ReviewAndPortfolioPanel
                 reviewData={reviewStats}
@@ -1648,12 +1650,14 @@ function PortfolioRiskMiniPanel({ data, loading, error, rangeDays, onReload, onR
 
 function WorkspacePanel({ tabs, activeTab, onTabChange, scrollRef, children }: { tabs: Array<{ key: WorkspaceTab; label: string; count: number }>; activeTab: WorkspaceTab; onTabChange: (tab: WorkspaceTab) => void; scrollRef?: RefObject<HTMLDivElement>; children: React.ReactNode }) {
   return (
-    <section data-testid="decision-workspace" className="flex min-h-0 flex-col overflow-hidden rounded-[10px] border border-gray-200/90 bg-white/92 shadow-sm shadow-gray-100/50 dark:border-gray-700 dark:bg-gray-900 dark:shadow-none">
+    <section data-testid="decision-workspace" className="decision-workspace-panel flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[10px] border border-gray-200/90 bg-white/92 shadow-sm shadow-gray-100/50 dark:border-gray-700 dark:bg-gray-900 dark:shadow-none">
       <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-100 px-3 pt-3 dark:border-gray-800">
         {tabs.map(tab => (
           <button
             key={tab.key}
             type="button"
+            data-testid={`decision-workspace-tab-${tab.key}`}
+            aria-pressed={activeTab === tab.key}
             onClick={() => onTabChange(tab.key)}
             className={`rounded-t-lg border border-transparent border-b-0 px-3 py-2 text-xs transition-colors ${activeTab === tab.key ? 'translate-y-px border-gray-200 bg-white font-extrabold text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200'}`}
           >

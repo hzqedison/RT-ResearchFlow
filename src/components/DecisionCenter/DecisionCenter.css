@@ -1,0 +1,45 @@
+.decision-dashboard {
+  container-type: inline-size;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 18px 22px 22px;
+}
+
+.decision-command-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.decision-command-header > * { min-width: 0; }
+
+.decision-command-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.decision-workspace-panel {
+  min-height: 320px;
+  max-height: max(360px, calc(100dvh - 340px));
+}
+
+.decision-review-sidebar {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+@container (min-width: 760px) {
+  .decision-command-header { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .decision-command-header > :last-child { grid-column: 1 / -1; }
+  .decision-command-body { grid-template-columns: minmax(0, 1fr) 320px; }
+}
+
+@container (min-width: 1240px) {
+  .decision-command-header { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.45fr) 340px; }
+  .decision-command-header > :last-child { grid-column: auto; }
+  .decision-command-body { grid-template-columns: minmax(0, 1fr) 340px; }
+}

@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import type { MultiSourcePreference, DataExtensionInstallProgress } from '../../shared/dataSourceTypes'
 import { minimumDataSourcePythonMinor, supportsDataSourcePython } from '../../shared/pythonSourceRequirements'
+import { prepareProductPython } from './productPythonRuntime'
 
 type Runner = (executable: string, args: string[], input?: string, timeout?: number, collect?: boolean) => Promise<string>
 const requirements = { akshare: 'akshare==1.19.1', mootdx: 'mootdx==0.11.7', pywencai: 'pywencai==0.13.1' } as const
@@ -23,7 +24,9 @@ export async function installOnDemandExtensions(config: MultiSourcePreference, b
   let stage: string | undefined
   const root = resolve(userData, 'data-source-extensions')
   try {
-    progress = { running: true, phase: 'checking', message: '检查本机 Python 版本' }
+    progress = { running: true, phase: 'checking', message: process.platform === 'win32' ? '在产品数据目录准备专用 Python，不修改系统安装' : '检查本机 Python 版本' }
+    basePython = await prepareProductPython(basePython, userData, minimumDataSourcePythonMinor(config), run,
+      message => { progress = { running: true, phase: 'checking', message } })
     const version = (await run(basePython, ['-I', '-c', 'import sys; print(sys.version.split()[0])'])).trim()
     if (!supportsDataSourcePython(version, config)) throw Error(minimumDataSourcePythonMinor(config) === 11 ? 'AKSHARE_PYTHON_VERSION_UNSUPPORTED' : 'PYTHON_UNAVAILABLE')
     await mkdir(root, { recursive: true })

@@ -226,10 +226,11 @@ export function DataSource() {
         <h3 className="text-sm font-medium">可选本地扩展</h3>
         <p className="text-xs text-gray-500">{extensionMode === 'bundled'
           ? '此安装包使用已随包准备的数据扩展，安装按钮仅核对本地依赖，不在线下载。'
-          : '扩展按需安装：先从 Python 官网安装 Python 3.11 或以上（建议 3.12），必要时选择解释器，再点击安装所选扩展。每个扩展最长等待10分钟，首次需要联网。虚拟环境、缓存与临时文件放在应用数据目录，不修改系统 Python；基础腾讯、东财日线不需要这些扩展。'}</p>
+          : '扩展按需安装：Mac 自动下载独立 Python，无需安装系统 Python；Windows 从已有完整 Python 创建产品专用环境，保存在安装目录的 data 下。扩展、缓存与临时文件统一使用程序专用数据目录，不修改共享 Python。首次需要联网，每个扩展最长等待10分钟；腾讯、东财日线等基础功能无需这些扩展。'}</p>
+        {extensionMode !== 'bundled' && <p className="text-xs text-gray-500">Windows 如尚无 Python，请从官网自定义安装 Python 3.11 或以上（建议 3.13）到非系统盘，再选择解释器。不要直接搬动虚拟环境，也不要删除其他软件使用的共享 Python。</p>}
         {busy === '安装扩展' && <p role="status" data-testid="extension-install-progress" className="text-xs text-blue-700 dark:text-blue-300">{extensionProgress || '准备安装扩展，请勿退出应用…'}</p>}
         <input className={inputClass} value={pythonPath} disabled={disabled} onChange={event => setPythonPath(event.target.value)}
-          placeholder="留空自动寻找 Python；也可选择本机解释器的绝对路径" />
+          aria-label="扩展 Python 路径" placeholder="Mac 可留空自动准备；Windows 可选择已有完整 Python，安装成功后自动保存专用路径" />
         <div className="flex flex-wrap gap-2">
           <button className={buttonClass} disabled={disabled} onClick={() => void run('选择 Python', async () => {
             const path = await window.api.datasource.choosePython()
