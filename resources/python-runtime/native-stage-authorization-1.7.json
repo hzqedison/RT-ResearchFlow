@@ -18,7 +18,10 @@
       "110 isolated tests passed: native-test context/byte bindings, retained release denial on the actual formal lock, immutable-only Git cache, bounded retries, producer and final-proof rejection contracts",
       "7 isolated crypto-scope tests passed: actual-module inventory byte binding, duplicate/path/version rejection; fixture tests are not native execution or license approval",
       "Prior source 7d35ba4cbce59b9a21df6dd556742692a7cff54c had actual successful native staging on win32-x64, darwin-arm64 and darwin-x64 in run 38080531723; not an installer acceptance",
-      "9 isolated crypto-scope tests passed including built-in module identity, exact interpreter carrier byte binding and missing-file rejection; run 38082087511 failed the added probe and is not successful evidence"
+      "9 isolated crypto-scope tests passed including built-in module identity, exact interpreter carrier byte binding and missing-file rejection; run 38082087511 failed the added probe and is not successful evidence",
+      "Retained local staging driver edits as explicitly requested by human; changed only fresh origin bindings; 8 isolated stage-origin tests passed",
+      "29 Windows-only isolated reviewed-version-lock fixtures passed; not Mac-executed tests",
+      "Actual version-frozen preparation run 38086414260 succeeded on all three native targets; structural merge run 38086904113 succeeded with formal lock 030b7a5200052ecdf3cef0a2611b61e40f0dfa71adf1b018898f1cb137144cc2; structural-only evidence does not authorize distribution"
     ],
     "notClaimed": [
       "Human license approval",
@@ -26,7 +29,9 @@
       "Installer acceptance",
       "Permission to execute broker orders",
       "Native-test assembly is redistribution approval",
-      "Crypto version observation on the new source before its native job completes"
+      "Crypto version observation on the new source before its native job completes",
+      "Native execution on this newly merged source before fresh staging completes",
+      "Public runtime redistribution rights or final recipient-delivery acceptance"
     ]
   },
   "assemblyTargets": [
@@ -37,10 +42,10 @@
   "trustedContext": {
     "repositoryId": 1408465497,
     "repositoryFullName": "hzqedison/RT-ResearchFlow",
-    "approvedSourceCommit": "744882ec3cce5f89cc63f53ef1c5a0dea723afce",
-    "approvedPolicySha256": "d7cb20a0894c245ce2f942c5932cc550128003a8d2eab61dd8e9e477ac42b264",
-    "approvedSealImplementationSha256": "5456c6744419bcb698b2e693c24d3c8de4f0187bf8d754b660111677d715800e",
-    "sourceSnapshotSha256": "6b8bad51b91bd8bd811e8e4b6701fe3b3438e530fba5c6f2b345619d5441be5f",
+    "approvedSourceCommit": "f3ec469bf90193395ac710b249bbf465234bee91",
+    "approvedPolicySha256": "82efe2a0287f505e0acfe526177a39db1c58c84026fa34e2493875350c960ecb",
+    "approvedSealImplementationSha256": "7c78b3c65be39a960e2b63703c9dc7b25e7d8ba21ab14bd01d86f3f7f82ce013",
+    "sourceSnapshotSha256": "593395f234e1682edd6b22d0da3e69d62153670fa85cb0f1ada650108e5837c3",
     "requiredSourceFiles": [
       ".github/workflows/private-runtime-stage-native.yml",
       "LICENSE",
@@ -64,6 +69,7 @@
       "scripts/private-node-js-runtime/rt_private_node_js_runtime/worker.cjs",
       "scripts/private-python-runtime-builder.cjs",
       "scripts/private-runtime-owned-supervisor.cjs",
+      "scripts/private-runtime-recipient-materials.cjs",
       "scripts/private-runtime-release-verifiers.cjs",
       "scripts/rebuild-lxml-native.py",
       "scripts/report-private-runtime-native-bootstrap.py",
@@ -78,28 +84,28 @@
     "producers": []
   },
   "entrypoints": {
-    "scripts/seal-private-python-runtime.cjs": "5456c6744419bcb698b2e693c24d3c8de4f0187bf8d754b660111677d715800e",
+    "scripts/seal-private-python-runtime.cjs": "7c78b3c65be39a960e2b63703c9dc7b25e7d8ba21ab14bd01d86f3f7f82ce013",
     "scripts/seal-private-python-runtime-producer.cjs": "418b36abc6609dd7744dde1ac014529b6a610f29a7a8134778162980b55b6c6b",
-    "scripts/private-runtime-release-verifiers.cjs": "afafc8cbc79dddbfc4f46857789ff1e72a631697690356a4669cf47ba19f4c51"
+    "scripts/private-runtime-release-verifiers.cjs": "db4f7b3fb051f9c0a760b79e6a3ba56ae7d9932b68a36e41d0aac19275caeb8e"
   },
   "stagingInputs": {
     "darwin-arm64": {
-      "candidateLockSha256": "b0aa361919e73c1e2531d76c32f2a1f9771c418492be6c4a38199597d492d0cd",
-      "formalLockSha256": "c20a1a327b91d4022746d2fc18b4a8045c31767134b14fdfae866ba2f06cd6ea",
-      "fragmentSha256": "6693b501c70f0a6f2a5a0b2c0315656a8346568f1fe339d94e9637750c246ffe",
-      "handoffSha256": "9fa4aa3f251137c3b671e093e8f7b5c46070cb41e47f920783574f2beb9ce13b"
+      "candidateLockSha256": "ad39bac0833aef255a1c4ef5ce2920cf9425b54bb45f62655bf703f7a851dc03",
+      "formalLockSha256": "030b7a5200052ecdf3cef0a2611b61e40f0dfa71adf1b018898f1cb137144cc2",
+      "fragmentSha256": "4a1f197d3c2c629bda5942b04e723220949e490cb72fe3c0936fc8ca405ed3cb",
+      "handoffSha256": "c19a0013820d443b19d05ae3863e76f57b7735cf1410a5d6a43418a22da5e8df"
     },
     "darwin-x64": {
-      "candidateLockSha256": "57206a2e21bd7a2c306cc2213efbb89d12b4b3e3e36fce4e4a146c01cdad7a83",
-      "formalLockSha256": "c20a1a327b91d4022746d2fc18b4a8045c31767134b14fdfae866ba2f06cd6ea",
-      "fragmentSha256": "de106aefa305f9c9ebb048a4880eaa967064a10e576177399d0b9a9e224189bc",
-      "handoffSha256": "341db917fa4979e041f4170cc27dcf9c9df6ebb9b44241aeaa61375ecb9ecb82"
+      "candidateLockSha256": "0f997b1a38541efa5ec4f4696ecc7e8eb944d0b229cab316d3d22663e10ecf85",
+      "formalLockSha256": "030b7a5200052ecdf3cef0a2611b61e40f0dfa71adf1b018898f1cb137144cc2",
+      "fragmentSha256": "daeb8828a2d420031406fbe498371c8dd89db30ffb42da2f51032c8864cc72ba",
+      "handoffSha256": "78e4becd4a41665c5542a6f7cec1a51e77465ba16526276046218a226adf0456"
     },
     "win32-x64": {
-      "candidateLockSha256": "5fdd20fbc999e5708fa969f90551a44c348d1f6e0e86d3ba427b5a7e7a896293",
-      "formalLockSha256": "c20a1a327b91d4022746d2fc18b4a8045c31767134b14fdfae866ba2f06cd6ea",
-      "fragmentSha256": "6279cfc153523dab724b4d781cd65c31ea0130d01a699a9e35f701b442ca6359",
-      "handoffSha256": "ccee45e24387298c76793c2d362f04867defe3432e891308fa795a2d518d31f2"
+      "candidateLockSha256": "1a2c9bf3c3b83d22467fc517f305c7c332d18b4a459452d56bdc19cb4a821acf",
+      "formalLockSha256": "030b7a5200052ecdf3cef0a2611b61e40f0dfa71adf1b018898f1cb137144cc2",
+      "fragmentSha256": "3284a2d13263879f01436bb663ae1584c0bfe34d0b65a866b076ba75556f7a7f",
+      "handoffSha256": "70ce4774b9cb0c681d0fa723b085b62ddb13225cd04fe636ad3105e2bafbfb7c"
     }
   },
   "stageProducerPolicies": {
@@ -141,7 +147,7 @@
   "verifierPolicy": {
     "schemaVersion": 1,
     "kind": "rt-private-runtime-release-verifier-policy-v1",
-    "preparationPolicySha256": "d7cb20a0894c245ce2f942c5932cc550128003a8d2eab61dd8e9e477ac42b264",
+    "preparationPolicySha256": "82efe2a0287f505e0acfe526177a39db1c58c84026fa34e2493875350c960ecb",
     "nativeReporters": {
       "win32-x64": {
         "path": "scripts/report-private-runtime-native-bootstrap.py",
