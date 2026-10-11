@@ -59,7 +59,7 @@ function responseFor(url, depth=0) {
   if (u.protocol!=='https:' || u.username || u.password || !allowed || depth>5) return reject(Error('OWNER_DOWNLOAD_HOST'))
   const headers={'User-Agent':'rt-owner-package-1.7',Accept:'application/vnd.github+json'}
   if (u.hostname==='api.github.com') headers.Authorization='Bearer ' + process.env.GITHUB_TOKEN
-  const req=https.get(u,{headers},res=>{
+  const req=https.get(u,{headers,agent:false},res=>{
    if ([301,302,303,307,308].includes(res.statusCode)) {
     res.resume();responseFor(new URL(res.headers.location,u).href,depth+1).then(resolve,reject)
    } else if (res.statusCode!==200) { res.resume();reject(Error('OWNER_DOWNLOAD_HTTP_' + res.statusCode)) }
@@ -67,7 +67,7 @@ function responseFor(url, depth=0) {
   });req.on('error',reject);req.setTimeout(120000,()=>req.destroy(Error('OWNER_DOWNLOAD_TIMEOUT')))
  })
 }
-async function download(endpoint, filename, expectedSize, expectedSha, cap) {
+async function downloadOnce(endpoint, filename, expectedSize, expectedSha, cap) {
  const response=await responseFor('https://api.github.com/repos/' + REPO + endpoint)
  let size=0;const h=crypto.createHash('sha256')
  response.on('data',b=>{size+=b.length;h.update(b);if(size>cap) response.destroy(Error('OWNER_DOWNLOAD_BUDGET'))})
@@ -75,6 +75,22 @@ async function download(endpoint, filename, expectedSize, expectedSha, cap) {
  const digest=h.digest('hex')
  if ((expectedSize!==null && size!==expectedSize) || (expectedSha && digest!==expectedSha)) fail('OWNER_DOWNLOAD_BYTES')
  return {path:path.basename(filename),size,sha256:digest}
+}
+async function download(endpoint, filename, expectedSize, expectedSha, cap) {
+ for(let attempt=1;attempt<=5;attempt++) {
+  const partial=filename+'.owner-download-'+attempt
+  try {
+   const value=await downloadOnce(endpoint,partial,expectedSize,expectedSha,cap)
+   if(fs.existsSync(filename)) fail('OWNER_DOWNLOAD_DESTINATION_EXISTS')
+   fs.renameSync(partial,filename)
+   return {...value,path:path.basename(filename)}
+  } catch(e) {
+   if(fs.existsSync(partial)) fs.unlinkSync(partial)
+   if(attempt===5 || /^OWNER_DOWNLOAD_(BYTES|BUDGET|HOST|DESTINATION)/.test(e.message)) throw e
+   console.log('Owner download transport retry '+attempt+' for '+endpoint)
+   await new Promise(r=>setTimeout(r,attempt*2000))
+  }
+ }
 }
 const UNZIP = String.raw`
 import pathlib,stat,sys,zipfile
@@ -170,6 +186,7 @@ async function prepare() {
  const result=assembler.assemble({lockPath,preparedRoot,assetsRoot,outputRoot,target:c.target})
  write(path.join(c.work,'ordinary-assembly-receipt.json'),{...result,formalLockSha256:FORMAL_SHA,
   sourceCommit:c.sha,purpose:'owner-draft-package',releaseEligible:false,finalReleaseAuthorized:false})
+ console.log('ORDINARY_ASSEMBLY_OK ' + JSON.stringify(result))
  const sourceRoot=path.join(c.work,'source');fs.mkdirSync(sourceRoot)
  const archive=await download('/zipball/' + c.sha,path.join(sourceRoot,'application-source.zip'),null,null,128*1024**2)
  const developmentPath=path.join(ROOT,'resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/DEVELOPMENT-RUNTIME.txt')
