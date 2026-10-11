@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { prepareProductPython } from '../../electron/main/services/productPythonRuntime'
@@ -61,5 +61,30 @@ describe.skipIf(process.platform !== 'win32')('product-local Windows Python', ()
     const first = prepareProductPython(join(source, 'python.exe'), data, 11, run)
     const second = prepareProductPython(join(source, 'python.exe'), data, 11, run)
     expect(await first).toBe(await second)
+  })
+
+  it('materializes an internal executable alias instead of retaining its shared link', async context => {
+    const { source, data, run } = await fixture()
+    try { await symlink('python.exe', join(source, 'python3.exe'), 'file') } catch (error) {
+      if (['EPERM', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')) { context.skip(); return }
+      throw error
+    }
+    const python = await prepareProductPython(join(source, 'python.exe'), data, 11, run)
+    const alias = join(dirname(python), 'python3.exe')
+    expect((await lstat(alias)).isSymbolicLink()).toBe(false)
+    expect(await readFile(alias, 'utf8')).toBe('runtime-fixture')
+  })
+
+  it('rejects a source link escaping the Python installation', async context => {
+    const { source, data, run } = await fixture()
+    const external = join(dirname(source), 'external-private.txt')
+    await writeFile(external, 'not runtime data')
+    try { await symlink(external, join(source, 'external.txt'), 'file') } catch (error) {
+      if (['EPERM', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')) { context.skip(); return }
+      throw error
+    }
+    await expect(prepareProductPython(join(source, 'python.exe'), data, 11, run)).rejects.toThrow('PRODUCT_PYTHON_SYMLINK_SOURCE_UNSUPPORTED')
+    await expect(readFile(join(data, 'runtime', 'python', 'python.exe'))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await readFile(external, 'utf8')).toBe('not runtime data')
   })
 })

@@ -1,4 +1,4 @@
-import { cp, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { cp, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { isAbsolute, join, parse, relative, resolve, sep, toNamespacedPath } from 'node:path'
 import { prepareMacProductPython } from './macProductPythonRuntime'
@@ -26,7 +26,8 @@ async function exists(path: string): Promise<boolean> {
 
 // A Windows full Python install is relocatable when its complete standard
 // library and DLLs are retained. Never copy site-packages, venvs, pip launchers
-// or symbolic links from the shared installation. macOS framework/Homebrew
+// or live symbolic links from the shared installation. Internal file aliases
+// are materialized; directory links and escapes are rejected. macOS framework/Homebrew
 // installations have different relocation rules and are deliberately excluded.
 export async function prepareProductPython(configuredPython: string, userData: string, minimumMinor: number, run: Runner, report?: (message: string) => void): Promise<string> {
   if (process.platform === 'darwin') return prepareMacProductPython(userData, minimumMinor, run, report)
@@ -51,7 +52,7 @@ async function prepare(root: string, configuredPython: string, minimumMinor: num
     return executable
   }
   const source = await inspect(configuredPython, minimumMinor, run)
-  const sourceRoot = resolve(source.base)
+  const sourceRoot = await realpath(resolve(source.base))
   const nested = relative(sourceRoot, destination)
   if (!nested || (!nested.startsWith(`..${sep}`) && nested !== '..' && !isAbsolute(nested))) {
     throw Error('PRODUCT_PYTHON_UNSAFE_SOURCE')
@@ -62,13 +63,19 @@ async function prepare(root: string, configuredPython: string, minimumMinor: num
   try {
     await cp(sourceRoot, stage, {
       recursive: true,
+      dereference: true,
       force: false,
       errorOnExist: true,
       filter: async path => {
         const parts = relative(toNamespacedPath(sourceRoot), toNamespacedPath(path)).split(sep)
         if (parts.some(part => ['site-packages', '__pycache__', 'test', 'tests'].includes(part.toLowerCase()))
           || parts[0]?.toLowerCase() === 'scripts' || /\.py[co]$/i.test(path)) return false
-        if ((await lstat(path)).isSymbolicLink()) throw Error('PRODUCT_PYTHON_SYMLINK_SOURCE_UNSUPPORTED')
+        if ((await lstat(path)).isSymbolicLink()) {
+          const target = await realpath(path)
+          const linkRelative = relative(toNamespacedPath(sourceRoot), toNamespacedPath(target))
+          if (!linkRelative || isAbsolute(linkRelative) || linkRelative === '..' || linkRelative.startsWith(`..${sep}`)
+            || !(await stat(target)).isFile()) throw Error('PRODUCT_PYTHON_SYMLINK_SOURCE_UNSUPPORTED')
+        }
         return true
       }
     })
