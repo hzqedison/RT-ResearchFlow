@@ -1,6 +1,6 @@
 # Initialization capabilities 1.14 candidate
 
-Status: candidate, not published. Public release and the production Windows installation remain 1.13.0.
+Status: published as 1.14.0. Installer source: `714c13d291be913afa9215c4b575b9983b44a17b`. The historical candidate filename is retained for existing links.
 
 ## Implemented path
 
@@ -20,8 +20,9 @@ Status: candidate, not published. Public release and the production Windows inst
 - Actual packaged Windows startup/settings/clean-exit test passed. The first combined UI run failed because the button's accessible name is `打开新用户引导`, not its visible text `新用户引导`; the test now uses the existing stable test ID. No force click or production UI workaround was used.
 - The fixture test forbids production Windows installations and requires explicit fixture authorization; Mac execution requires isolated GitHub CI. Test profiles remain under the D-drive acceptance root locally.
 
-## Pending / boundaries
+## Native delivery and remaining boundaries
 
-- Native Windows installer and both Mac DMG acceptance for this source still pending; the new actual UI test is wired into all three jobs before installer receipts are generated.
+- Native Windows installer and both Mac DMG acceptance passed in run `38170966070`, including the new actual UI test and OS credential persistence checks. Windows lifecycle run `38171438331` and original-byte publication run `38172239804` passed. The public Release has 10 installer/checksum/acceptance assets.
+- Local production 1.13-to-1.14 upgrade returned exit code 0 and preserved six database/configuration file hashes before startup. The installed startup/settings/clean-exit test passed, 13.0 seconds. The first deployment command failed PowerShell parsing before execution; it made no installation or data changes and was corrected without rebuilding binaries.
 - No live Tushare Key, paid interface permission, complete historical market coverage, auction/chip facts, portfolio accounting or real trading evidence is claimed.
 - This is progress on task 4.2, not completion of its entire provider/quality mapping or task 8.2. Historical 1.0-to-1.1 upgrade evidence and full Mac upgrade/data retention scope remain open.

@@ -7,9 +7,9 @@
 
 同一产品，选择对应系统即可直接安装，不需要再解压安装包：
 
-- [Windows x64 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.13.0/RT-ResearchFlow-Setup-1.13.0-x64.exe)
-- [Mac Apple Silicon 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.13.0/RT-ResearchFlow-macOS-1.13.0-arm64.dmg)
-- [Mac Intel 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.13.0/RT-ResearchFlow-macOS-1.13.0-x64.dmg)
+- [Windows x64 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.14.0/RT-ResearchFlow-Setup-1.14.0-x64.exe)
+- [Mac Apple Silicon 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.14.0/RT-ResearchFlow-macOS-1.14.0-arm64.dmg)
+- [Mac Intel 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.14.0/RT-ResearchFlow-macOS-1.14.0-x64.dmg)
 
 **明确的凭证入口**：配置中心 → 数据源 → 顶部“Tushare Key 绑定与验证”。可绑定新 Token、复查已有 Token，显示验证时间、检查接口与权限受限提示。免费数据源不会隐藏此入口；Tushare Token 与大模型 API Key 分开配置。
 
@@ -17,7 +17,7 @@
 
 Windows 和两种 Mac 均通过实际安装、启动、设置页与退出验收。Key 验证只代表实际测试的接口，不承诺全部付费权限；本轮没有有效用户 Key，因此不宣称已完成线上 Tushare 认证。
 
-[更新说明与安装包验收](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.13.0) · [真实公开数据隔离验收](docs/quality/packaged-free-limit-1.12-live.md)
+[更新说明与安装包验收](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.14.0) · [真实公开数据隔离验收](docs/quality/packaged-free-limit-1.12-live.md)
 
 以下原有说明中的旧安装包和验收信息保留作为历史记录；当前下载以上方 1.12 为准。
 <!-- CURRENT-RELEASE-END -->
@@ -272,6 +272,6 @@ Windows 构建：`pnpm run dist:win`。Mac 构建在对应架构上执行 `node 
 
 </details>
 
-## 1.14.0 候选进展
+## 1.14.0 免费初始化与能力状态
 
-当前正式下载仍为 1.13.0。下一候选优先免费初始化、保留明确的 Tushare/AI 绑定入口，并按数据事实与模块能力展示可用状态；详见 [候选说明](docs/releases/v1.14.0.md) 与 [本地验收记录](docs/quality/initialization-capabilities-1.14-candidate.md)。三端候选安装包验收完成前不会替换正式下载。
+当前正式版本为 1.14.0。优先免费初始化、保留明确的 Tushare/AI 绑定入口，按本地事实与模块能力展示状态；详情见 [发布说明](docs/releases/v1.14.0.md) 和 [验收记录](docs/quality/release-1.14-acceptance.md)。基础可使用不代表竞价、筹码或全部历史策略已齐备。
