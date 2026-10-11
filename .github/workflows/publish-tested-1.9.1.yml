@@ -1,0 +1,161 @@
+name: Publish tested installers without rebuilding
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: choice
+        options: [v1.10.0, v1.9.1]
+        default: v1.10.0
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: github.repository == 'hzqedison/RT-ResearchFlow' && inputs.version == 'v1.9.1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPOSITORY: hzqedison/RT-ResearchFlow
+      TESTED_COMMIT: 67ae2281801e5b7b54e957170a86104c0fbd207c
+      TESTED_RUN: '38138615536'
+      RELEASE_TAG: v1.9.1
+    steps:
+      - name: Require completed native acceptance and immutable release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPOSITORY/actions/runs/$TESTED_RUN" > run.json
+          jq -e --arg commit "$TESTED_COMMIT" '.status == "completed" and .conclusion == "success" and .head_sha == $commit' run.json
+          gh api "repos/$REPOSITORY/actions/runs/$TESTED_RUN/jobs" > jobs.json
+          jq -e '[.jobs[] | select(.name | startswith("package ("))] | length == 2 and all(.conclusion == "success")' jobs.json
+          gh api "repos/$REPOSITORY/releases?per_page=100" |
+            jq -e --arg tag "$RELEASE_TAG" '[.[] | select(.tag_name == $tag)] | if length == 1 then .[0] else error("release identity missing or ambiguous") end' > release.json
+          jq -e --arg commit "$TESTED_COMMIT" '.tag_name == "v1.9.1" and .target_commitish == $commit' release.json
+          if jq -e '.draft == false' release.json >/dev/null; then
+            test "$(gh api "repos/$REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq .object.sha)" = "$TESTED_COMMIT"
+          fi
+      - name: Retrieve only tested installers from the exact completed run
+        uses: actions/download-artifact@v4
+        with:
+          repository: hzqedison/RT-ResearchFlow
+          run-id: '38138615536'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: public-mac-*-67ae2281801e5b7b54e957170a86104c0fbd207c
+          path: tested-artifacts
+      - name: Verify native installer checksums and upload without overwriting assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto'), cp = require('node:child_process')
+          const existing = new Set(JSON.parse(fs.readFileSync('release.json','utf8')).assets.map(a=>a.name))
+          const files = []
+          for (const arch of ['arm64','x64']) {
+            const root = path.join('tested-artifacts', `public-mac-${arch}-${process.env.TESTED_COMMIT}`)
+            const sumName = `SHA256SUMS-${arch}.txt`
+            const sums = fs.readFileSync(path.join(root,sumName),'utf8').trim().split(/\r?\n/)
+            if (sums.length !== 1) throw Error('UNEXPECTED_INSTALLER_COUNT')
+            const match = sums[0].match(/^([a-f0-9]{64})\s+release\/([^/]+)$/)
+            if (!match || match[2] !== `RT-ResearchFlow-macOS-1.9.1-${arch}.dmg`) throw Error('UNEXPECTED_INSTALLER_IDENTITY')
+            const installer = path.join(root,match[2])
+            const actual = crypto.createHash('sha256').update(fs.readFileSync(installer)).digest('hex')
+            if (actual !== match[1] || existing.has(match[2]) || existing.has(sumName)) throw Error('HASH_MISMATCH_OR_PUBLISHED_ASSET_EXISTS')
+            console.log(JSON.stringify({arch,file:match[2],sha256:actual,sourceCommit:process.env.TESTED_COMMIT,testedRun:process.env.TESTED_RUN}))
+            files.push(installer,path.join(root,sumName))
+          }
+          const result = cp.spawnSync('gh',['release','upload',process.env.RELEASE_TAG,'--repo',process.env.REPOSITORY,...files],{stdio:'inherit'})
+          if (result.status !== 0) process.exit(result.status || 1)
+          NODE
+  publish_1_10:
+    if: github.repository == 'hzqedison/RT-ResearchFlow' && github.actor == 'hzqedison' && inputs.version == 'v1.10.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPOSITORY: hzqedison/RT-ResearchFlow
+      MAC_COMMIT: c9dea47314174152bd09c0d59f936a85804ff9bc
+      WINDOWS_COMMIT: 26f6853b8f39d2d135df3f648df30617cdac508e
+      RELEASE_TAG: v1.10.0
+    steps:
+      - name: Require native acceptance and unchanged shared application sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          for run in 38146695142 38149298676 38150066618; do
+            gh api "repos/$REPOSITORY/actions/runs/$run" > "run-$run.json"
+            gh api "repos/$REPOSITORY/actions/runs/$run/jobs" > "jobs-$run.json"
+            jq -e '.status == "completed" and .path == ".github/workflows/public-on-demand-macos.yml" and .repository.full_name == "hzqedison/RT-ResearchFlow" and .head_repository.full_name == "hzqedison/RT-ResearchFlow"' "run-$run.json"
+          done
+          jq -e --arg sha "$MAC_COMMIT" '.head_sha == $sha' run-38146695142.json
+          jq -e --arg sha "$WINDOWS_COMMIT" '.head_sha == $sha and .conclusion == "success"' run-38149298676.json
+          jq -e '.conclusion == "success"' run-38150066618.json
+          jq -e '[.jobs[] | select(.name == "package (macos-15, arm64)" or .name == "package (macos-15-intel, x64)")] | length == 2 and all(.conclusion == "success")' jobs-38146695142.json
+          jq -e '[.jobs[] | select(.name == "windows")] | length == 1 and all(.conclusion == "success")' jobs-38149298676.json
+          jq -e '[.jobs[] | select(.name == "installer_lifecycle")] | length == 1 and all(.conclusion == "success")' jobs-38150066618.json
+          gh api "repos/$REPOSITORY/compare/$MAC_COMMIT...$WINDOWS_COMMIT" > source-difference.json
+          node <<'NODE'
+          const fs=require('node:fs'),d=JSON.parse(fs.readFileSync('source-difference.json','utf8'))
+          const allowed=new Set(['.github/workflows/public-on-demand-macos.yml','resources/installer.nsh','tests/unit/nsisFreshInstallDefaults.contract.test.ts','tests/unit/nsisExplicitRepairDispatch.contract.test.ts'])
+          if(d.status!=='ahead'||d.total_commits!==2||!Array.isArray(d.files)||d.files.length!==4||d.files.some(f=>!allowed.has(f.filename)))throw Error('SHARED_APPLICATION_SOURCE_CHANGED')
+          NODE
+          gh api "repos/$REPOSITORY/releases?per_page=100" | jq -e '[.[] | select(.tag_name == "v1.10.0")] | if length == 1 then .[0] else error("draft identity missing or ambiguous") end' > release.json
+          jq -e --arg sha "$WINDOWS_COMMIT" '.draft == true and .target_commitish == $sha' release.json
+      - name: Retrieve only already-tested installers and lifecycle receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download 38146695142 --repo "$REPOSITORY" --name "public-mac-arm64-$MAC_COMMIT" --dir tested/mac-arm64
+          gh run download 38146695142 --repo "$REPOSITORY" --name "public-mac-x64-$MAC_COMMIT" --dir tested/mac-x64
+          gh run download 38149298676 --repo "$REPOSITORY" --name "public-windows-x64-$WINDOWS_COMMIT" --dir tested/windows-x64
+          gh run download 38150066618 --repo "$REPOSITORY" --name public-installer-lifecycle-38150066618 --dir tested/lifecycle
+      - name: Verify exact bytes, upload without overwriting, then publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),cp=require('node:child_process')
+          const repo=process.env.REPOSITORY,tag=process.env.RELEASE_TAG
+          const gh=args=>{const r=cp.spawnSync('gh',args,{encoding:'utf8',maxBuffer:8*1024*1024});if(r.status!==0)throw Error(r.stderr);return r.stdout}
+          const initial=JSON.parse(fs.readFileSync('release.json','utf8')),existing=new Map(initial.assets.map(a=>[a.name,a])),files=[]
+          const lifecyclePath='tested/lifecycle/installer-lifecycle-acceptance.json'
+          const lifecycle=JSON.parse(fs.readFileSync(lifecyclePath,'utf8').replace(/^\uFEFF/,''))
+          if(lifecycle.version!=='1.10.0'||lifecycle.sourceCommit!==process.env.WINDOWS_COMMIT||lifecycle.defaultNonSystemPathPassed!==true||lifecycle.sameDirectoryUpgradePreservesData!==true||lifecycle.silentUninstallPreservesData!==true||lifecycle.sharedPythonUnchanged!==true||lifecycle.brokerOrdersSubmitted!==false)throw Error('INSTALLER_LIFECYCLE_NOT_ACCEPTED')
+          for(const [folder,platform,arch,commit,run] of [
+            ['mac-arm64','darwin','arm64',process.env.MAC_COMMIT,'38146695142'],
+            ['mac-x64','darwin','x64',process.env.MAC_COMMIT,'38146695142'],
+            ['windows-x64','win32','x64',process.env.WINDOWS_COMMIT,'38149298676']]) {
+            const root=path.join('tested',folder),label=platform+'-'+arch
+            const name=platform==='darwin'?`RT-ResearchFlow-macOS-1.10.0-${arch}.dmg`:'RT-ResearchFlow-Setup-1.10.0-x64.exe'
+            const receiptName=`acceptance-${label}.json`,sumName=`SHA256SUMS-${label}.txt`
+            const receipt=JSON.parse(fs.readFileSync(path.join(root,receiptName),'utf8'))
+            if(receipt.version!=='1.10.0'||receipt.sourceCommit!==commit||String(receipt.runId)!==run||receipt.platform!==platform||receipt.arch!==arch||receipt.file!==name||receipt.extensionDelivery!=='on-demand'||receipt.packagedStartupAndExit!==true||receipt.packagedPdfCanvasSqlite!==true||receipt.actualPrivateAkshareInstall!==true||receipt.brokerOrdersSubmitted!==false||receipt.published!==false)throw Error('NATIVE_ACCEPTANCE_RECEIPT_MISMATCH')
+            if(platform==='win32'&&receipt.sha256!==lifecycle.installerSha256)throw Error('LIFECYCLE_USED_DIFFERENT_INSTALLER')
+            if(fs.readFileSync(path.join(root,sumName),'utf8').trim()!==`${receipt.sha256}  ${name}`)throw Error('CHECKSUM_IDENTITY_MISMATCH')
+            for(const filename of [name,sumName,receiptName]) {
+              const local=path.join(root,filename),stat=fs.lstatSync(local)
+              if(!stat.isFile()||stat.isSymbolicLink()||stat.size>512*1024*1024)throw Error('ASSET_FILE_INVALID')
+              const digest=crypto.createHash('sha256').update(fs.readFileSync(local)).digest('hex')
+              if(filename===name&&(digest!==receipt.sha256||stat.size!==receipt.size))throw Error('INSTALLER_BYTES_MISMATCH')
+              files.push({local,name:filename,size:stat.size,digest:'sha256:'+digest})
+            }
+          }
+          const addReceipt=file=>{const b=fs.readFileSync(file);files.push({local:file,name:path.basename(file),size:b.length,digest:'sha256:'+crypto.createHash('sha256').update(b).digest('hex')})}
+          addReceipt(lifecyclePath)
+          for(const file of files){const prior=existing.get(file.name);if(prior&&(prior.size!==file.size||prior.digest!==file.digest))throw Error('EXISTING_ASSET_MISMATCH')}
+          const pending=files.filter(f=>!existing.has(f.name))
+          if(pending.length)gh(['release','upload',tag,'--repo',repo,...pending.map(f=>f.local)])
+          const endpoint=`repos/${repo}/releases/${initial.id}`
+          const release=JSON.parse(gh(['api',endpoint]))
+          if(!release.draft||release.target_commitish!==process.env.WINDOWS_COMMIT)throw Error('DRAFT_IDENTITY_CHANGED')
+          for(const file of files){const asset=release.assets.find(a=>a.name===file.name);if(!asset||asset.size!==file.size||asset.digest!==file.digest)throw Error('SERVER_ASSET_BYTES_NOT_CONFIRMED')}
+          gh(['release','edit',tag,'--repo',repo,'--draft=false','--latest'])
+          const published=JSON.parse(gh(['api',endpoint])),ref=JSON.parse(gh(['api',`repos/${repo}/git/ref/tags/${tag}`]))
+          if(published.draft||ref.object.type!=='commit'||ref.object.sha!==process.env.WINDOWS_COMMIT)throw Error('PUBLICATION_NOT_CONFIRMED')
+          console.log(JSON.stringify({url:published.html_url,version:'1.10.0',rebuilt:false,assets:files.map(f=>({name:f.name,digest:f.digest}))}))
+          NODE
