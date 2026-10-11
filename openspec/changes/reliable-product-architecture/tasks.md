@@ -32,6 +32,8 @@
 已进一步接入公共历史及证券列表的工作归属、取消信号、串行队列和成功检查点保留，并通过 28 项定向检查及 Windows 实际手动请求退出。对应规格为 `specs/cancellable-public-data-work/spec.md`；Tushare、其他服务及两种 Mac 的本轮原生证明尚未完成，4.4 不扩大完成范围。
 
 随后接入 Tushare 历史同步、日历准备及 daily_basic 补充的取消，84 项定向回归与 Windows 独立合成凭证退出通过。对应规格 `specs/cancellable-tushare-history/spec.md`，证据 `docs/quality/tushare-shutdown-1.18-candidate.md`；不冒充真实 Key 权限，其他后台任务与 Mac 原生证明仍未完成，4.4 保持未勾选。
+
+新增仅诊断的两种 Mac 原生应用目录验证，记录在 `docs/quality/mac-cancellation-1.18.md`。不上传安装包，不替代正式 DMG/升级/恢复验收，不取消已知发布阻断，4.4 不因诊断绿灯整体勾选。
 - [ ] 4.5 将既有日历和更新模块的未验证改动逐项检查后纳入下一版本
 
 ## 5. 交易与研究后续迁移

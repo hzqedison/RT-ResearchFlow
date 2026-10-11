@@ -1,0 +1,85 @@
+name: Diagnostic-only native Mac cancellation
+
+on:
+  push:
+    branches: [codex/public-product-runtime-1.10]
+    paths: [.github/workflows/verify-macos-cancellation.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagnostic-mac-cancellation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-diagnostic:
+    name: cancellation (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      RT_EXTENSION_DELIVERY: on-demand
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.18.0
+          cache: pnpm
+      - name: Prepare native dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm exec electron-builder install-app-deps
+      - name: Check source and cancellation contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e "if(require('./package.json').version!=='1.18.0')throw Error('DIAGNOSTIC_CANDIDATE_VERSION_MISMATCH')"
+          pnpm exec tsc -p tsconfig.node.json --noEmit
+          pnpm exec tsc -p tsconfig.web.json --noEmit
+          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/tushareHistoricalCancellation.test.ts tests/unit/tushareCancellationTransport.test.ts tests/unit/tradeCalCancellation.test.ts tests/unit/diagnosticsCancellationHandlers.test.ts tests/unit/historicalDailySync.service.test.ts tests/unit/tradeCalSync.service.test.ts tests/unit/tushareAccessError.test.ts tests/unit/tushare.diagnosticBounds.test.ts tests/unit/historicalSyncCancellation.test.ts tests/unit/publicMarketWorkOwner.test.ts tests/unit/publicHistoricalDailySync.service.test.ts tests/unit/publicMarketRequestGovernor.test.ts tests/unit/publicStockUniverse.service.test.ts --maxWorkers=1 --minWorkers=1 --silent
+      - name: Build actual native application directory without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec electron-vite build
+          pnpm exec vite build --config research-access.vite.config.ts
+          pnpm exec electron-builder --mac --${{ matrix.arch }} --dir --config electron-builder.js --publish never --config.mac.identity=null
+      - name: Verify real application, native key storage and cancelled requests
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_path=$(find release -mindepth 1 -maxdepth 2 -type d -name 'RT-ResearchFlow.app' -print -quit)
+          test -n "$app_path"
+          export RT_PACKAGED_EXE="$PWD/$app_path/Contents/MacOS/RT-ResearchFlow"
+          export RT_PACKAGED_TEST_ROOT="$RUNNER_TEMP/native-cancellation-${{ matrix.arch }}"
+          export RT_PACKAGED_VERSION=1.18.0
+          export RT_PUBLIC_WORK_FIXTURE_ALLOWED=1
+          export RT_TUSHARE_WORK_FIXTURE_ALLOWED=1
+          mkdir -p "$RT_PACKAGED_TEST_ROOT"
+          pnpm exec playwright test tests/e2e/packaged-public-work-shutdown.spec.ts tests/e2e/packaged-tushare-work-shutdown.spec.ts --workers=1 --retries=0 --reporter=line
+          mkdir -p diagnostic-evidence
+          find "$RT_PACKAGED_TEST_ROOT" -maxdepth 2 -type f -name '*shutdown-proof.json' -exec cp {} diagnostic-evidence/ \;
+          node -e "const fs=require('fs');const names=['isolated-shutdown-proof.json','isolated-tushare-shutdown-proof.json'];for(const name of names)if(!fs.existsSync('diagnostic-evidence/'+name))throw Error('DIAGNOSTIC_PROOF_MISSING');fs.writeFileSync('diagnostic-evidence/summary.json',JSON.stringify({schema:1,version:'1.18.0',sourceCommit:process.env.GITHUB_SHA,runId:process.env.GITHUB_RUN_ID,platform:process.platform,arch:process.arch,tests:['public-manual-quit','synthetic-tushare-quit'],applicationDirectoryOnly:true,installerVerified:false,realTushareAuthentication:false,brokerOrdersSubmitted:false,published:false,releaseEligible:false},null,2)+'\n')"
+      - name: Upload diagnostic evidence only, never application files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-mac-cancellation-${{ matrix.arch }}-${{ github.sha }}
+          path: diagnostic-evidence/*.json
+          if-no-files-found: ignore
+          retention-days: 14
