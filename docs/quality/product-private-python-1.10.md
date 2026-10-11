@@ -25,7 +25,9 @@ Primary source: https://github.com/astral-sh/python-build-standalone/releases/ta
 - Do not relocate framework or Homebrew Python by copying its directory.
 - The downloader and the existing extension-install entry point are connected. Size/hash checks, bounded downloads, archive path checks and staged runtime validation are implemented.
 - Twelve download-contract/integrity tests and the main-process type check passed locally on Windows. This does not prove native Mac execution.
-- A separate dual-architecture native workflow exercises the real download and extension installer with an unavailable system interpreter. Native execution, packaged GUI checks and live data API acceptance remain outstanding until receipts demonstrate otherwise.
+- Native run 38142676164 passed on arm64 and x64 at source f43865881c0ce2a236300636cab922b7ebd5c231. Both downloaded receipts confirmed actual Python 3.13.16 provisioning, reuse, extension installation and AkShare 1.19.1 import with an unavailable system interpreter.
+- These native receipts do not cover packaged GUI checks or live data APIs. Those remain outstanding.
+- Local Windows application-host execution did not yield a success receipt. A subsequent development-host launch was rejected by execution policy and was not retried through an alternative local launcher. Do not infer native Windows acceptance from unit tests or a launcher exit code.
 - Keep signed application bundles unchanged. Confirm a writable runtime location and upgrade preservation before connecting Mac installation.
 
 ## Release gates

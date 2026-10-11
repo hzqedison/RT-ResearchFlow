@@ -2,6 +2,12 @@ name: Product-private Python native acceptance
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: Native acceptance target; no installer publication
+        type: choice
+        options: [macos, windows, all]
+        default: macos
 
 permissions:
   contents: read
@@ -9,6 +15,7 @@ permissions:
 jobs:
   native-python:
     name: Native Python ${{ matrix.arch }}
+    if: github.event.inputs.target != 'windows'
     strategy:
       fail-fast: false
       matrix:
@@ -56,6 +63,71 @@ jobs:
         with:
           name: product-private-python-${{ matrix.arch }}-${{ github.sha }}
           path: ${{ runner.temp }}/product-private-python-acceptance.json
+          if-no-files-found: warn
+
+  native-python-windows:
+    name: Native Python Windows x64
+    if: github.event.inputs.target != 'macos'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      USE_HARD_LINKS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.18.0
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.13'
+          check-latest: true
+      - name: Prepare isolated non-system-drive temporary storage
+        shell: pwsh
+        run: |
+          $temporary = "D:\rt-python-temp-${{ github.run_id }}"
+          New-Item -ItemType Directory -Path $temporary -Force | Out-Null
+          "TEMP=$temporary" >> $env:GITHUB_ENV
+          "TMP=$temporary" >> $env:GITHUB_ENV
+      - name: Install test dependencies without application setup hooks
+        env:
+          npm_config_cache: ${{ runner.temp }}/npm-cache
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install the unmodified native Electron test host
+        env:
+          ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+        run: node node_modules/electron/install.js
+      - name: Verify runtime contracts and main-process types
+        shell: pwsh
+        run: |
+          pnpm exec vitest run tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm exec tsc --noEmit -p tsconfig.node.json --composite false
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Compile isolated Windows smoke harness
+        shell: pwsh
+        run: pnpm exec esbuild tests/native/productPythonWindowsSmoke.ts --bundle --platform=node --format=cjs --external:electron --outfile="$env:RUNNER_TEMP/product-private-python-windows-smoke.cjs"
+      - name: Accept fresh Windows copy and actual AkShare installation
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
+          RT_PRODUCT_PYTHON_TEST_ROOT: D:\rt-product-private-python-${{ github.run_id }}
+          RT_SHARED_PYTHON_TEST_SOURCE: ${{ steps.python.outputs.python-path }}
+          RT_PRODUCT_PYTHON_RECEIPT: ${{ runner.temp }}/product-private-python-windows-acceptance.json
+        shell: pwsh
+        run: |
+          pnpm exec electron "$env:RUNNER_TEMP/product-private-python-windows-smoke.cjs"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path -LiteralPath $env:RT_PRODUCT_PYTHON_RECEIPT)) { throw 'Missing native acceptance receipt' }
+      - name: Upload the bounded Windows acceptance receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-private-python-windows-x64-${{ github.sha }}
+          path: ${{ runner.temp }}/product-private-python-windows-acceptance.json
           if-no-files-found: warn
 
 # This workflow publishes no installers and never accesses production user data.

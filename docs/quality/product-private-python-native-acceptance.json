@@ -1,0 +1,37 @@
+{
+  "targetVersion": "1.10.0",
+  "released": false,
+  "sourceCommit": "f43865881c0ce2a236300636cab922b7ebd5c231",
+  "nativeMacRun": {
+    "id": 38142676164,
+    "url": "https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38142676164",
+    "conclusion": "success",
+    "receiptsDownloadedAndChecked": true,
+    "architectures": ["arm64", "x64"],
+    "pythonVersion": "3.13.16",
+    "akshareVersion": "1.19.1",
+    "privateRuntimeCreated": true,
+    "existingPrivateRuntimeReused": true,
+    "unavailableSystemInterpreterAccepted": true,
+    "actualApplicationExtensionInstallerUsed": true,
+    "actualAkshareImportPassed": true
+  },
+  "localChecks": {
+    "relatedUnitTestsPassed": 16,
+    "mainProcessTypecheckPassed": true,
+    "windowsInstalledPrivatePythonAndAkshareImportPassed": true,
+    "windowsAutomaticCopyNativeAcceptancePassed": false,
+    "windowsDevelopmentElectronLaunchPolicyRejected": true,
+    "installedLauncherWithoutReceiptNotCountedAsSuccess": true
+  },
+  "notAccepted": [
+    "Windows automatic migration in the native application host",
+    "1.10.0 packaged application GUI and upgrade lifecycle",
+    "Live upstream data APIs and complete strategy data coverage",
+    "Automatic runtime provisioning UI usability",
+    "Safe cleanup of shared C-drive Python and caches",
+    "Brokerage connectivity or real orders"
+  ],
+  "existingPublicInstallersModified": false,
+  "existingLocalApplicationVersion": "1.9.1"
+}
