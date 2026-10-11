@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { checkLocalWork, localWorkDelay, waitForLocalWork } from './publicMarketWorkOwner'
 import {
   getPublicMarketGlobalRequestState,
   getPublicMarketProviderState,
@@ -43,7 +44,7 @@ export class PublicMarketProviderCoolingDownError extends Error {
 
 interface GovernorDependencies {
   now?: () => number
-  sleep?: (ms: number) => Promise<void>
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
   random?: () => number
 }
 
@@ -62,7 +63,7 @@ export class PersistentPublicMarketRequestGovernor {
   private activeRequests = 0
   private maximumActiveRequests = 0
   private readonly now: () => number
-  private readonly sleep: (ms: number) => Promise<void>
+  private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>
   private readonly random: () => number
 
   constructor(
@@ -71,7 +72,7 @@ export class PersistentPublicMarketRequestGovernor {
     dependencies: GovernorDependencies = {},
   ) {
     this.now = dependencies.now ?? Date.now
-    this.sleep = dependencies.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
+    this.sleep = dependencies.sleep ?? localWorkDelay
     this.random = dependencies.random ?? Math.random
   }
 
@@ -90,19 +91,25 @@ export class PersistentPublicMarketRequestGovernor {
   async run<T extends GovernedPublicResponse>(
     provider: string,
     task: () => Promise<T>,
+    signal?: AbortSignal,
   ): Promise<GovernedPublicResult<T>> {
+    checkLocalWork(signal)
     let releaseQueue!: () => void
     const previous = this.queueTail
-    this.queueTail = new Promise<void>((resolve) => { releaseQueue = resolve })
+    const released = new Promise<void>((resolve) => { releaseQueue = resolve })
+    // Cancelling this slot never lets its successor bypass the predecessor.
+    this.queueTail = previous.then(() => released)
     const queuedAt = this.now()
-    await previous
 
     try {
+      await waitForLocalWork(previous, signal)
+      checkLocalWork(signal)
       this.assertProviderAvailable(provider)
       const global = getPublicMarketGlobalRequestState(this.db)
       const waitUntil = Math.max(global.nextAllowedAt, global.batchBlockedUntil)
       const waitMs = Math.max(0, waitUntil - this.now())
-      if (waitMs > 0) await this.sleep(waitMs)
+      if (waitMs > 0) await waitForLocalWork(this.sleep(waitMs, signal), signal)
+      checkLocalWork(signal)
       this.assertProviderAvailable(provider)
 
       const startedAt = this.now()
@@ -121,7 +128,10 @@ export class PersistentPublicMarketRequestGovernor {
         let value: T
         try {
           value = await task()
+          checkLocalWork(signal)
         } catch (error) {
+          // Local cancellation is not a provider outage or rate-limit event.
+          checkLocalWork(signal)
           const completedAt = this.now()
           recordPublicMarketRequestOutcome(this.db, {
             provider,

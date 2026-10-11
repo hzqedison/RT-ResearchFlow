@@ -26,6 +26,7 @@ import {
 } from './publicMarketRequestGovernor'
 import type { DailyRow } from './tushareService'
 import { runPublicStockUniverseSync } from './publicStockUniverseService'
+import { checkLocalWork, isLocalWorkCancelled, publicMarketWorkOwner, publicRequestSignal } from './publicMarketWorkOwner'
 
 const PUBLIC_DAILY_JOB_KEY = 'historical_daily_public'
 const TARGET_TRADE_DAYS = 480
@@ -35,6 +36,7 @@ export const PUBLIC_HISTORICAL_DAILY_BATCH_SIZE = 400
 export const PUBLIC_HISTORICAL_DAILY_BATCH_PAUSE_MS = 60_000
 
 interface PublicHistoricalDailyDependencies {
+  signal?: AbortSignal
   providers?: Array<'sina' | 'tencent'>
   fetchImpl?: typeof fetch
   governor?: PersistentPublicMarketRequestGovernor
@@ -105,21 +107,27 @@ async function fetchJson(
   url: string,
   fetchImpl: typeof fetch,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   const governed = await governor.run(provider, async () => {
+    checkLocalWork(signal)
+    const request = publicRequestSignal(signal, timeoutMs)
+    try {
     const response = await fetchImpl(url, {
       headers: {
         Accept: 'application/json,text/plain,*/*',
         Referer: provider === 'sina' ? 'https://finance.sina.com.cn/' : 'https://stockapp.finance.qq.com/',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121 Safari/537.36',
       },
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: request.signal,
     })
     const text = await response.text()
+    checkLocalWork(signal)
     if (!response.ok) return { status: response.status, body: null }
     const body: unknown = JSON.parse(text)
     return { status: response.status, body }
-  })
+    } finally { request.dispose() }
+  }, signal)
   if (governed.value.status < 200 || governed.value.status >= 400) {
     throw errorWithCode(
       `PUBLIC_${provider.toUpperCase()}_HTTP_${governed.value.status}`,
@@ -133,9 +141,9 @@ async function fetchSinaHistory(
   tsCode: string,
   targetEndDate: string,
   dependencies: Required<Pick<PublicHistoricalDailyDependencies, 'fetchImpl' | 'governor' | 'timeoutMs'>>
-    & Pick<PublicHistoricalDailyDependencies, 'acceptEmptyBeforeFirstClose'>,
+    & Pick<PublicHistoricalDailyDependencies, 'acceptEmptyBeforeFirstClose' | 'signal'>,
 ): Promise<PublicHistoryFetchResult> {
-  const body = await fetchJson(dependencies.governor, 'sina', sinaHistoryUrl(tsCode), dependencies.fetchImpl, dependencies.timeoutMs)
+  const body = await fetchJson(dependencies.governor, 'sina', sinaHistoryUrl(tsCode), dependencies.fetchImpl, dependencies.timeoutMs, dependencies.signal)
   const rawRows = Array.isArray(body) ? body : []
   const transformed = transformSinaDailySeries(tsCode, rawRows, {
     maxTradeDate: targetEndDate,
@@ -151,10 +159,10 @@ async function fetchSinaHistory(
 async function fetchTencentHistory(
   tsCode: string,
   targetEndDate: string,
-  dependencies: Required<Pick<PublicHistoricalDailyDependencies, 'fetchImpl' | 'governor' | 'timeoutMs'>>,
+  dependencies: Required<Pick<PublicHistoricalDailyDependencies, 'fetchImpl' | 'governor' | 'timeoutMs'>> & Pick<PublicHistoricalDailyDependencies, 'signal'>,
 ): Promise<PublicHistoryFetchResult> {
   if (tsCode.endsWith('.BJ')) throw errorWithCode('PUBLIC_TENCENT_BJ_UNSUPPORTED')
-  const body = await fetchJson(dependencies.governor, 'tencent', tencentHistoryUrl(tsCode), dependencies.fetchImpl, dependencies.timeoutMs)
+  const body = await fetchJson(dependencies.governor, 'tencent', tencentHistoryUrl(tsCode), dependencies.fetchImpl, dependencies.timeoutMs, dependencies.signal)
   const symbol = tencentSymbol(tsCode)
   const rawRows = symbol && typeof body === 'object' && body !== null
     ? (body as { data?: Record<string, { day?: unknown[] }> }).data?.[symbol]?.day
@@ -168,13 +176,20 @@ async function fetchTencentHistory(
   return { provider: 'tencent', rows }
 }
 
-export async function fetchPublicDailyHistoryForCode(
+export function fetchPublicDailyHistoryForCode(
   db: Database.Database,
   tsCode: string,
   targetEndDate: string,
   dependencies: PublicHistoricalDailyDependencies = {},
 ): Promise<PublicHistoryFetchResult> {
+  return publicMarketWorkOwner.run(signal => fetchPublicDailyHistoryForCodeOwned(db, tsCode, targetEndDate, { ...dependencies, signal }), dependencies.signal)
+}
+async function fetchPublicDailyHistoryForCodeOwned(
+  db: Database.Database, tsCode: string, targetEndDate: string, dependencies: PublicHistoricalDailyDependencies,
+): Promise<PublicHistoryFetchResult> {
+  checkLocalWork(dependencies.signal)
   const resolved = {
+    signal: dependencies.signal,
     fetchImpl: dependencies.fetchImpl ?? fetch,
     governor: dependencies.governor ?? getPersistentPublicMarketRequestGovernor(db),
     timeoutMs: dependencies.timeoutMs ?? DEFAULT_TIMEOUT_MS,
@@ -186,17 +201,21 @@ export async function fetchPublicDailyHistoryForCode(
       try {
         if (provider === 'sina') return await fetchSinaHistory(tsCode, targetEndDate, resolved)
         if (provider === 'tencent') return await fetchTencentHistory(tsCode, targetEndDate, resolved)
-      } catch (error) { lastError = error }
+      } catch (error) { checkLocalWork(dependencies.signal); if (isLocalWorkCancelled(error)) throw error; lastError = error }
     }
     throw lastError
   }
   try {
     return await fetchSinaHistory(tsCode, targetEndDate, resolved)
   } catch (sinaError) {
+    checkLocalWork(dependencies.signal)
+    if (isLocalWorkCancelled(sinaError)) throw sinaError
     if (tsCode.endsWith('.BJ')) throw sinaError
     try {
       return await fetchTencentHistory(tsCode, targetEndDate, resolved)
     } catch (tencentError) {
+      checkLocalWork(dependencies.signal)
+      if (isLocalWorkCancelled(tencentError)) throw tencentError
       if (
         sinaError instanceof PublicMarketProviderCoolingDownError
         && tencentError instanceof PublicMarketProviderCoolingDownError
@@ -256,16 +275,20 @@ export function runPublicHistoricalDailySync(
   targetEndDate: string,
   dependencies: PublicHistoricalDailyDependencies = {},
 ): Promise<PublicHistoricalDailySyncResult> {
+  try { publicMarketWorkOwner.assertAccepting(dependencies.signal) } catch (error) { return Promise.reject(error) }
   if (!/^\d{8}$/.test(targetEndDate)) return Promise.reject(errorWithCode('PUBLIC_DAILY_INVALID_TARGET_DATE'))
   if (publicHistoricalDailyPromise) return publicHistoricalDailyPromise
   const now = dependencies.now ?? Date.now
   const startedAt = now()
 
   let promise: Promise<PublicHistoricalDailySyncResult>
-  promise = (async () => {
+  promise = publicMarketWorkOwner.run(async signal => {
+    dependencies = { ...dependencies, signal }
+    checkLocalWork(signal)
     let activeStocks = queryAllActive(db)
     if (activeStocks.length === 0) {
-      await runPublicStockUniverseSync(db, dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {})
+      await runPublicStockUniverseSync(db, { fetchImpl: dependencies.fetchImpl, governor: dependencies.governor, signal })
+      checkLocalWork(signal)
       activeStocks = queryAllActive(db)
     }
     if (activeStocks.length === 0) throw errorWithCode('PUBLIC_STOCK_UNIVERSE_NOT_READY')
@@ -295,6 +318,7 @@ export function runPublicHistoricalDailySync(
     }, dependencies.onProgress)
 
     for (const [pendingIndex, tsCode] of pendingCodes.entries()) {
+      checkLocalWork(signal)
       const existing = getPublicDailySyncCheckpoint(db, tsCode)
       const attemptAt = now()
       upsertPublicDailySyncCheckpoint(db, {
@@ -317,6 +341,7 @@ export function runPublicHistoricalDailySync(
             targetEndDate,
           ),
         })
+        checkLocalWork(signal)
         const fetchedAt = now()
         upsertDailyClose(db, fetched.rows, writeMetadata(fetched.provider, fetchedAt))
         const lastSuccessDate = fetched.rows.at(-1)?.tradeDate ?? targetEndDate
@@ -334,6 +359,13 @@ export function runPublicHistoricalDailySync(
         result.syncedStocks += 1
         result.writtenRows += fetched.rows.length
       } catch (error) {
+        if (isLocalWorkCancelled(error) || signal.aborted) {
+          upsertPublicDailySyncCheckpoint(db, { tsCode, primaryProvider: existing?.primaryProvider ?? 'sina', status: 'pending', targetEndDate,
+            lastSuccessDate: existing?.lastSuccessDate ?? null, writtenRows: existing?.writtenRows ?? 0, lastError: null,
+            attempts: (existing?.attempts ?? 0) + 1, updatedAt: now() })
+          checkLocalWork(signal)
+          throw error
+        }
         const failedAt = now()
         const status = errorStatus(error)
         const message = (error instanceof Error ? error.message : String(error)).slice(0, 300)
@@ -394,6 +426,7 @@ export function runPublicHistoricalDailySync(
       }, dependencies.onProgress)
     }
 
+    checkLocalWork(signal)
     const completedAt = now()
     publishJob(db, {
       jobKey: PUBLIC_DAILY_JOB_KEY,
@@ -410,16 +443,17 @@ export function runPublicHistoricalDailySync(
       updatedAt: completedAt,
     }, dependencies.onProgress)
     return result
-  })().catch((error) => {
+  }, dependencies.signal).catch((error) => {
     const failedAt = now()
+    const cancelled = isLocalWorkCancelled(error), currentJob = getPublicMarketSyncJob(db, PUBLIC_DAILY_JOB_KEY)
     publishJob(db, {
       jobKey: PUBLIC_DAILY_JOB_KEY,
-      status: error instanceof PublicMarketProviderCoolingDownError ? 'cooldown' : 'failed',
-      totalItems: queryAllActive(db).length,
-      processedItems: 0,
-      writtenRows: 0,
-      currentItem: null,
-      message: (error instanceof Error ? error.message : String(error)).slice(0, 300),
+      status: cancelled ? 'partial' : error instanceof PublicMarketProviderCoolingDownError ? 'cooldown' : 'failed',
+      totalItems: currentJob?.totalItems ?? queryAllActive(db).length,
+      processedItems: currentJob?.processedItems ?? 0,
+      writtenRows: currentJob?.writtenRows ?? 0,
+      currentItem: currentJob?.currentItem ?? null,
+      message: cancelled ? 'LOCAL_WORK_CANCELLED：本轮已停止，成功检查点已保留，下次可继续' : (error instanceof Error ? error.message : String(error)).slice(0, 300),
       startedAt,
       completedAt: failedAt,
       updatedAt: failedAt,

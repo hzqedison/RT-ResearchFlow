@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { checkLocalWork, isLocalWorkCancelled, publicMarketWorkOwner, publicRequestSignal } from './publicMarketWorkOwner'
 import {
   mergePublicStockIdentities,
   type PublicStockIdentityMergeResult,
@@ -27,6 +28,7 @@ const MIN_PUBLIC_STOCK_UNIVERSE_ROWS = 4_000
 const DEFAULT_TIMEOUT_MS = 15_000
 
 interface PublicStockUniverseDependencies {
+  signal?: AbortSignal
   fetchImpl?: typeof fetch
   governor?: PersistentPublicMarketRequestGovernor
   now?: () => number
@@ -94,10 +96,14 @@ function publishJob(
   onProgress?.({ ...job })
 }
 
-export async function fetchPublicStockUniverse(
+export function fetchPublicStockUniverse(
   db: Database.Database,
   dependencies: PublicStockUniverseDependencies = {},
 ): Promise<PublicStockUniverseFetchResult> {
+  return publicMarketWorkOwner.run(signal => fetchPublicStockUniverseOwned(db, { ...dependencies, signal }), dependencies.signal)
+}
+async function fetchPublicStockUniverseOwned(db: Database.Database, dependencies: PublicStockUniverseDependencies): Promise<PublicStockUniverseFetchResult> {
+  checkLocalWork(dependencies.signal)
   const fetchImpl = dependencies.fetchImpl ?? fetch
   const governor = dependencies.governor ?? getPersistentPublicMarketRequestGovernor(db)
   const timeoutMs = dependencies.timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -110,6 +116,7 @@ export async function fetchPublicStockUniverse(
   const startedAt = getPublicMarketSyncJob(db, PUBLIC_STOCK_JOB_KEY)?.startedAt ?? now()
 
   for (let page = 1; page <= SINA_UNIVERSE_MAX_PAGES; page += 1) {
+    checkLocalWork(dependencies.signal)
     const jobNow = now()
     publishJob(db, createJob(startedAt, {
       processedItems: page - 1,
@@ -120,20 +127,26 @@ export async function fetchPublicStockUniverse(
     }), dependencies.onProgress)
 
     const governed = await governor.run(SINA_UNIVERSE_PROVIDER, async () => {
+      checkLocalWork(dependencies.signal)
+      const request = publicRequestSignal(dependencies.signal, timeoutMs)
+      try {
       const response = await fetchImpl(pageUrl(page), {
         headers: {
           Accept: 'application/json,text/plain,*/*',
           Referer: 'https://finance.sina.com.cn/',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121 Safari/537.36',
         },
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: request.signal,
       })
       const text = await response.text()
+      checkLocalWork(dependencies.signal)
       if (!response.ok) return { status: response.status, body: null }
       const body: unknown = JSON.parse(text)
       if (!Array.isArray(body)) throw errorWithCode('PUBLIC_STOCK_UNIVERSE_INVALID_RESPONSE')
       return { status: response.status, body }
-    })
+      } finally { request.dispose() }
+    }, dependencies.signal)
+    checkLocalWork(dependencies.signal)
     if (governed.value.status < 200 || governed.value.status >= 400) {
       throw errorWithCode(
         `PUBLIC_STOCK_UNIVERSE_HTTP_${governed.value.status}`,
@@ -179,15 +192,19 @@ export function runPublicStockUniverseSync(
   db: Database.Database,
   dependencies: PublicStockUniverseDependencies = {},
 ): Promise<PublicStockUniverseSyncResult> {
+  try { publicMarketWorkOwner.assertAccepting(dependencies.signal) } catch (error) { return Promise.reject(error) }
   if (publicStockUniverseSyncPromise) return publicStockUniverseSyncPromise
   const now = dependencies.now ?? Date.now
   const startedAt = now()
-  publishJob(db, createJob(startedAt), dependencies.onProgress)
 
   let promise: Promise<PublicStockUniverseSyncResult>
-  promise = (async () => {
+  promise = publicMarketWorkOwner.run(async signal => {
+    dependencies = { ...dependencies, signal }
     try {
+      publishJob(db, createJob(startedAt), dependencies.onProgress)
+      checkLocalWork(signal)
       const fetched = await fetchPublicStockUniverse(db, dependencies)
+      checkLocalWork(signal)
       const observedAt = now()
       recentSinaMarketRows = { capturedAt: observedAt, rows: fetched.marketRows }
       const merged = mergePublicStockIdentities(db, fetched.rows.map((row) => ({
@@ -220,12 +237,12 @@ export function runPublicStockUniverseSync(
       const coolingDown = error instanceof PublicMarketProviderCoolingDownError
       const currentJob = getPublicMarketSyncJob(db, PUBLIC_STOCK_JOB_KEY)
       publishJob(db, createJob(startedAt, {
-        status: coolingDown ? 'cooldown' : 'failed',
+        status: isLocalWorkCancelled(error) ? 'partial' : coolingDown ? 'cooldown' : 'failed',
         totalItems: currentJob?.totalItems ?? SINA_UNIVERSE_MAX_PAGES,
         processedItems: currentJob?.processedItems ?? 0,
         writtenRows: currentJob?.writtenRows ?? 0,
         currentItem: currentJob?.currentItem ?? null,
-        message: coolingDown
+        message: isLocalWorkCancelled(error) ? 'LOCAL_WORK_CANCELLED：证券列表同步已停止，已有资料未覆盖' : coolingDown
           ? `公共证券来源冷却至 ${new Date(error.resumeAt).toLocaleString('zh-CN')}`
           : (error instanceof Error ? error.message : String(error)).slice(0, 300),
         completedAt: failedAt,
@@ -233,7 +250,7 @@ export function runPublicStockUniverseSync(
       }), dependencies.onProgress)
       throw error
     }
-  })().finally(() => {
+  }, dependencies.signal).finally(() => {
     if (publicStockUniverseSyncPromise === promise) publicStockUniverseSyncPromise = null
   })
   publicStockUniverseSyncPromise = promise

@@ -68,6 +68,7 @@ jobs:
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/capitalSimulationEngine.test.ts tests/unit/capitalSimulationService.test.ts tests/unit/capitalSimulationHandlers.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/rollingValidation.test.ts tests/unit/rollingValidationHandlers.test.ts tests/unit/rollingValidationPanel.test.tsx --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/schedulerTaskHost.test.ts tests/unit/schedulerGenerationProtection.test.ts tests/unit/cleanerLifecycle.test.ts tests/unit/afterCloseScheduler.contract.test.ts --maxWorkers=1 --minWorkers=1
+          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/historicalSyncCancellation.test.ts tests/unit/publicMarketWorkOwner.test.ts tests/unit/publicHistoricalDailySync.service.test.ts tests/unit/publicMarketRequestGovernor.test.ts tests/unit/publicStockUniverse.service.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/aiConfigStorage.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/strategyLab.publicLimitUp.test.tsx tests/unit/strategyLab.service.test.ts tests/unit/strategyLab.conditionSnapshotRun.test.ts tests/unit/tushareCredentialVerification.test.tsx tests/unit/publicLimitUpRules.test.tsx tests/unit/nativePublicLimitPool.test.ts tests/unit/verifiedPublicLimitPoolCache.test.ts tests/unit/currentPublicConceptLookup.service.test.ts tests/unit/currentPublicConceptLookup.wiring.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
@@ -98,6 +99,8 @@ jobs:
           pnpm exec playwright test tests/e2e/on-demand-extensions.spec.ts --workers=1 --retries=0 --reporter=line
           node scripts/verify-packaged-ai-credentials.cjs "$RT_PACKAGED_EXE"
           RT_INITIALIZATION_FIXTURE_ALLOWED=1 pnpm exec playwright test tests/e2e/packaged-initialization-capabilities.spec.ts --workers=1 --retries=0 --reporter=line
+          RT_PUBLIC_WORK_FIXTURE_ALLOWED=1 pnpm exec playwright test tests/e2e/packaged-public-work-shutdown.spec.ts --workers=1 --retries=0 --reporter=line
+          export RT_PACKAGED_PUBLIC_WORK_VERIFIED=1
           RT_LEDGER_FIXTURE_ALLOWED=1 pnpm exec playwright test tests/e2e/packaged-account-ledger.spec.ts --workers=1 --retries=0 --reporter=line
           export RT_PACKAGED_LEDGER_VERIFIED=1
           RT_CAPITAL_FIXTURE_ALLOWED=1 pnpm exec playwright test tests/e2e/packaged-capital-simulation.spec.ts tests/e2e/packaged-rolling-recovery.spec.ts --workers=1 --retries=0 --reporter=line
@@ -168,6 +171,7 @@ jobs:
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/capitalSimulationEngine.test.ts tests/unit/capitalSimulationService.test.ts tests/unit/capitalSimulationHandlers.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/rollingValidation.test.ts tests/unit/rollingValidationHandlers.test.ts tests/unit/rollingValidationPanel.test.tsx --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/schedulerTaskHost.test.ts tests/unit/schedulerGenerationProtection.test.ts tests/unit/cleanerLifecycle.test.ts tests/unit/afterCloseScheduler.contract.test.ts --maxWorkers=1 --minWorkers=1
+          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/historicalSyncCancellation.test.ts tests/unit/publicMarketWorkOwner.test.ts tests/unit/publicHistoricalDailySync.service.test.ts tests/unit/publicMarketRequestGovernor.test.ts tests/unit/publicStockUniverse.service.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/aiConfigStorage.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/strategyLab.publicLimitUp.test.tsx tests/unit/strategyLab.service.test.ts tests/unit/strategyLab.conditionSnapshotRun.test.ts tests/unit/tushareCredentialVerification.test.tsx tests/unit/publicLimitUpRules.test.tsx tests/unit/nativePublicLimitPool.test.ts tests/unit/verifiedPublicLimitPoolCache.test.ts tests/unit/currentPublicConceptLookup.service.test.ts tests/unit/currentPublicConceptLookup.wiring.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
@@ -199,6 +203,10 @@ jobs:
           pnpm exec playwright test tests/e2e/packaged-initialization-capabilities.spec.ts --workers=1 --retries=0 --reporter=line
           if ($LASTEXITCODE -ne 0) { throw 'Packaged initialization capability UI acceptance failed' }
           $env:RT_LEDGER_FIXTURE_ALLOWED = '1'
+          $env:RT_PUBLIC_WORK_FIXTURE_ALLOWED = '1'
+          pnpm exec playwright test tests/e2e/packaged-public-work-shutdown.spec.ts --workers=1 --retries=0 --reporter=line
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged public-work shutdown acceptance failed' }
+          'RT_PACKAGED_PUBLIC_WORK_VERIFIED=1' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           pnpm exec playwright test tests/e2e/packaged-account-ledger.spec.ts --workers=1 --retries=0 --reporter=line
           if ($LASTEXITCODE -ne 0) { throw 'Packaged ledger persistence acceptance failed' }
           'RT_PACKAGED_LEDGER_VERIFIED=1' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
