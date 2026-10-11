@@ -27,7 +27,7 @@ export interface BacktestSignal {
 export type BacktestSignalSource = 'shortTerm' | 'trendAlerts' | 'decisionSignals'
 
 export const STRATEGY_BACKTEST_REPORT_SCHEMA_VERSION = 4 as const
-export const STRATEGY_BACKTEST_ENGINE_VERSION = '4.0.0'
+export const STRATEGY_BACKTEST_ENGINE_VERSION = '4.1.0'
 
 export type BacktestEquityModel = 'equal_weighted_exit_day_compound'
 export const STRATEGY_BACKTEST_EQUITY_MODEL: BacktestEquityModel = 'equal_weighted_exit_day_compound'

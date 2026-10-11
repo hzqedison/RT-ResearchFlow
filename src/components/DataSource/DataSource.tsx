@@ -26,6 +26,8 @@ export function DataSource() {
   const [limitPoolDate, setLimitPoolDate] = useState(() => new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10))
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState('')
+  const [extensionProgress, setExtensionProgress] = useState('')
+  const [extensionMode, setExtensionMode] = useState<'bundled' | 'on-demand' | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [probeMessages, setProbeMessages] = useState<Record<string, string>>({})
@@ -44,6 +46,19 @@ export function DataSource() {
     }).catch(() => { if (active) setError('配置读取失败，请先重启应用；不要重复填写密钥。') })
     return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    let active = true
+    const refresh = async () => {
+      try {
+        const result = await window.api.datasource.extensionInstallStatus()
+        if (active) { setExtensionMode(result.mode); setExtensionProgress(result.progress.message) }
+      } catch { /* Older test fixtures may omit this optional status endpoint. */ }
+    }
+    void refresh()
+    const timer = busy === '安装扩展' ? setInterval(() => { void refresh() }, 1200) : undefined
+    return () => { active = false; if (timer !== undefined) clearInterval(timer) }
+  }, [busy])
 
   async function run(label: string, action: () => Promise<void>) {
     setBusy(label)
@@ -209,7 +224,10 @@ export function DataSource() {
 
       {needsPython && <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-5 space-y-3">
         <h3 className="text-sm font-medium">可选本地扩展</h3>
-        <p className="text-xs text-gray-500">AKShare 需要 Python 3.11+；其他本地扩展需要 Python 3.10+。点击安装才会下载所选开源依赖，最长10分钟；虚拟环境、下载缓存和临时文件均放在应用的数据目录，Windows安装版随你的安装目录走，不默认装到系统 Python。</p>
+        <p className="text-xs text-gray-500">{extensionMode === 'bundled'
+          ? '此安装包使用已随包准备的数据扩展，安装按钮仅核对本地依赖，不在线下载。'
+          : '扩展按需安装：先从 Python 官网安装 Python 3.11 或以上（建议 3.12），必要时选择解释器，再点击安装所选扩展。每个扩展最长等待10分钟，首次需要联网。虚拟环境、缓存与临时文件放在应用数据目录，不修改系统 Python；基础腾讯、东财日线不需要这些扩展。'}</p>
+        {busy === '安装扩展' && <p role="status" data-testid="extension-install-progress" className="text-xs text-blue-700 dark:text-blue-300">{extensionProgress || '准备安装扩展，请勿退出应用…'}</p>}
         <input className={inputClass} value={pythonPath} disabled={disabled} onChange={event => setPythonPath(event.target.value)}
           placeholder="留空自动寻找 Python；也可选择本机解释器的绝对路径" />
         <div className="flex flex-wrap gap-2">
@@ -229,7 +247,7 @@ export function DataSource() {
             if (!result.ok) throw new Error(result.message)
             setPythonPath(result.pythonPath)
             setMessage(result.message)
-          })}>安装所选扩展</button>
+          })}>{busy === '安装扩展' ? '安装进行中…' : extensionMode === 'bundled' ? '核对随包扩展' : '安装所选扩展'}</button>
           <button className={buttonClass} disabled={disabled} onClick={() => void window.api.datasource.openSourceLink('https://www.python.org/downloads/')}>Python 官网</button>
           {wencai && <button className={buttonClass} disabled={disabled} onClick={() => void window.api.datasource.openSourceLink('https://nodejs.org/en/download')}>Node.js 官网</button>}
         </div>

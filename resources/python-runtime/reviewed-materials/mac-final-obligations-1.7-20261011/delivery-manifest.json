@@ -1,0 +1,457 @@
+{
+  "kind": "mac-final-obligation-material-delivery-manifest-v1",
+  "status": "prepared-not-shipped",
+  "files": [
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.bdb.txt",
+      "size": 7293,
+      "sha256": "3bdff06e69991c94664f2ef5c5f8096f60b7dbec071756ea6cc26b445e06ec5b",
+      "provenance": {
+        "kind": "exact-original-archive-member",
+        "member": "python/licenses/LICENSE.bdb.txt",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ],
+        "archives": [
+          {
+            "target": "darwin-arm64",
+            "role": "full",
+            "sha256": "ca3eb5bf8110eaed1c3e516be4bd4d52bcf636f8e888359353f274288406bae7",
+            "size": 59224664,
+            "members": 3691
+          },
+          {
+            "target": "darwin-x64",
+            "role": "full",
+            "sha256": "57030cb11a1e823903b13ada440f64e7a06fcaeaabe1051559ef8c34890c277a",
+            "size": 58427280,
+            "members": 3688
+          }
+        ],
+        "formalLockPath": "licenses/python-full/python/licenses/LICENSE.bdb.txt"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.libX11.txt",
+      "size": 47018,
+      "sha256": "2daec087a88e7c9b8082557cdeebad5bbb8155a4137472f0b22e269cd99d0c1e",
+      "provenance": {
+        "kind": "exact-original-archive-member",
+        "member": "python/licenses/LICENSE.libX11.txt",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ],
+        "archives": [
+          {
+            "target": "darwin-arm64",
+            "role": "full",
+            "sha256": "ca3eb5bf8110eaed1c3e516be4bd4d52bcf636f8e888359353f274288406bae7",
+            "size": 59224664,
+            "members": 3691
+          },
+          {
+            "target": "darwin-x64",
+            "role": "full",
+            "sha256": "57030cb11a1e823903b13ada440f64e7a06fcaeaabe1051559ef8c34890c277a",
+            "size": 58427280,
+            "members": 3688
+          }
+        ],
+        "formalLockPath": "licenses/python-full/python/licenses/LICENSE.libX11.txt"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.libXau.txt",
+      "size": 1148,
+      "sha256": "56abe29bb1d9806a9e04fa9f80fed2c0f18027594df3f098148d814aef6bddfa",
+      "provenance": {
+        "kind": "exact-original-archive-member",
+        "member": "python/licenses/LICENSE.libXau.txt",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ],
+        "archives": [
+          {
+            "target": "darwin-arm64",
+            "role": "full",
+            "sha256": "ca3eb5bf8110eaed1c3e516be4bd4d52bcf636f8e888359353f274288406bae7",
+            "size": 59224664,
+            "members": 3691
+          },
+          {
+            "target": "darwin-x64",
+            "role": "full",
+            "sha256": "57030cb11a1e823903b13ada440f64e7a06fcaeaabe1051559ef8c34890c277a",
+            "size": 58427280,
+            "members": 3688
+          }
+        ],
+        "formalLockPath": "licenses/python-full/python/licenses/LICENSE.libXau.txt"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.libxcb.txt",
+      "size": 1337,
+      "sha256": "c5ffbfeaa501071ceeb97b7de2c0d703fdaa35de01c0fb6cbac1c28453a3e9fd",
+      "provenance": {
+        "kind": "exact-original-archive-member",
+        "member": "python/licenses/LICENSE.libxcb.txt",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ],
+        "archives": [
+          {
+            "target": "darwin-arm64",
+            "role": "full",
+            "sha256": "ca3eb5bf8110eaed1c3e516be4bd4d52bcf636f8e888359353f274288406bae7",
+            "size": 59224664,
+            "members": 3691
+          },
+          {
+            "target": "darwin-x64",
+            "role": "full",
+            "sha256": "57030cb11a1e823903b13ada440f64e7a06fcaeaabe1051559ef8c34890c277a",
+            "size": 58427280,
+            "members": 3688
+          }
+        ],
+        "formalLockPath": "licenses/python-full/python/licenses/LICENSE.libxcb.txt"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.openssl-1.1.txt",
+      "size": 6120,
+      "sha256": "9c04cce50c4989d5601dd8b07f6ab922c40388b66ac736c9007cb1ed9d9dd560",
+      "provenance": {
+        "kind": "exact-original-archive-member",
+        "member": "python/licenses/LICENSE.openssl-1.1.txt",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ],
+        "archives": [
+          {
+            "target": "darwin-arm64",
+            "role": "full",
+            "sha256": "ca3eb5bf8110eaed1c3e516be4bd4d52bcf636f8e888359353f274288406bae7",
+            "size": 59224664,
+            "members": 3691
+          },
+          {
+            "target": "darwin-x64",
+            "role": "full",
+            "sha256": "57030cb11a1e823903b13ada440f64e7a06fcaeaabe1051559ef8c34890c277a",
+            "size": 58427280,
+            "members": 3688
+          }
+        ],
+        "formalLockPath": "licenses/python-full/python/licenses/LICENSE.openssl-1.1.txt"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.openssl-3.txt",
+      "size": 10175,
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+      "provenance": {
+        "kind": "exact-original-archive-member",
+        "member": "python/licenses/LICENSE.openssl-3.txt",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ],
+        "archives": [
+          {
+            "target": "darwin-arm64",
+            "role": "full",
+            "sha256": "ca3eb5bf8110eaed1c3e516be4bd4d52bcf636f8e888359353f274288406bae7",
+            "size": 59224664,
+            "members": 3691
+          },
+          {
+            "target": "darwin-x64",
+            "role": "full",
+            "sha256": "57030cb11a1e823903b13ada440f64e7a06fcaeaabe1051559ef8c34890c277a",
+            "size": 58427280,
+            "members": 3688
+          }
+        ],
+        "formalLockPath": "licenses/python-full/python/licenses/LICENSE.openssl-3.txt"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.tix.txt",
+      "size": 2826,
+      "sha256": "3ac5cdd0bef6c43ce34c6a7ced452081d9e5a0bf94082b9f9147d23ec9e214f5",
+      "provenance": {
+        "kind": "exact-original-archive-member",
+        "member": "python/licenses/LICENSE.tix.txt",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ],
+        "archives": [
+          {
+            "target": "darwin-arm64",
+            "role": "full",
+            "sha256": "ca3eb5bf8110eaed1c3e516be4bd4d52bcf636f8e888359353f274288406bae7",
+            "size": 59224664,
+            "members": 3691
+          },
+          {
+            "target": "darwin-x64",
+            "role": "full",
+            "sha256": "57030cb11a1e823903b13ada440f64e7a06fcaeaabe1051559ef8c34890c277a",
+            "size": 58427280,
+            "members": 3688
+          }
+        ],
+        "formalLockPath": "licenses/python-full/python/licenses/LICENSE.tix.txt"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/LICENSE.tcl.txt",
+      "size": 2255,
+      "sha256": "c0a69a2bfd757361ec7e6143973b103c90409316b49e9c88db26ad6388e79f16",
+      "provenance": {
+        "kind": "exact-original-archive-member",
+        "member": "python/licenses/LICENSE.tcl.txt",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ],
+        "archives": [
+          {
+            "target": "darwin-arm64",
+            "role": "full",
+            "sha256": "ca3eb5bf8110eaed1c3e516be4bd4d52bcf636f8e888359353f274288406bae7",
+            "size": 59224664,
+            "members": 3691
+          },
+          {
+            "target": "darwin-x64",
+            "role": "full",
+            "sha256": "57030cb11a1e823903b13ada440f64e7a06fcaeaabe1051559ef8c34890c277a",
+            "size": 58427280,
+            "members": 3688
+          }
+        ],
+        "formalLockPath": "licenses/python-full/python/licenses/LICENSE.tcl.txt"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-vendored-certifi-2026.6.17/pip/_vendor/certifi/LICENSE",
+      "size": 989,
+      "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+      "provenance": {
+        "kind": "exact-wheel-source-member",
+        "outerMember": "python/lib/python3.13/ensurepip/_bundled/pip-26.2.1-py3-none-any.whl",
+        "wheelSha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e",
+        "member": "pip/_vendor/certifi/LICENSE",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ]
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-vendored-certifi-2026.6.17/pip/_vendor/certifi/__init__.py",
+      "size": 94,
+      "sha256": "f96d51ff2f1609a4a44f5b5d8eec47ff34c1658d581fac5081d3759db05a8ce1",
+      "provenance": {
+        "kind": "exact-wheel-source-member",
+        "outerMember": "python/lib/python3.13/ensurepip/_bundled/pip-26.2.1-py3-none-any.whl",
+        "wheelSha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e",
+        "member": "pip/_vendor/certifi/__init__.py",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ]
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-vendored-certifi-2026.6.17/pip/_vendor/certifi/__main__.py",
+      "size": 255,
+      "sha256": "d64dc2afde6f0b1c464460e58eb5b7c0c76965d2f73617f4bb59fe936a9db026",
+      "provenance": {
+        "kind": "exact-wheel-source-member",
+        "outerMember": "python/lib/python3.13/ensurepip/_bundled/pip-26.2.1-py3-none-any.whl",
+        "wheelSha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e",
+        "member": "pip/_vendor/certifi/__main__.py",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ]
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-vendored-certifi-2026.6.17/pip/_vendor/certifi/cacert.pem",
+      "size": 234354,
+      "sha256": "bbc7e9c01d7551bb8a159b5dedd989b8ee3ce105aff522b68eb1b01bf854cab0",
+      "provenance": {
+        "kind": "exact-wheel-source-member",
+        "outerMember": "python/lib/python3.13/ensurepip/_bundled/pip-26.2.1-py3-none-any.whl",
+        "wheelSha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e",
+        "member": "pip/_vendor/certifi/cacert.pem",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ]
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-vendored-certifi-2026.6.17/pip/_vendor/certifi/core.py",
+      "size": 3442,
+      "sha256": "82efc40952359b746ad32b69b0d13ad6181019c29a380b7d46cf46f0ab1308e2",
+      "provenance": {
+        "kind": "exact-wheel-source-member",
+        "outerMember": "python/lib/python3.13/ensurepip/_bundled/pip-26.2.1-py3-none-any.whl",
+        "wheelSha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e",
+        "member": "pip/_vendor/certifi/core.py",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ]
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-vendored-certifi-2026.6.17/pip/_vendor/certifi/py.typed",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "provenance": {
+        "kind": "exact-wheel-source-member",
+        "outerMember": "python/lib/python3.13/ensurepip/_bundled/pip-26.2.1-py3-none-any.whl",
+        "wheelSha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e",
+        "member": "pip/_vendor/certifi/py.typed",
+        "targets": [
+          "darwin-arm64",
+          "darwin-x64"
+        ]
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-context/pip/_vendor/vendor.txt",
+      "size": 317,
+      "sha256": "3df0c9601bfa2e0dca23cc574a4f900a4d7fdad060ab203fab8354350ed93320",
+      "provenance": {
+        "kind": "exact-wheel-member",
+        "member": "pip/_vendor/vendor.txt",
+        "wheelSha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-context/pip-26.2.1.dist-info/METADATA",
+      "size": 4617,
+      "sha256": "3a561005822841f2c45f442f6c7a7505172c8c376c9fe274d876c8ac912968cb",
+      "provenance": {
+        "kind": "exact-wheel-member",
+        "member": "pip-26.2.1.dist-info/METADATA",
+        "wheelSha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-context/pip-26.2.1.dist-info/licenses/LICENSE.txt",
+      "size": 1093,
+      "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104",
+      "provenance": {
+        "kind": "exact-wheel-member",
+        "member": "pip-26.2.1.dist-info/licenses/LICENSE.txt",
+        "wheelSha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/source/pip-context/pip-26.2.1.dist-info/licenses/AUTHORS.txt",
+      "size": 12139,
+      "sha256": "4eb1fb1705e2def898e81bcba19c3aac80620d27ba3569d6a6df7b4629d1b5c2",
+      "provenance": {
+        "kind": "exact-wheel-member",
+        "member": "pip-26.2.1.dist-info/licenses/AUTHORS.txt",
+        "wheelSha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/MPL-2.0.txt",
+      "size": 16726,
+      "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+      "provenance": {
+        "kind": "retained-complete-license",
+        "path": "resources/python-runtime/MPL-2.0.txt",
+        "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/evidence/darwin-arm64-PYTHON.json",
+      "size": 125628,
+      "sha256": "c790554ad25809b202d3ee8b16c312dafd96936307a040c9099c6ecb4a0cf5ac",
+      "provenance": {
+        "kind": "exact-original-archive-member",
+        "member": "python/PYTHON.json",
+        "archiveSha256": "ca3eb5bf8110eaed1c3e516be4bd4d52bcf636f8e888359353f274288406bae7"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/evidence/darwin-x64-PYTHON.json",
+      "size": 132916,
+      "sha256": "0b90eadd5f9359ae2e549b47bcb397af2f8cf687e67c4bd238d4147b85325e8b",
+      "provenance": {
+        "kind": "exact-original-archive-member",
+        "member": "python/PYTHON.json",
+        "archiveSha256": "57030cb11a1e823903b13ada440f64e7a06fcaeaabe1051559ef8c34890c277a"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/notices/OPENSSL-ACKNOWLEDGMENTS.txt",
+      "size": 476,
+      "sha256": "cec0d3c6d4ff4708e2f171e5a34ac76bd49fb36c294c5a2a9974a47df9251294",
+      "provenance": {
+        "kind": "delivery-acknowledgment-extracted-from-retained-legacy-license",
+        "licenseSha256": "9c04cce50c4989d5601dd8b07f6ab922c40388b66ac736c9007cb1ed9d9dd560",
+        "notes": "Both clause 3 and clause 6 OpenSSL wording retained; Tim Hudson attribution retained conservatively, not a finding that Windows apps code is shipped on Mac."
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/evidence/native-dependencies.json",
+      "size": 1857762,
+      "sha256": "37b52ccc1a18bb3a8d116dad92098e411a944a36d46d3f24a42b334a4ff4da1d",
+      "provenance": {
+        "kind": "computed-original-archive-audit"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/evidence/current-input-binding.json",
+      "size": 97018,
+      "sha256": "be892891b00c3485c92ddccaabd9455f61249a121a7122487e06938b9b83be60",
+      "provenance": {
+        "kind": "computed-current-lock-binding"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/evidence/pip-vendor-source.json",
+      "size": 11750,
+      "sha256": "b13aed812cf5d5a5f464c64390dc67dca7b772c92873960f192948001c77e806",
+      "provenance": {
+        "kind": "computed-wheel-source-binding"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/README.txt",
+      "size": 3199,
+      "sha256": "76cf29509f4251bc9e8e4af1d21bf0882bd9ce3987825884ac93402209da1235",
+      "provenance": {
+        "kind": "new-recipient-readable-source-and-notice-entrypoint"
+      }
+    },
+    {
+      "path": "resources/python-runtime/reviewed-materials/mac-final-obligations-1.7-20261011/evidence/read-only-audit.cjs",
+      "size": 6441,
+      "sha256": "e1eeca4190ad733a3aacc43d011033d685d07e86cd7e6b012364af6286ed365a",
+      "provenance": {
+        "kind": "saved-method-from-executed-in-memory-audit",
+        "executionStatus": "Saved standalone entrypoint not separately executed; parser functions were used in this audit."
+      }
+    }
+  ]
+}

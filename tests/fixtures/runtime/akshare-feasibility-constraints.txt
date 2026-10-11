@@ -1,0 +1,3 @@
+# Feasibility candidates only; this is not a complete distribution hash lock.
+akshare==1.19.1
+mini-racer==0.12.4

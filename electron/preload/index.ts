@@ -1935,6 +1935,10 @@ const api = {
     listVerifiedPublicLimitPool: () =>
       ipcRenderer.invoke('datasource:listVerifiedPublicLimitPool') as Promise<PublicLimitPoolObservationSnapshot>,
     choosePython: () => ipcRenderer.invoke('datasource:choosePython') as Promise<string | null>,
+    extensionInstallStatus: () => ipcRenderer.invoke('datasource:extensionInstallStatus') as Promise<{
+      mode: 'bundled' | 'on-demand';
+      progress: import('../shared/dataSourceTypes').DataExtensionInstallProgress
+    }>,
     bridgeStatus: () => ipcRenderer.invoke('datasource:bridgeStatus') as Promise<
       { ok: true; data: unknown } | { ok: false; message: string }
     >,
@@ -2705,6 +2709,12 @@ const api = {
       ipcRenderer.invoke('shortTerm:setConceptSource', { source }) as Promise<
         { ok: true } | { ok: false; error: string }
       >,
+    getPublicConceptSyncStatus: () =>
+      ipcRenderer.invoke('shortTerm:getPublicConceptSyncStatus') as Promise<import('../shared/publicConceptSnapshots').PublicConceptSyncReply>,
+    syncPublicConceptSnapshots: () =>
+      ipcRenderer.invoke('shortTerm:syncPublicConceptSnapshots') as Promise<import('../shared/publicConceptSnapshots').PublicConceptSyncReply>,
+    cancelPublicConceptSync: () =>
+      ipcRenderer.invoke('shortTerm:cancelPublicConceptSync') as Promise<import('../shared/publicConceptSnapshots').PublicConceptSyncReply>,
     syncConceptMembers: (source: string) =>
       ipcRenderer.invoke('shortTerm:syncConceptMembers', { source }) as Promise<
         { ok: true } | { ok: false; error: string }

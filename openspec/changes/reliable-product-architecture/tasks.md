@@ -42,13 +42,42 @@
 - [ ] 6.3 记录测试反馈编号、修复与回归证据，关闭已解决问题
 - [x] 6.4 运行诊断界面、IPC 和错误路径接入后的集成检查
 
-### 1.1 当前验收证据
+### 1.1 当前发布与云端验收证据
 
-- 日历覆盖、显式未知前驱、基准 `asOf` 质量和诊断质量快照刷新已分别通过本轮对应测试；具体数量与边界见 `docs/quality/reliability-1.1-evidence.md`。
-- 先前 1115 passed/1 skipped 的主可靠性隔离测试及更新器 24 项测试仅作历史证据，不与本轮测试简单相加。
-- 真实 Electron `runtime-reliability` E2E 最终 1 项通过（22.9 秒）：隔离 K 盘 profile、阻断 HTTP、无交易；覆盖 UI 启动、无 Key 配置保存、真实 IPC 诊断错误关联、脱敏预览/本地导出一致、正常退出进程码 0、同 profile 重启保留配置、旧 in-memory 事件不跨重启及二次正常退出。首次失败为脚本在 Playwright 销毁后调用 `running.process()`，缓存关闭前的 process 对象后重跑通过。此证据支持上述狭义链路，不代表其他场景均已验收。
-- 当前源码 Node 与 Web 类型检查、目标 lint、完整生产 build（electron-vite、research-access Vite、size report）均 exit 0。首次全量 251 文件为 249 passed/2 failed；2345 项为 2339 passed/3 failed/3 skipped（594.71s）。3 项失败均属旧源文本契约：`afterCloseScheduler.contract` 2 项、`zeroKeyFirstValue.contract` 1 项。仅修改这两个测试文件，改用 TypeScript 语法树识别函数/受信 IPC，保留代次扫描仅替换自身、不依赖 Token 的盘后补漏、可信窗口通道及免费数据 fallback 断言；未削弱或跳过。两个文件加 `trustedIpcHandlers`、`schedulerGenerationProtection` 共 4 文件 1001 项通过（3.89s），相关测试 lint 通过。完整 251 文件未重跑，不声称单次全量全绿；生产源码字节不变。
-- 真实 Electron `runtime-reliability` E2E 仍为 1 passed（22.9s），范围为隔离 K 盘 profile、阻断 HTTP、无交易下的 UI、无 Key 配置保存、真实 IPC 诊断错误关联、脱敏预览/导出一致、正常退出、同 profile 重启配置保留、旧 in-memory 事件不跨重启及二次正常退出。
-- Windows electron-builder 候选 EXE 构建 exit 0；排除原 `data` 的 K 盘临时 `win-unpacked` 中，`packaged-app-smoke` 与 `windows-integrated-app` 两项 26.4s 通过（版本、无 Key AI 保存、SQLite 沙箱、非 Mac 交易禁用）。这不是 NSIS 安装/覆盖升级证明。本机生产 app、用户数据及账户未动。发布管线三平台同 tag 原生构建/隔离安装/原字节门禁仅离线语法验证、未云端执行。
-- Windows 覆盖安装/升级、Mac Apple Silicon 与 Intel 设备验收、1.1 发布继续未完成；历史 1.0 已交付且不变。以上证据均非实盘验收。4.4 的完整任务生命周期仍未完成。
-- 以上测试不构成实盘可用证明；年度日历核对也不代表临时休市或所有证券均已验证。1.1.0 未发布，继续复用同版本号。
+- 正式 1.1（内部版本 1.1.0）已发布：[v1.1.0](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.1.0)。发布源为 `ec1fe73e5f3c80edb1f3e7b0a989a03cf66b18ad`，[GitHub Actions run 37717182978](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/37717182978) 最终全部成功；发布管线已实际云端执行。历史 1.0 已交付且不变。
+- Mac arm64 与 x64 各完成 251 文件测试：2344 passed、1 skipped，隔离安装检查各 3/3 通过。两架构属于同一产品；这些结果不证明真实 Keychain 保存、1.0 到 1.1 升级、公证或实盘已验收。
+- Windows 完成 251 文件测试：2342 passed、3 skipped，隔离安装检查 2/2 通过，另通过同版本重装及合成数据保留检查。attempt 1 失败根因未知；实际发布的是 attempt 2 新构建并经该次验收的 EXE，不能表述为复用 attempt 1 产物。1.1.0 同版本重装不代表 1.0 到 1.1 跨版升级通过。
+- [Astra 独立报告](../../../docs/quality/astra-release-acceptance-1.1.md) 结论为 **CONDITIONAL（有条件通过）**，亲测 54 passed、1 项平台 skipped、0 failed。Mac 实际 Keychain 保存、跨版升级、实盘及公证均未验证；mock 密钥测试不等于真实 OS 凭证存储验收。
+- `4.1`、`6.2` 及其他未完成项保持原范围和未勾选状态；`4.4` 的完整任务生命周期仍待完成。正式发布和云端成功不等于全面放行，也不构成实盘可用证明；年度日历核对不代表临时休市或所有证券均已验证。
+
+### 1.2 已交付证据与下一版本边界
+
+- 正式 1.2（内部版本 1.2.0）已于 2026-10-08 发布：[v1.2.0](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.2.0)。来源提交为 `7e6cfa6dae8b9a1c69ce68089f51d61c72785c37`，Release ID 为 `406685251`。
+- [Release run 37759228841](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/37759228841) attempt 1 三平台通过。Windows 已安装应用检查 2/2、Mac arm64 3/3、Mac x64 3/3，安装检查无跳过、重试或 flaky；Windows 同目录同版本重装的合成数据保留检查通过。Astra 最终结论为 `DRAFT_READY_FOR_PUBLICATION`，随后公开的是同一批经上传后字节回读的附件，没有重新构建。
+- 1.2 纳入数据就绪分类、所选题材源初始化、有界事实补齐、竞价入口依赖和基准日期统计修复。首次候选 run `37755286902` 的源码回归失败证据保留，该失败候选没有生成或发布安装包。
+- 1.2 不包含独立 F3 订单存储/恢复实验模块；F3 后端独立合同通过不代表 IPC、启动/退出、页面接线或实盘通过。`5.1` 仍未完成，不能用后端测试数量替代产品完整链路。
+- 本轮证据不证明真实用户旧数据跨版本升级、实际 Mac 数据源授权、Apple 公证或真实券商交易。相关待办继续保留，不因正式发布而勾选。
+- 下一轮产品版本为 1.3（内部版本 1.3.0），在现有手动确认交易流程接入持久订单意图和异常核对。不得修改已发布 1.2 的 tag 或附件，不得为自动续跑操作真实账户。
+
+## 7. 1.3 订单意图接入
+
+- [ ] 7.1 Astra 依据当前产品入口和已验收 F3 API 定义启动、关闭、提交及人工核对契约，明确可执行与待核对状态。
+- [ ] 7.2 Sol 将订单意图与恢复协调接入实际服务及可信 IPC，保留本人确认，不自动补发、重试或绕过未决订单。
+- [ ] 7.3 在同一交易页面展示待核对及恢复结果，通信失败不恢复提交资格；导出仍不包含订单参数、账户或凭证。
+- [ ] 7.4 Astra 对实际产品链路执行隔离验收，再统一进入 1.3 三平台候选构建；后端独立测试不代替接线验收。
+
+### 历史本地验收证据及范围
+
+- 日历覆盖、显式未知前驱、基准 `asOf` 质量和诊断质量快照刷新已分别通过当轮对应测试；当时的数量与边界见 `docs/quality/reliability-1.1-evidence.md`，其中发布状态不作为当前状态依据。
+- 更早的 1115 passed/1 skipped 主可靠性隔离测试及更新器 24 项测试仅作历史证据，不与当前云端、定向回归或 Astra 测试简单相加。
+- 本地真实 Electron `runtime-reliability` E2E 最终 1 项通过（22.9 秒）：隔离 K 盘 profile、阻断 HTTP、无交易；覆盖 UI 启动、无 Key 配置保存、真实 IPC 诊断错误关联、脱敏预览/本地导出一致、正常退出进程码 0、同 profile 重启保留配置、旧 in-memory 事件不跨重启及二次正常退出。首次失败为脚本在 Playwright 销毁后调用 `running.process()`，缓存关闭前的 process 对象后重跑通过。该脚本失败与 Windows 云端 attempt 1 根因未知分别记录。
+- 当时本地 Node/Web 类型检查、目标 lint、完整生产 build（electron-vite、research-access Vite、size report）均 exit 0。首次本地全量 251 文件为 249 passed/2 failed；2345 项为 2339 passed/3 failed/3 skipped（594.71s）。3 项失败均属旧源文本契约：`afterCloseScheduler.contract` 2 项、`zeroKeyFirstValue.contract` 1 项。仅修改这两个测试文件，改用 TypeScript 语法树识别函数/受信 IPC，保留代次扫描仅替换自身、不依赖 Token 的盘后补漏、可信窗口通道及免费数据 fallback 断言；未削弱或跳过。两个文件加 `trustedIpcHandlers`、`schedulerGenerationProtection` 共 4 文件 1001 项通过（3.89s），相关测试 lint 通过。当时未重跑本地完整 251 文件，且该次测试修复未改变生产源码字节；当前云端全量结果另行列于上节。
+- 当时 Windows electron-builder 候选 EXE 构建 exit 0；排除原 `data` 的 K 盘临时 `win-unpacked` 中，`packaged-app-smoke` 与 `windows-integrated-app` 两项 26.4s 通过（版本、无 Key AI 保存、SQLite 沙箱、非 Mac 交易禁用）。此历史本地结果不属于 NSIS 安装/升级证据，也不等同于云端 attempt 2 的发布产物验收；当时本机生产 app、用户数据及账户未动。
+
+### 下一步独立原生升级与 Keychain 验收待办
+
+本子段补充独立验收场景，不改变 `4.1`、`6.2` 或其他既有任务的范围与完成状态。
+
+- [ ] Windows 原生环境独立验证正式 1.0 到 1.1 安装升级，记录升级前后应用目录、版本、合成配置及数据库数据保留；与已通过的 1.1.0 同版本重装分开留证。
+- [ ] Mac arm64 与 x64 原生环境分别验证正式 1.0 到 1.1 升级，记录应用替换、配置及数据库迁移/保留，分别留证。
+- [ ] Mac arm64 与 x64 分别使用真实 OS Keychain 验证单提供方凭证保存、应用退出重启后读取与凭证状态，明确区分无 Key 配置和 mock 密钥路径；仅记录脱敏结果，不导出凭证原文。

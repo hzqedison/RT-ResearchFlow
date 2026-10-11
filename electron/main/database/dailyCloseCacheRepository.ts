@@ -139,7 +139,8 @@ function fromDbRow(r: CacheRow): DailyRow {
     close: r.close,
     pctChg: r.pct_chg ?? 0,
     vol: r.vol,
-    turnoverRate: r.turnover_rate
+    turnoverRate: r.turnover_rate,
+    ...(r.amount === undefined ? {} : { amount: r.amount }),
   }
 }
 
@@ -290,7 +291,7 @@ export function queryDailyClose(
   const placeholders = queryCodes.map(() => '?').join(', ')
   const rows = db
     .prepare(
-      `SELECT ts_code, trade_date, open, high, low, close, pct_chg, vol, turnover_rate
+      `SELECT ts_code, trade_date, open, high, low, close, pct_chg, vol, turnover_rate${hasDailyCloseProvenanceColumns(db) ? ', amount' : ''}
        FROM daily_close_cache
        WHERE ts_code IN (${placeholders}) AND trade_date >= ?
        ORDER BY ts_code, trade_date ASC`
@@ -325,7 +326,7 @@ export function queryDailyCloseExact(
   const aliases = [...new Set(tsCodes.flatMap((tsCode) => [tsCode, tsCode.split('.')[0]]))]
   const placeholders = aliases.map(() => '?').join(', ')
   const rows = db.prepare(
-    `SELECT ts_code, trade_date, open, high, low, close, pct_chg, vol, turnover_rate
+    `SELECT ts_code, trade_date, open, high, low, close, pct_chg, vol, turnover_rate${hasDailyCloseProvenanceColumns(db) ? ', amount' : ''}
      FROM daily_close_cache
      WHERE ts_code IN (${placeholders}) AND trade_date = ?
      ORDER BY ts_code ASC`
@@ -359,7 +360,7 @@ export function queryStockOHLCV(
 ): DailyRow[] {
   const rows = db
     .prepare(
-      `SELECT ts_code, trade_date, open, high, low, close, pct_chg, vol, turnover_rate
+      `SELECT ts_code, trade_date, open, high, low, close, pct_chg, vol, turnover_rate${hasDailyCloseProvenanceColumns(db) ? ', amount' : ''}
        FROM daily_close_cache
        WHERE ts_code = ? AND trade_date >= ?
        ORDER BY trade_date ASC`
@@ -374,7 +375,7 @@ export function queryStockOHLCV(
 export function queryDailyCloseByDate(db: Database.Database, tradeDate: string): DailyRow[] {
   const rows = db
     .prepare(
-      `SELECT ts_code, trade_date, open, high, low, close, pct_chg, vol, turnover_rate
+      `SELECT ts_code, trade_date, open, high, low, close, pct_chg, vol, turnover_rate${hasDailyCloseProvenanceColumns(db) ? ', amount' : ''}
        FROM daily_close_cache
        WHERE trade_date = ?
          AND open IS NOT NULL

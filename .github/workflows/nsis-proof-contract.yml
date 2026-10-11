@@ -1,0 +1,53 @@
+name: Installer build observation contracts (no installers)
+
+on:
+  push:
+    branches: [codex/verify-1.7]
+    paths:
+      - .github/workflows/nsis-proof-contract.yml
+      - scripts/collect-nsis-build-proof.cjs
+      - tests/unit/nsisBuildProof.isolated.test.cjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nsis-proof-contract-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  isolated-observation-contracts:
+    if: github.repository == 'hzqedison/RT-ResearchFlow'
+    name: proof-contract-${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            target: windows-x64
+            arch: x64
+          - runner: macos-15
+            target: macos-arm64
+            arch: arm64
+          - runner: macos-15-intel
+            target: macos-x64
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.23.3'
+          architecture: ${{ matrix.arch }}
+      - name: Run only synthetic observation tests
+        run: node --test tests/unit/nsisBuildProof.isolated.test.cjs
+      - name: Declare evidence scope
+        if: always()
+        shell: bash
+        run: |
+          printf '%s\n' 'These jobs test synthetic compiler observations only. They do not build or install an application, approve runtime licenses, or submit orders.' >> "$GITHUB_STEP_SUMMARY"

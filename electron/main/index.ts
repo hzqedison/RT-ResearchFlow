@@ -1,8 +1,7 @@
 import { app, BrowserWindow, shell, net, ipcMain, Menu } from 'electron'
-import { join, resolve } from 'path'
+import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { initDb, getDb } from './database/db'
-import { claimMainEntryOwner } from './mainEntryOwner'
 import { seedBuiltInSources } from './database/sourceRepository'
 import { BUILT_IN_SOURCES } from './database/seeds'
 import { registerBriefingHandlers } from './ipc/briefingHandlers'
@@ -92,17 +91,6 @@ const startupDiagnostic: StartupDiagnostic = diagnosticProcess[startupDiagnostic
 startupDiagnostic.entryEvaluations += 1
 diagnosticProcess[startupDiagnosticKey] = startupDiagnostic
 
-const mainEntryBuildIdentity = JSON.stringify({
-  version: app.getVersion(),
-  appPath: resolve(app.getAppPath()),
-  entryPath: resolve(__filename),
-  executablePath: resolve(process.execPath),
-  electronVersion: process.versions.electron,
-})
-const entryClaim = claimMainEntryOwner(process, mainEntryBuildIdentity)
-if (entryClaim.acquired) {
-const mainEntryOwnership = entryClaim
-try {
 let mainWindow: BrowserWindow | null = null
 let databaseReady = false
 let applicationStarted = false
@@ -320,7 +308,6 @@ function createWindow(): void {
 
 async function bootstrap(): Promise<void> {
   startupDiagnostic.bootstrapInvocations += 1
-  if (mainEntryOwnership.owner.phase === 'failed') throw new Error('MAIN_ENTRY_STARTUP_FAILED')
   if (applicationStopping) return
   // macOS needs native edit shortcuts, window management, and Command+Q.
   Menu.setApplicationMenu(process.platform === 'darwin'
@@ -552,19 +539,11 @@ app.on('second-instance', () => {
 })
 
 if (!ownsApplicationInstance) {
-  mainEntryOwnership.fail(new Error('MAIN_ENTRY_SECOND_INSTANCE'))
   app.quit()
 } else if (applicationDataReady) {
   startupDiagnostic.readySubscriptions += 1
   bootstrapTask = app.whenReady().then(bootstrap)
-  void bootstrapTask.then(() => {
-    if (!applicationStarted || applicationStopping) {
-      mainEntryOwnership.fail(new Error('MAIN_ENTRY_STARTUP_ABORTED'))
-    } else {
-      mainEntryOwnership.complete()
-    }
-  }, (error) => {
-    mainEntryOwnership.fail(error)
+  void bootstrapTask.catch((error) => {
     if (applicationStopping) return
     const incident = recordSupportFailure('DATABASE_UNAVAILABLE', 'runtime')
     const details = error instanceof Error ? error.stack ?? error.message : String(error)
@@ -576,7 +555,6 @@ if (!ownsApplicationInstance) {
     })
   })
 } else {
-  mainEntryOwnership.fail(new Error('MAIN_ENTRY_APP_DATA_UNAVAILABLE'))
   app.whenReady().then(() => {
     showFatalErrorWindow({
       title: '本地数据目录初始化失败',
@@ -613,8 +591,3 @@ app.on('before-quit', (event) => {
     if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus() }
   })
 })
-} catch (error) {
-  mainEntryOwnership.fail(error)
-  throw error
-}
-}

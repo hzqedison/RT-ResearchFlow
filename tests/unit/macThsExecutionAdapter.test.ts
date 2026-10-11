@@ -20,10 +20,10 @@ const ORDER = { symbol: '600000', market: 'SH' as const, side: 'buy' as const, p
 const TARGET: NativeTarget = { ...ORDER, contractNo: 'TEST-NEW', tradingDate: DATE, observation: 'accepted',
   filledQuantity: null, cancelledQuantity: null }
 const facts = { account: ACCOUNT, clientVersion: '9.0.0', tradingDate: DATE }
+const nativeTempRoot = realpathSync.native(tmpdir())
 const directories: string[] = []
 const adapters: MacThsExecutionAdapter[] = []
 const stores: { store: MacThsIntentStore; adapter: MacThsExecutionAdapter }[] = []
-const nativeTempRoot = realpathSync.native(tmpdir())
 function directory(): string {
   const path = mkdtempSync(join(nativeTempRoot, 'rt-native-adapter-'))
   directories.push(path)

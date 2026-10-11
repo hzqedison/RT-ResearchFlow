@@ -3,6 +3,13 @@ export type DailyDataProvider = typeof DAILY_DATA_PROVIDERS[number]
 export type ReportDataProvider = 'eastmoney' | 'akshare'
 export type DataProbeProvider = DailyDataProvider | 'eastmoney-reports' | 'akshare-reports' | 'iwencai' | 'akshare-limit-pool'
 
+export interface DataExtensionInstallProgress {
+  running: boolean
+  phase: 'idle' | 'checking' | 'creating' | 'downloading' | 'verifying' | 'complete' | 'failed'
+  provider?: string
+  message: string
+}
+
 export interface MultiSourcePreference {
   dailyProviders: DailyDataProvider[]
   reportProviders: ReportDataProvider[]

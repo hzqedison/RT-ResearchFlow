@@ -125,7 +125,14 @@ export function registerDiagnosticsHandlers(getWindow: TrustedWindowGetter): voi
       const data = await runDiagnosticAction(getDb(), action, win)
       if (data.outcome && data.outcome !== 'success' && data.outcome !== 'started') {
         const code = data.reasonCode && FACT_REASON_MESSAGES[data.reasonCode] ? data.reasonCode : 'DIAGNOSTICS_FAILED'
-        return { ok: false as const, error: code, message: data.message, receipt: data }
+        const failure = recordSupportFailure(toSupportErrorCode(code), action === 'refreshHealth' ? 'runtime' : 'data')
+        return {
+          ok: false as const,
+          error: code,
+          message: `${data.message} 问题编号：${failure.correlationId}`,
+          correlationId: failure.correlationId,
+          receipt: data,
+        }
       }
       return { ok: true as const, data }
     } catch (err) {

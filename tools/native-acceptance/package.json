@@ -1,0 +1,10 @@
+{
+  "name": "rt-native-upgrade-acceptance",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.14.0",
+  "engines": { "node": ">=20 <21" },
+  "scripts": { "test": "playwright test", "check": "node --test offline.test.mjs" },
+  "devDependencies": { "@playwright/test": "1.58.2" }
+}

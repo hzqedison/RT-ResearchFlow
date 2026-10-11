@@ -39,47 +39,7 @@ async function assertNoFatalWindows(application: ElectronApplication) {
       console.error('[Mac installed startup] Fatal window detected', fatal)
     }
   }
-  if (fatalFound) {
-    try {
-      const lifecycle = await application.evaluate(({ app }) => {
-        const value = Reflect.get(process, Symbol.for('RT-ResearchFlow.main.diagnostic.v1')) as
-          { entryEvaluations?: number; bootstrapInvocations?: number; readySubscriptions?: number } | undefined
-        return {
-          entryEvaluations: Number.isSafeInteger(value?.entryEvaluations) ? value!.entryEvaluations : null,
-          bootstrapInvocations: Number.isSafeInteger(value?.bootstrapInvocations) ? value!.bootstrapInvocations : null,
-          readySubscriptions: Number.isSafeInteger(value?.readySubscriptions) ? value!.readySubscriptions : null,
-          readyListeners: app.listenerCount('ready'),
-          beforeQuitListeners: app.listenerCount('before-quit'),
-          activateListeners: app.listenerCount('activate'),
-        }
-      })
-      console.error('[Mac installed startup] Lifecycle counts', lifecycle)
-    } catch {
-      console.error('[Mac installed startup] Lifecycle counts unavailable')
-    }
-    throw new Error('FATAL_STARTUP_WINDOW_PRESENT')
-  }
-}
-
-async function assertMainOwnerReady(application: ElectronApplication) {
-  const startup = await application.evaluate(() => {
-    const owner = Reflect.get(process, Symbol.for('RT-ResearchFlow.main.owner.v1')) as
-      { phase?: string; suppressedEvaluations?: number } | undefined
-    const diagnostic = Reflect.get(process, Symbol.for('RT-ResearchFlow.main.diagnostic.v1')) as
-      { entryEvaluations?: number; bootstrapInvocations?: number; readySubscriptions?: number } | undefined
-    return {
-      phase: owner?.phase ?? null,
-      entryEvaluations: diagnostic?.entryEvaluations ?? 0,
-      bootstrapInvocations: diagnostic?.bootstrapInvocations ?? 0,
-      readySubscriptions: diagnostic?.readySubscriptions ?? 0,
-      suppressedEvaluations: owner?.suppressedEvaluations ?? -1,
-    }
-  })
-  expect(startup.phase).toBe('ready')
-  expect(startup.bootstrapInvocations).toBe(1)
-  expect(startup.readySubscriptions).toBe(1)
-  expect(startup.entryEvaluations).toBeGreaterThanOrEqual(1)
-  expect(startup.suppressedEvaluations).toBe(startup.entryEvaluations - 1)
+  if (fatalFound) throw new Error('FATAL_STARTUP_WINDOW_PRESENT')
 }
 
 async function openPanel(application: ElectronApplication) {
@@ -104,46 +64,47 @@ async function openPanel(application: ElectronApplication) {
       await Promise.race([
         Promise.all(windows.map(async (window, index) => {
           try {
-            const detail = await window.evaluate(() => ({
-              readyState: document.readyState,
-              titleMatches: document.title === 'RT-ResearchFlow',
-              hasStartupDiagnostic: ['应用启动失败', '本地数据目录初始化失败'].some(title =>
-                document.title === title || document.querySelector('h1')?.textContent?.trim() === title),
-              fatalKind: (() => {
-                const title = document.querySelector('#fatal-title')?.textContent?.trim()
-                return title === '应用启动失败' ? 'BOOTSTRAP_FAILED' :
-                  title === '本地数据目录初始化失败' ? 'APP_DATA_FAILED' : 'NONE'
-              })(),
-              fatalError: (() => {
-                const details = document.querySelector('pre.details')?.textContent ?? ''
-                const errorClass = /\bSqliteError\b/.test(details) ? 'SqliteError' :
-                  /\bTypeError\b/.test(details) ? 'TypeError' :
-                  /\bReferenceError\b/.test(details) ? 'ReferenceError' :
-                  /\bRangeError\b/.test(details) ? 'RangeError' :
-                  /\bError\b/.test(details) ? 'Error' : 'UNKNOWN'
-                const category = /no such table/i.test(details) ? 'MISSING_TABLE' :
-                  /no such column/i.test(details) ? 'MISSING_COLUMN' :
-                  /UNIQUE constraint failed/i.test(details) ? 'UNIQUE_CONSTRAINT' :
-                  /NOT NULL constraint failed/i.test(details) ? 'NOT_NULL_CONSTRAINT' :
-                  /database is locked/i.test(details) ? 'DATABASE_LOCKED' :
-                  /Cannot find module|MODULE_NOT_FOUND/i.test(details) ? 'MODULE_NOT_FOUND' :
-                  /ERR_DLOPEN_FAILED/i.test(details) ? 'ERR_DLOPEN_FAILED' :
-                  /SQLITE_CANTOPEN/i.test(details) ? 'SQLITE_CANTOPEN' :
-                  /EACCES/i.test(details) ? 'EACCES' :
-                  /EBUSY/i.test(details) ? 'EBUSY' : 'UNCLASSIFIED'
-                const duplicateHandler = /Attempted to register a second handler for/i.test(details)
-                const channelMatch = details.match(/Attempted to register a second handler for ['"`]?([A-Za-z][A-Za-z0-9:_-]{0,79})/i)
-                const allowedChannels = ['renderer:ready', 'window:minimize', 'window:toggleMaximize',
-                  'window:close', 'window:isMaximized', 'app:relaunch']
-                const duplicateChannel = duplicateHandler
-                  ? allowedChannels.includes(channelMatch?.[1] ?? '') ? channelMatch![1] : 'OTHER'
-                  : null
-                const bundleFrames = [...details.matchAll(/out\/main\/index\.js:(\d+):(\d+)/g)]
-                  .slice(0, 3).map(match => ({ line: Number(match[1]), column: Number(match[2]) }))
-                return { errorClass, category, duplicateHandler, duplicateChannel, bundleFrames }
-              })(),
-              entryCount: document.querySelectorAll('[data-testid="quant-onboarding-open"]').length,
-            }))
+            const detail = await window.evaluate(() => {
+              const fatalTitle = document.querySelector('#fatal-title')?.textContent?.trim()
+              const fatalShell = !!document.querySelector('a[href="trade-watch-fatal://exit"]')
+              const fatalKind = !fatalShell ? null
+                : fatalTitle === '应用启动失败' ? 'BOOTSTRAP_FAILED'
+                  : fatalTitle === '本地数据目录初始化失败' ? 'APP_DATA_FAILED' : null
+              // Inspect locally; emit only fixed classifications and numeric bundle coordinates.
+              const details = fatalKind
+                ? (document.querySelector('pre.details')?.textContent ?? '').slice(0, 16000) : ''
+              const allowedCodes = [
+                'SQLITE_ERROR', 'SQLITE_INTERNAL', 'SQLITE_PERM', 'SQLITE_ABORT',
+                'SQLITE_BUSY', 'SQLITE_LOCKED', 'SQLITE_NOMEM', 'SQLITE_READONLY',
+                'SQLITE_INTERRUPT', 'SQLITE_IOERR', 'SQLITE_CORRUPT', 'SQLITE_NOTFOUND',
+                'SQLITE_FULL', 'SQLITE_CANTOPEN', 'SQLITE_PROTOCOL', 'SQLITE_EMPTY',
+                'SQLITE_SCHEMA', 'SQLITE_TOOBIG', 'SQLITE_CONSTRAINT', 'SQLITE_MISMATCH',
+                'SQLITE_MISUSE', 'SQLITE_NOLFS', 'SQLITE_AUTH', 'SQLITE_FORMAT',
+                'SQLITE_RANGE', 'SQLITE_NOTADB', 'SQLITE_IOERR_FSYNC',
+                'SQLITE_IOERR_DIR_FSYNC', 'SQLITE_BUSY_RECOVERY', 'SQLITE_READONLY_DBMOVED',
+                'ERR_DLOPEN_FAILED', 'MODULE_NOT_FOUND', 'ERR_MODULE_NOT_FOUND',
+                'ERR_REQUIRE_ESM', 'ERR_INVALID_ARG_TYPE', 'ERR_INVALID_ARG_VALUE',
+                'EBUSY', 'EACCES', 'EPERM', 'ENOENT', 'EEXIST', 'ENOSPC',
+                'EROFS', 'EIO', 'EINVAL', 'EADDRINUSE', 'EMFILE', 'ENFILE',
+              ]
+              const errorCode = new RegExp('\\b(?:' + allowedCodes.join('|') + ')\\b').exec(details)?.[0] ?? null
+              const errorCategory = !fatalKind ? null
+                : errorCode === 'MODULE_NOT_FOUND' || errorCode === 'ERR_MODULE_NOT_FOUND' ? 'MODULE_NOT_FOUND'
+                  : /\bdatabase (?:is )?locked\b/i.test(details) ? 'DATABASE_LOCKED'
+                    : /(?:^|\n)\s*SqliteError\b/.test(details) ? 'SqliteError'
+                      : /(?:^|\n)\s*TypeError\b/.test(details) ? 'TypeError'
+                        : /(?:^|\n)\s*Error\b/.test(details) ? 'Error' : 'UNKNOWN'
+              const mainFrame = /(?:^|\n)[ \t]*at[^\r\n]*[/\\]out[/\\]main[/\\]index\.js:(\d{1,9}):(\d{1,9})/.exec(details)
+              return {
+                readyState: document.readyState,
+                titleMatches: document.title === 'RT-ResearchFlow',
+                hasStartupDiagnostic: fatalKind !== null,
+                fatalKind, errorCode, errorCategory,
+                projectMainLine: mainFrame ? Number(mainFrame[1]) : null,
+                projectMainColumn: mainFrame ? Number(mainFrame[2]) : null,
+                entryCount: document.querySelectorAll('[data-testid="quant-onboarding-open"]').length,
+              }
+            })
             console.error('[Mac installed startup] Window detail', { index, ...detail })
           } catch {
             console.error('[Mac installed startup] Window detail unavailable', { index })
@@ -258,7 +219,6 @@ test('installed Mac exposes a real narrow bridge and private diagnostic without 
       packaged: true, name: applicationName, userData: fixture, appData,
     })
     let page = await openPanel(application)
-    await assertMainOwnerReady(application)
     expect(await readState(page)).toMatchObject({
       adapterVersion: '3', serviceState: 'BLOCKED_STORAGE', code: 'STORAGE_UNAVAILABLE',
       recoveryReason: 'STORAGE_IO', liveEnabled: false, canInitialize: false, canPrepare: false,
@@ -287,7 +247,6 @@ test('installed Mac exposes a real narrow bridge and private diagnostic without 
       packaged: true, name: applicationName, userData: defaultDirectory, appData,
     })
     page = await openPanel(application)
-    await assertMainOwnerReady(application)
     const directoryStat = lstatSync(defaultDirectory)
     expect(directoryStat.isDirectory()).toBe(true)
     expect(directoryStat.isSymbolicLink()).toBe(false)

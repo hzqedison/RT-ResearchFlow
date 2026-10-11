@@ -1,0 +1,50 @@
+name: Native Windows private process ownership
+
+on:
+  push:
+    branches: [codex/verify-1.7]
+    paths:
+      - .github/workflows/private-runtime-owned-job-native.yml
+      - scripts/private-runtime-owned-supervisor.cjs
+      - resources/private-runtime-owned-job-host.cs
+      - tests/node/private-runtime-owned-supervisor.test.cjs
+      - tests/native/private-runtime-owned-supervisor.cjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-owned-job:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Isolated ownership contracts, no product or account access
+        run: node --test tests/node/private-runtime-owned-supervisor.test.cjs
+      - name: Real kernel Job ownership and timeout cleanup probes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = "D:/RT-ResearchFlow-BuildCache/owned-job-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          New-Item -ItemType Directory -Path $root -ErrorAction Stop | Out-Null
+          $env:RT_OWNED_PROBE_ROOT = $root
+          # Hosted interpreter is only an OS process-ownership probe. This does
+          # not approve the product PBS runtime, providers or an installer.
+          $env:RT_PRIVATE_PYTHON_PROBE = (Get-Command python.exe -ErrorAction Stop).Source
+          $proof = & node tests/native/private-runtime-owned-supervisor.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Native owned Job probe failed' }
+          [IO.File]::WriteAllText("$root/native-proof.json", ($proof -join "\n"), [Text.UTF8Encoding]::new($false))
+          "RT_OWNED_PROOF=$root/native-proof.json" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Preserve only successful primitive metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-owned-job-primitive-proof
+          path: ${{ env.RT_OWNED_PROOF }}
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "kind": "rt-windows-install-repair-consumer-contract-v1",
+  "status": "implementation-candidate",
+  "releaseEligible": false,
+  "productionDispatchEnabled": false,
+  "productionRejectionExitCode": 23,
+  "authorization": {
+    "rootSource": "reviewed-consumer-build-not-request-or-producer-self-attestation",
+    "required": ["consumer-sha256", "signed-producer-sha256", "live-direct-parent-installer-image-sha256", "explicit-repair-intent", "explicit-consent", "initiating-user-sid", "scope", "view", "canonical-target", "app-id", "payload-members-sha256", "fresh-plan-sha256", "intent-nonce"]
+  },
+  "execution": {
+    "oldUninstallerExecutions": 0,
+    "targetChanges": 0,
+    "registryAtomicityClaim": false,
+    "journalBeforeEveryMutation": true,
+    "bothKeysReadbackRequired": true,
+    "remainingSixSlotsUnchangedRequired": true,
+    "unknownConcurrentChange": "retain-journal-recovery-required",
+    "unknownPendingJournal": "refuse-no-inferred-repair",
+    "dataAndBackups": "never-mutate",
+    "productionFixtureSwitch": false
+  },
+  "acceptance": {
+    "nativeWindowsScenarios": ["fresh-d-full-product-directory", "fresh-k-fallback", "healthy-upgrade-same-directory", "invalid-old-file-no-repair", "per-user-explicit-repair", "all-users-explicit-repair", "payload-failure-restore", "second-key-failure-recover", "crash-and-concurrent-change-refuse"],
+    "unitJournalTestsAreInstallerEvidence": false,
+    "fixtureInstallerIsReleaseArtifact": false,
+    "requiredBeforeProductionDispatch": ["independent-consumer-review", "actual-native-launch-proof", "protected-journal-acl-and-native-handles", "trusted-payload-source-seal", "nine-disposable-windows-installer-scenarios"]
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "repository": "hzqedison/RT-ResearchFlow",
+  "versions": ["1.0.0", "1.1.0"],
+  "packageName": "rt-research-flow",
+  "productName": "RT-ResearchFlow",
+  "builderAppId": "com.tradewatcher.app",
+  "windowsAppUserModelId": "com.tradewatch.app",
+  "runtimeNameRule": "installed-package.productName || installed-package.name; unchanged across versions",
+  "databaseBasename": "trade-watch.db",
+  "windows": {
+    "executable": "RT-ResearchFlow.exe",
+    "userData": "install/data",
+    "sessionData": "install/data/session",
+    "registrationRule": "zero-before-install; exactly-one-actual-key; same-key-and-InstallLocation-after-upgrade"
+  },
+  "macOS": {
+    "executable": "RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow",
+    "userData": "profile",
+    "sessionDataAllowed": ["profile"],
+    "unexpectedSessionData": "BLOCKED_ENVIRONMENT; freeze any alternative before another run"
+  },
+  "onboardingStorageKey": "rt-researchflow.quant-onboarding.v1",
+  "caseStorageKey": "rt-native-acceptance.case",
+  "markerBasename": "native-acceptance-case.json",
+  "sentinelBasename": "native-acceptance-sentinel.txt",
+  "settings": { "decision_notify_min_priority": 3, "autoAiAnalysisPrompt": 0 },
+  "provider": { "provider": "deepseek", "model": "deepseek-chat", "maxTokens": 2048 },
+  "sql": {
+    "settings": "SELECT decision_notify_min_priority, autoAiAnalysisPrompt FROM app_settings WHERE id = 1",
+    "ai": "SELECT provider, model, baseUrl, presetPrompt, triggerRating, maxArticlesPerBatch FROM ai_config WHERE id = 1",
+    "provider": "SELECT provider, model, baseUrl, maxTokens, presetPrompt FROM provider_configs WHERE provider = ?",
+    "cipher": "SELECT apiKeyEncrypted FROM provider_configs WHERE provider = ?",
+    "otherKeys": "SELECT COUNT(*) AS count FROM provider_configs WHERE provider <> ? AND apiKeyEncrypted IS NOT NULL AND LENGTH(apiKeyEncrypted) > 0",
+    "source": "SELECT id, nameCN, nameEN, url, feedUrl, parseStrategy, authorityWeight, isBuiltIn, isEnabled FROM sources WHERE id = ?",
+    "migrations": "SELECT version FROM schema_migrations ORDER BY version"
+  },
+  "migrationPolicy": {
+    "allowedAddedVersions": [],
+    "unexpectedChange": "BLOCKED_INPUT / MIGRATION_PLAN_NOT_FROZEN; requires Astra-approved target migrations and recovery-point contract"
+  },
+  "probeUrl": "https://1.1.1.1/cdn-cgi/trace",
+  "timeoutsMs": { "launch": 30000, "exit": 20000, "ipc": 15000, "probe": 6000, "install": 120000 }
+}

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "status": "pending",
+  "pending": [
+    "Exact Python Build Standalone 3.13 patch version, three native asset names/URLs/SHA256/sizes",
+    "Exact private Node patch version and three native asset names/URLs/SHA256/sizes",
+    "Complete per-provider wheel dependency closures, hashes and platform/ABI compatibility",
+    "Explicit mootdx derivative version, upstream hash, patch identity/asset/hash, modern MiniRacer compatibility",
+    "Reviewed redistributable licenses, SPDX SBOM and complete prepared-tree file inventory",
+    "Native offline import and private Node invocation evidence on all three targets",
+    "Windows real Unicode MiniRacer product-adapter two-context evidence for AKShare and mootdx",
+    "Mac assets and all native wheels must retain the declared macOS 12.0 minimum; macOS 14-only wheels are not accepted"
+  ],
+  "platforms": {
+    "win32-x64": null,
+    "darwin-arm64": null,
+    "darwin-x64": null
+  },
+  "requiredProviders": ["akshare", "mootdx", "pywencai"],
+  "baselineVersions": {
+    "python": "3.13",
+    "privateNode": "22.23.3",
+    "akshare": "1.19.1",
+    "mootdxUpstream": "0.11.7",
+    "mootdxDerived": "0.11.7+rt.1",
+    "pywencai": "0.13.1",
+    "miniRacerExact": "0.12.4",
+    "minimumMacOS": "12.0"
+  },
+  "pbsCandidate": {
+    "status": "awaiting-reviewed-asset-pins-and-licenses",
+    "batch": "20261003",
+    "python": "3.13.16"
+  },
+  "miniRacerAdapter": {
+    "path": "miniracer_unicode_adapter.py",
+    "version": "0.12.4",
+    "windowsStrategy": "win32-unicode-resource-prewarm-v1",
+    "sha256": null
+  },
+  "mootdxDerivativeEvidence": {
+    "status": "candidate-not-final-lock",
+    "filename": "mootdx-0.11.7+rt.1-py3-none-any.whl",
+    "version": "0.11.7+rt.1",
+    "upstreamSha256": "eab475f1d08b1c71ea51212c8b1b1038c4739798f7d95ad1a6fb7bb26e348ef2",
+    "wheelSha256": "35f282624ed7a2a6908b4b847fba9119e7fb376cd00797606ee5ee97b6139f77",
+    "bytes": 413852,
+    "patchSha256": null
+  }
+}

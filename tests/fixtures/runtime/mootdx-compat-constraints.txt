@@ -1,0 +1,24 @@
+# Feasibility constraints, not the final per-platform hashed release lock.
+# Every transitive dependency is installed normally; none are skipped.
+anyio==4.15.1
+certifi==2026.7.22
+click==8.5.0
+colorama==0.4.6
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.25.2
+idna==3.20
+mini-racer==0.12.4
+mootdx==0.11.7+rt.1
+numpy==2.5.3
+pandas==3.0.6
+prettytable==3.18.0
+python-dateutil==2.9.0.post0
+six==1.17.0
+sniffio==1.3.1
+tdxpy==0.2.7
+tenacity==8.5.0
+tqdm==4.70.1
+typing-extensions==4.16.0
+tzdata==2026.5
+wcwidth==0.9.2

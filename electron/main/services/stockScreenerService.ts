@@ -23,7 +23,7 @@
 import type Database from 'better-sqlite3'
 import { queryAllActive } from '../database/stockBasicCacheRepository'
 import { queryDailyClose } from '../database/dailyCloseCacheRepository'
-import { upsertResults } from '../database/stockScreenerResultsRepository'
+import { replaceResultsForDate } from '../database/stockScreenerResultsRepository'
 import type { ScreenerMoneyFlowSummary, ScreenerRankBreakdownItem, ScreenerSignalKey, StockScreenerResultRow } from '../database/types'
 import { buildEstimatedMoneyFlowSummary, buildMoneyFlowSummary, getMoneyFlowMapByDate } from '../database/moneyFlowRepository'
 import { getScreenerRankConfig, type ScreenerRankConfig } from '../database/screenerRankConfigRepository'
@@ -152,7 +152,7 @@ export interface ScreenerStock {
   pctChg: number
   turnoverRate: number | null
   vol: number
-  amount: number
+  amount: number | null
   signalScore: number
   conditionsMet: string[]   // 满足的条件名称
   concepts: string[]        // 题材名称（最多 5 个）
@@ -265,6 +265,17 @@ function toBjHHmm(ms: number): string {
   return `${hh}:${mm}`
 }
 
+export function validateScreenerTradeDate(tradeDate: string): void {
+  const today = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, '')
+  const parsed = typeof tradeDate === 'string' && /^\d{8}$/.test(tradeDate)
+    ? new Date(`${tradeDate.slice(0, 4)}-${tradeDate.slice(4, 6)}-${tradeDate.slice(6, 8)}T00:00:00Z`)
+    : null
+  if (!parsed || !Number.isFinite(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10).replace(/-/g, '') !== tradeDate || tradeDate > today) {
+    throw Object.assign(new Error('目标日期无效或尚未到来'), { code: 'INVALID_TRADE_DATE' })
+  }
+}
+
 // ── 主函数 ────────────────────────────────────────────────────────────────────
 
 /**
@@ -277,14 +288,22 @@ export function runScreener(
   tradeDate: string,
   options?: ScreenerOptions
 ): ScreenerSnapshot {
+  validateScreenerTradeDate(tradeDate)
   const turnoverThreshold = options?.turnoverThreshold ?? 1.0
   const volumeMultiplier = options?.volumeMultiplier ?? 1.1
   const minDays = options?.minDays ?? 65
   const rankConfig = getScreenerRankConfig(db)
 
-  const inTradingHours = isInTradingHoursBj()
+  const now = Date.now()
+  const today = new Date(now + 8 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, '')
+  const targetIsToday = tradeDate === today
+  const inTradingHours = targetIsToday && isInTradingHoursBj()
   const rtCache = getRtKCache()
-  const canUseRealtime = inTradingHours && !!rtCache && rtCache.size > 0 && !isRtKStale()
+  const cachedAt = getRtKCachedAt()
+  const cacheDate = Number.isFinite(cachedAt) && cachedAt > 0
+    ? new Date(cachedAt + 8 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, '') : null
+  const canUseRealtime = inTradingHours && cacheDate === tradeDate && cachedAt <= now &&
+    !!rtCache && rtCache.size > 0 && !isRtKStale()
   const mode: ScreenerMode = inTradingHours ? (canUseRealtime ? 'realtime' : 'eod-fallback') : 'eod'
   const rtTime = canUseRealtime ? toBjHHmm(getRtKCachedAt()) : undefined
 
@@ -310,7 +329,9 @@ export function runScreener(
   const moneyFlowMap = getMoneyFlowMapByDate(db, tradeDate)
 
   // 检查数据充分性：需 ≥65 个不同交易日（EMA42 稳定需约 84 个日历天）
-  const distinctDateCount = (db.prepare('SELECT COUNT(DISTINCT trade_date) AS cnt FROM daily_close_cache').get() as { cnt: number }).cnt
+  const distinctDateCount = (db.prepare(
+    'SELECT COUNT(DISTINCT trade_date) AS cnt FROM daily_close_cache WHERE trade_date >= ? AND trade_date <= ?',
+  ).get(startDate, tradeDate) as { cnt: number }).cnt
   if (distinctDateCount < 65) {
     throw Object.assign(new Error(`daily_close_cache 仅有 ${distinctDateCount} 个交易日，需 ≥65 个`), {
       code: 'DAILY_DATA_INSUFFICIENT'
@@ -350,8 +371,6 @@ export function runScreener(
       continue
     }
 
-    totalScanned++
-
     // 只取 tradeDate 及以前的数据（防止未来数据泄漏）
     const filtered = rows.filter(r => r.tradeDate <= tradeDate)
     if (filtered.length < minDays) continue
@@ -380,6 +399,8 @@ export function runScreener(
         effectiveRows = [...filtered, realtimeRow]
       }
     }
+    // A prior day's last row is not a fact for the requested trading date.
+    if (effectiveRows[effectiveRows.length - 1]?.tradeDate !== tradeDate) continue
 
     const closes = effectiveRows.map(r => r.close)
     const vols = effectiveRows.map(r => r.vol ?? 0)
@@ -409,6 +430,7 @@ export function runScreener(
 
     if (isNaN(angel[last]) || isNaN(devilFull[last])) continue
     if (prev < 0 || isNaN(angel[prev]) || isNaN(devilFull[prev])) continue
+    totalScanned++
 
     // 信号1：天使魔鬼金叉（前一日天使 < 魔鬼，当日天使 > 魔鬼）
     const crossUp = angel[prev] < devilFull[prev] && angel[last] > devilFull[last]
@@ -436,7 +458,7 @@ export function runScreener(
     // 换手率(%) = vol*100股 / (circFloat*10000股) * 100 = vol / circFloat
     const lastVol = vols[last]
     const circFloat = basic.circFloat ?? 0
-    const estimatedTurnover = circFloat > 0 ? lastVol / circFloat : null
+    const estimatedTurnover = targetIsToday && circFloat > 0 ? lastVol / circFloat : null
     const dbTurnover = turnovers[last]
     const turnoverRate = dbTurnover ?? estimatedTurnover
     const hasTurnover = turnoverRate != null && turnoverRate > turnoverThreshold
@@ -451,7 +473,11 @@ export function runScreener(
 
     // 末日行情数据
     const lastRow = effectiveRows[last]
-    const amount = rtEntry?.amount ?? (lastRow.vol != null ? lastRow.vol * lastRow.close * 100 : 0) // 近似成交额（元）
+    // DailyRow amounts are in thousands of yuan; rt_k amounts are already yuan.
+    // A closing-price approximation is not an observed transaction amount.
+    const observedAmount = rtEntry ? rtEntry.amount : lastRow.amount == null ? null : lastRow.amount * 1000
+    const amount = observedAmount != null && Number.isFinite(observedAmount) && observedAmount >= 0
+      ? observedAmount : null
     const moneyFlowRow = moneyFlowMap.get(basic.tsCode) ?? moneyFlowMap.get(basic.tsCode.split('.')[0]) ?? null
     const moneyFlow = moneyFlowRow ? buildMoneyFlowSummary(moneyFlowRow, amount) : buildEstimatedMoneyFlowSummary()
     const moneyInflow = moneyFlow?.source === 'real' && (moneyFlow.mainNetInflow ?? 0) > 0
@@ -521,11 +547,14 @@ export function runScreener(
     moneyflowJson: s.moneyFlow ? JSON.stringify(s.moneyFlow) : null,
     signalStrengthJson: JSON.stringify(s.signalStrength)
   }))
-  upsertResults(db, dbRows)
+  const calculatedAt = new Date().toISOString()
+  replaceResultsForDate(db, tradeDate, dbRows, {
+    calculatedAt, mode, totalScanned, rankConfigUpdatedAt: rankConfig.updatedAt,
+  })
 
   return {
     tradeDate,
-    calculatedAt: new Date().toISOString(),
+    calculatedAt,
     isCached: false,
     mode,
     rtTime,

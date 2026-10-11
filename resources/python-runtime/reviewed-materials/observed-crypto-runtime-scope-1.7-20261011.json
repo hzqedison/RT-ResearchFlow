@@ -1,0 +1,181 @@
+{
+  "kind": "rt-observed-crypto-runtime-review-v1",
+  "schemaVersion": 1,
+  "status": "native-scope-observed-not-installer-acceptance",
+  "observedSourceCommit": "744882ec3cce5f89cc63f53ef1c5a0dea723afce",
+  "runId": 38082539226,
+  "runUrl": "https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38082539226",
+  "preparationPolicySha256": "d7cb20a0894c245ce2f942c5932cc550128003a8d2eab61dd8e9e477ac42b264",
+  "sourceSnapshotSha256": "6b8bad51b91bd8bd811e8e4b6701fe3b3438e530fba5c6f2b345619d5441be5f",
+  "observations": [
+    {
+      "target": "darwin-arm64",
+      "producer": {
+        "attempt": 1,
+        "jobId": 114302242581,
+        "runId": 38082539226,
+        "sourceCommit": "744882ec3cce5f89cc63f53ef1c5a0dea723afce"
+      },
+      "reporter": {
+        "path": "scripts/report-private-runtime-native-bootstrap.py",
+        "sha256": "da4c19833ca8346ed3fdfc8dab240f28ca7100f1d4f71585711e8453d81ca2f6"
+      },
+      "scope": {
+        "kind": "rt-loaded-crypto-runtime-scope-v1",
+        "libraryVersion": "OpenSSL 3.5.9 29 Sep 2026",
+        "libraryVersionInfo": [
+          3,
+          5,
+          0,
+          9,
+          0
+        ],
+        "licenseApprovalGranted": false,
+        "loadingMode": "builtin",
+        "modulePath": "python/bin/python3.13",
+        "moduleSha256": "65f8844799498293cbecee5cea3f7e7b69f0c0e2a75d9e0e49b45ccf1634a535",
+        "moduleSize": 18022968,
+        "observation": "loaded-builtin-with-python-executable-byte-binding",
+        "releaseEligible": false
+      },
+      "reportSha256": "4043807fd325b5ef812be3ef9c379d0d90748bd5b0a627112c919dcdc4bd1848",
+      "receiptFilesVerified": 7,
+      "reporterExitCode": 0,
+      "reporterExitObserved": true,
+      "ownedTreeEmpty": true
+    },
+    {
+      "target": "darwin-x64",
+      "producer": {
+        "attempt": 1,
+        "jobId": 114302242588,
+        "runId": 38082539226,
+        "sourceCommit": "744882ec3cce5f89cc63f53ef1c5a0dea723afce"
+      },
+      "reporter": {
+        "path": "scripts/report-private-runtime-native-bootstrap.py",
+        "sha256": "da4c19833ca8346ed3fdfc8dab240f28ca7100f1d4f71585711e8453d81ca2f6"
+      },
+      "scope": {
+        "kind": "rt-loaded-crypto-runtime-scope-v1",
+        "libraryVersion": "OpenSSL 3.5.9 29 Sep 2026",
+        "libraryVersionInfo": [
+          3,
+          5,
+          0,
+          9,
+          0
+        ],
+        "licenseApprovalGranted": false,
+        "loadingMode": "builtin",
+        "modulePath": "python/bin/python3.13",
+        "moduleSha256": "393ae73ffa5e92b3c446b234849bcac182497db444ef083469bb0fca6c8d84b8",
+        "moduleSize": 18229944,
+        "observation": "loaded-builtin-with-python-executable-byte-binding",
+        "releaseEligible": false
+      },
+      "reportSha256": "d25ed15aa1256e89352a317117d539c0102ed03ae23db73b1d1fb60082553516",
+      "receiptFilesVerified": 7,
+      "reporterExitCode": 0,
+      "reporterExitObserved": true,
+      "ownedTreeEmpty": true
+    },
+    {
+      "target": "win32-x64",
+      "producer": {
+        "attempt": 1,
+        "jobId": 114302242466,
+        "runId": 38082539226,
+        "sourceCommit": "744882ec3cce5f89cc63f53ef1c5a0dea723afce"
+      },
+      "reporter": {
+        "path": "scripts/report-private-runtime-native-bootstrap.py",
+        "sha256": "da4c19833ca8346ed3fdfc8dab240f28ca7100f1d4f71585711e8453d81ca2f6"
+      },
+      "scope": {
+        "kind": "rt-loaded-crypto-runtime-scope-v1",
+        "libraryVersion": "OpenSSL 3.5.9 29 Sep 2026",
+        "libraryVersionInfo": [
+          3,
+          5,
+          0,
+          9,
+          0
+        ],
+        "licenseApprovalGranted": false,
+        "loadingMode": "extension-file",
+        "modulePath": "python/DLLs/_ssl.pyd",
+        "moduleSha256": "9c3b297b1d1b5c80a0e951329d42f084a01c65773717292b3f488645ee951a0f",
+        "moduleSize": 176640,
+        "observation": "loaded-module-with-manifest-byte-binding",
+        "releaseEligible": false
+      },
+      "reportSha256": "77d5b3e9183fdc9013f5d35104face330e5b27762438945dcb553527da10608c",
+      "receiptFilesVerified": 7,
+      "reporterExitCode": 0,
+      "reporterExitObserved": true,
+      "ownedTreeEmpty": true
+    }
+  ],
+  "upstream": {
+    "repository": "astral-sh/python-build-standalone",
+    "tag": "20261003",
+    "sourceCommit": "5e46737f6480fc315ebfea83866910cbfcc772f0",
+    "treeComplete": true,
+    "sourceFiles": [
+      {
+        "path": "pythonbuild/downloads.json",
+        "blobOid": "aad5d8a608b3c103d3cc5999f1a7843949d6eb99",
+        "url": "https://github.com/astral-sh/python-build-standalone/blob/5e46737f6480fc315ebfea83866910cbfcc772f0/pythonbuild/downloads.json"
+      },
+      {
+        "path": "cpython-unix/build-openssl-3.5.sh",
+        "blobOid": "0c440a894562a693ab81d405c7c9f931add9dfa6",
+        "url": "https://github.com/astral-sh/python-build-standalone/blob/5e46737f6480fc315ebfea83866910cbfcc772f0/cpython-unix/build-openssl-3.5.sh"
+      },
+      {
+        "path": "cpython-unix/Makefile",
+        "blobOid": "feaf64e753cc3e43e8c45fde18a62cfa615e4019",
+        "url": "https://github.com/astral-sh/python-build-standalone/blob/5e46737f6480fc315ebfea83866910cbfcc772f0/cpython-unix/Makefile"
+      },
+      {
+        "path": "cpython-unix/build.py",
+        "blobOid": "eb95536efde1b72ce8fdaad4e99be65c64508e3a",
+        "url": "https://github.com/astral-sh/python-build-standalone/blob/5e46737f6480fc315ebfea83866910cbfcc772f0/cpython-unix/build.py"
+      }
+    ],
+    "downloadDescriptor": {
+      "_comment": "Remember to update OPENSSL_VERSION_INFO in pythonbuild/disttests/ whenever upgrading.",
+      "url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz",
+      "size": 53279637,
+      "sha256": "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a",
+      "version": "3.5.9",
+      "library_names": [
+        "crypto",
+        "ssl"
+      ],
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE.openssl-3.txt"
+    }
+  },
+  "assessment": {
+    "scope": "Only the observed selected private Python _ssl runtime on the three tested targets",
+    "observedLibrary": "OpenSSL 3.5.9 29 Sep 2026",
+    "upstreamDescriptorLicense": "Apache-2.0",
+    "legacyCatalogNotice": "The archive retains both OpenSSL 1.1 and OpenSSL 3 notice paths. Presence of the legacy notice is not evidence of a loaded OpenSSL 1.1 library.",
+    "retention": "Keep both complete original OpenSSL notices; do not replace them with a shortened attribution.",
+    "limitations": [
+      "This observation does not prove absence of every older OpenSSL component in the whole application.",
+      "A built-in module is bound to the exact interpreter carrier and already validated runtime inventory; modulePath is not a separate _ssl shared-library path.",
+      "Source build catalog and native observation agree on 3.5.9; this is scoped engineering evidence, not human legal approval.",
+      "The stage artifacts contain native evidence, not EXE or DMG installers.",
+      "The later distribution-scope source commit requires its own final source authorization and checks."
+    ]
+  },
+  "licenseApprovalGranted": false,
+  "finalSealAccepted": false,
+  "installerAccepted": false,
+  "releaseEligible": false
+}

@@ -1,0 +1,461 @@
+{
+  "kind": "rt-windows-crt-delivery-evidence-v1",
+  "collectedDate": "2026-10-11",
+  "scope": "evidence and compliance entry only; not a policy approval or release eligibility change",
+  "userScenario": "individual, non-charging, open-source learning and testing; no existing Visual Studio Product license assumed",
+  "formalLock": {
+    "path": "D:/RT-ResearchFlow-BuildCache/windows-1.7-formal-inputs-current/formal-lock.json",
+    "sha256": "c20a1a327b91d4022746d2fc18b4a8045c31767134b14fdfae866ba2f06cd6ea",
+    "status": "locked",
+    "releaseEligible": false,
+    "structuralOnly": true
+  },
+  "retainedTree": "D:/RT-ResearchFlow-BuildCache/windows-1.7-native-inputs/retained/prepare/materialize/tree",
+  "dlls": [
+    {
+      "name": "vcruntime140.dll",
+      "sha256": "d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066",
+      "version": "14.44.35211.0",
+      "size": 124544,
+      "formalLockMembers": [
+        {
+          "kind": "file",
+          "path": "python/vcruntime140.dll",
+          "sha256": "d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066",
+          "size": 124544
+        }
+      ],
+      "observedAuthenticode": {
+        "status": "Valid",
+        "signer": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "observation": "Get-AuthenticodeSignature on retained tree representative files during this task; authenticity is not license entitlement"
+      }
+    },
+    {
+      "name": "vcruntime140_1.dll",
+      "sha256": "1f2d41c4aa5db0bc33ebf7b66d72943a817d7ce6cbe880502a9403823633093f",
+      "version": "14.44.35211.0",
+      "size": 49792,
+      "formalLockMembers": [
+        {
+          "kind": "file",
+          "path": "python/vcruntime140_1.dll",
+          "sha256": "1f2d41c4aa5db0bc33ebf7b66d72943a817d7ce6cbe880502a9403823633093f",
+          "size": 49792
+        }
+      ],
+      "observedAuthenticode": {
+        "status": "Valid",
+        "signer": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "observation": "Get-AuthenticodeSignature on retained tree representative files during this task; authenticity is not license entitlement"
+      }
+    },
+    {
+      "name": "msvcp140.dll",
+      "sha256": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde",
+      "version": "14.40.33810.0",
+      "size": 575056,
+      "formalLockMembers": [
+        {
+          "kind": "file",
+          "path": "providers/akshare/site/numpy.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
+          "sha256": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde",
+          "size": 575056
+        },
+        {
+          "kind": "file",
+          "path": "providers/akshare/site/pandas.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
+          "sha256": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde",
+          "size": 575056
+        },
+        {
+          "kind": "file",
+          "path": "providers/mootdx/site/numpy.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
+          "sha256": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde",
+          "size": 575056
+        },
+        {
+          "kind": "file",
+          "path": "providers/mootdx/site/pandas.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
+          "sha256": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde",
+          "size": 575056
+        },
+        {
+          "kind": "file",
+          "path": "providers/pywencai/site/numpy.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
+          "sha256": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde",
+          "size": 575056
+        },
+        {
+          "kind": "file",
+          "path": "providers/pywencai/site/pandas.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
+          "sha256": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde",
+          "size": 575056
+        }
+      ],
+      "observedAuthenticode": {
+        "status": "Valid",
+        "signer": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "observation": "Get-AuthenticodeSignature on retained tree representative files during this task; authenticity is not license entitlement"
+      }
+    }
+  ],
+  "pythonArchive": {
+    "sourceAsset": {
+      "filename": "cpython-3.13.16+20261003-x86_64-pc-windows-msvc-install_only.tar.gz",
+      "kind": "download",
+      "sha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "size": 47421192,
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.13.16%2B20261003-x86_64-pc-windows-msvc-install_only.tar.gz"
+    },
+    "inspection": {
+      "archiveSha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+      "archiveSize": 47421192,
+      "memberCount": 3350,
+      "licenseMember": "python/LICENSE.txt",
+      "licenseSha256": "76900732e5f075b725f754000ad5cab1b2cf89e355c1570138476956b6413cd3",
+      "dlls": [
+        {
+          "member": "python/vcruntime140.dll",
+          "sha256": "d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066"
+        },
+        {
+          "member": "python/vcruntime140_1.dll",
+          "sha256": "1f2d41c4aa5db0bc33ebf7b66d72943a817d7ce6cbe880502a9403823633093f"
+        }
+      ]
+    },
+    "originalWindowsAdditionalConditions": "available in python/LICENSE.txt; embedded Distributable Code wording; not an exact standalone DLL EULA"
+  },
+  "wheelEvidence": [
+    {
+      "distribution": "numpy",
+      "sourceAsset": {
+        "filename": "numpy-2.5.3-cp313-cp313-win_amd64.whl",
+        "kind": "download",
+        "sha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+        "size": 12560965,
+        "url": "https://files.pythonhosted.org/packages/f3/ec/100f2b1794ede74a9b3d7ec6b9736927f56713414c1dfe19ab6c383494bf/numpy-2.5.3-cp313-cp313-win_amd64.whl"
+      },
+      "inspection": {
+        "memberCount": 1062,
+        "licenseMembers": [
+          {
+            "member": "numpy/ma/LICENSE",
+            "sha256": "d78dbb208b80d92b4d333e41a4baae50d12444f46e53199fa7726a91de6e2da7",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy/random/LICENSE.md",
+            "sha256": "b4bc2f4fa1c95778f1ed3dd8f14706bece399475b978f9f34b5d3cd72521b48a",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy/_core/include/numpy/random/LICENSE.txt",
+            "sha256": "d544761558b510866c21f7e8a2d5716fca76e0b98117e3b6b86314db7244d150",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/LICENSE.txt",
+            "sha256": "a804dff0ead9fadc5293456410bcbfc32bf024be9c4513459663fb7b442d2341",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/fft/pocketfft/LICENSE.md",
+            "sha256": "8db000e158c162e7249787852d8c69764706502ccee725c06641b31c1e95c8af",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/linalg/lapack_lite/LICENSE.txt",
+            "sha256": "19060ef465e1797d682ee0fc3081bd25ab1395e995e43d25c9d13c95d9a3cd6b",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/ma/LICENSE",
+            "sha256": "d78dbb208b80d92b4d333e41a4baae50d12444f46e53199fa7726a91de6e2da7",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/random/LICENSE.md",
+            "sha256": "b4bc2f4fa1c95778f1ed3dd8f14706bece399475b978f9f34b5d3cd72521b48a",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/random/src/distributions/LICENSE.md",
+            "sha256": "cf5619f25b112d5ce7c896efffc8e610bcb345dfadcc19f2c1460aa48fff2c9e",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/random/src/mt19937/LICENSE.md",
+            "sha256": "92c10699884321f1c2947fe2a70ab23b0fbf1507f756d89dd08f38c61fc3d4fa",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/random/src/pcg64/LICENSE.md",
+            "sha256": "41190663b77bee5302386495a07b7eabfbfa571aa0ae2f11da6764162062fc4f",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/random/src/philox/LICENSE.md",
+            "sha256": "322ac46d870c8aeead6c53adcccc839296fb3c8e456eae155081297daf7f8013",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/random/src/sfc64/LICENSE.md",
+            "sha256": "28cad82ce1379dc529df30da78ec012d7d0d1d576b03ddcb93388aee53659f59",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/random/src/splitmix64/LICENSE.md",
+            "sha256": "454ec7350e478e037061850b67395753b425b1cb0a34bbc26290b020bf89d763",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/_core/include/numpy/libdivide/LICENSE.txt",
+            "sha256": "d544761558b510866c21f7e8a2d5716fca76e0b98117e3b6b86314db7244d150",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/_core/src/common/pythoncapi-compat/COPYING",
+            "sha256": "aea41976c720f91bd19725c16916a1ace40eb1ea42620d340e587a5de4bbcea0",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/_core/src/highway/LICENSE",
+            "sha256": "d208152e2777ffd0126eacc1bd21c0320d69e4e6b622d21a2a12a47e8ef73763",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/_core/src/multiarray/dragon4_LICENSE.txt",
+            "sha256": "b0fd592d4ead563148e3977e7b589169d46a5ef2ff133c755a81af880a3fc919",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/_core/src/npysort/x86-simd-sort/LICENSE.md",
+            "sha256": "a732977853530066790c42817087f4829b518dd98d340c916acbfd227e39d3cb",
+            "microsoftMention": false
+          },
+          {
+            "member": "numpy-2.5.3.dist-info/licenses/numpy/_core/src/umath/svml/LICENSE",
+            "sha256": "585483905b13d4b42f800c55ba99e89d6e2e33ccd5f503e201c07531d148ff41",
+            "microsoftMention": false
+          }
+        ],
+        "dlls": [
+          {
+            "member": "numpy.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
+            "sha256": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde"
+          }
+        ],
+        "mainLicenseMember": "numpy-2.5.3.dist-info/licenses/LICENSE.txt"
+      },
+      "microsoftCrtTermsInInspectedLicenseMembers": "not_found"
+    },
+    {
+      "distribution": "pandas",
+      "sourceAsset": {
+        "filename": "pandas-3.0.6-cp313-cp313-win_amd64.whl",
+        "kind": "download",
+        "sha256": "f3ce8a6968045481e91a3990e797e348ce13db45ee164a7095bbc824e26c09dd",
+        "size": 9638092,
+        "url": "https://files.pythonhosted.org/packages/c0/bd/63cb67e6903ef6d9c2871916dbcbc09d254da0fe8b870cf62e16b21945f2/pandas-3.0.6-cp313-cp313-win_amd64.whl"
+      },
+      "inspection": {
+        "memberCount": 1725,
+        "licenseMembers": [
+          {
+            "member": "pandas-3.0.6.dist-info/LICENSE",
+            "sha256": "9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae",
+            "microsoftMention": false
+          }
+        ],
+        "dlls": [
+          {
+            "member": "pandas.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
+            "sha256": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde"
+          }
+        ],
+        "mainLicenseMember": "pandas-3.0.6.dist-info/LICENSE"
+      },
+      "microsoftCrtTermsInInspectedLicenseMembers": "not_found"
+    }
+  ],
+  "localBuildTools": {
+    "productId": "Microsoft.VisualStudio.Product.BuildTools",
+    "instanceId": "d5d3b1c4",
+    "installationVersion": "17.14.37516.0",
+    "installationName": "VisualStudio/17.14.37+37516.0.-july.2026-",
+    "installDate": "2026-08-08T05:49:05Z",
+    "isComplete": true,
+    "isPrerelease": false,
+    "installationPath": "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools",
+    "observation": "vswhere -all -products * -format json and local installation catalog inspected read-only",
+    "catalogPath": "C:/ProgramData/Microsoft/VisualStudio/Packages/_Instances/d5d3b1c4/catalog.json",
+    "catalogLicenseLink": "https://go.microsoft.com/fwlink/?LinkId=2179911",
+    "licenseEulaId": "VS_2022_Tools_2024Mar_ENU.1033",
+    "x64RedistDirectory": "VC/Redist/MSVC/14.44.35112/x64/Microsoft.VC143.CRT",
+    "exactMatches": [
+      {
+        "filename": "vcruntime140.dll",
+        "sha256": "d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066",
+        "version": "14.44.35211.0"
+      },
+      {
+        "filename": "vcruntime140_1.dll",
+        "sha256": "1f2d41c4aa5db0bc33ebf7b66d72943a817d7ce6cbe880502a9403823633093f",
+        "version": "14.44.35211.0"
+      }
+    ],
+    "msvcpCounterexample": {
+      "filename": "msvcp140.dll",
+      "version": "14.44.35211.0",
+      "sha256": "0f885b509a685d2bbfa652fed26b5fb31d88fbdab0a978c641d1c7b8aa460aa9",
+      "matchesTarget": false
+    },
+    "subjectEntitlementEvidence": "not established; installed Build Tools is not a fabricated Visual Studio Product license record"
+  },
+  "materials": [
+    {
+      "id": "buildtools-license-page",
+      "url": "https://go.microsoft.com/fwlink/?LinkId=2179911",
+      "finalUrl": "https://visualstudio.microsoft.com/license-terms/vs2022-ga-diagnosticbuildtools/",
+      "size": 236902,
+      "sha256": "897695ef4488b53065d94627e73760fed1516ecb0963eaff122404ffc2a7579b",
+      "file": "windows-crt-1.7-20261011-buildtools-license-page.html"
+    },
+    {
+      "id": "buildtools-terms",
+      "url": "https://visualstudio.microsoft.com/wp-content/uploads/2024/03/Visual-Studio-2022-Diagnostic-Build-Tools-Agent-License_Update-March-2024_EN.docx",
+      "finalUrl": "https://visualstudio.microsoft.com/wp-content/uploads/2024/03/Visual-Studio-2022-Diagnostic-Build-Tools-Agent-License_Update-March-2024_EN.docx",
+      "size": 34395,
+      "sha256": "2f66b86a00e8d9833789897ce23d05a4a2dbea370cf39c8c1098dbc17d0e7bdc",
+      "file": "windows-crt-1.7-20261011-buildtools-terms.docx"
+    },
+    {
+      "id": "community-license-page",
+      "url": "https://visualstudio.microsoft.com/license-terms/vs2022-ga-community/",
+      "finalUrl": "https://visualstudio.microsoft.com/license-terms/vs2022-ga-community/",
+      "size": 234952,
+      "sha256": "6e97d58bd0a375b78cb928ee1fc10fe2d9b54ce90f0807f48b861329ff95181f",
+      "file": "windows-crt-1.7-20261011-community-license-page.html"
+    },
+    {
+      "id": "community-terms",
+      "url": "https://visualstudio.microsoft.com/wp-content/uploads/2021/11/Visual-Studio-2022-Community-License-EN.docx",
+      "finalUrl": "https://visualstudio.microsoft.com/wp-content/uploads/2021/11/Visual-Studio-2022-Community-License-EN.docx",
+      "size": 62859,
+      "sha256": "41a207b10c8ab91d0d2f10a854715f73dca54509581692d2fe179aa3ffcb8540",
+      "file": "windows-crt-1.7-20261011-community-terms.docx"
+    },
+    {
+      "id": "msvc-redistribution",
+      "url": "https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files?view=msvc-170&accept=text/markdown",
+      "finalUrl": "https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files?view=msvc-170&accept=text/markdown",
+      "size": 12480,
+      "sha256": "ccc5b30a9f037fb5c345a2dbf277c239f8cde0dc56e280e648ec325353478d40",
+      "file": "windows-crt-1.7-20261011-msvc-redistribution.md"
+    },
+    {
+      "id": "vs2022-redist-list",
+      "url": "https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution?accept=text/markdown",
+      "finalUrl": "https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution?accept=text/markdown",
+      "size": 24763,
+      "sha256": "0240b9a75f8fd997d998af27ea84b901f576782177f8ff535b7b07924c9570f7",
+      "file": "windows-crt-1.7-20261011-vs2022-redist-list.md"
+    },
+    {
+      "id": "buildtools-terms-text",
+      "file": "windows-crt-1.7-20261011-buildtools-terms.txt",
+      "sha256": "c577c6137db9df991585f4988c019761b8dd59578870925b401327ffa3a285aa",
+      "size": 11288,
+      "derivedFrom": "windows-crt-1.7-20261011-buildtools-terms.docx",
+      "extraction": "word/document.xml w:p/w:t, UTF-8; numbering/layout not reproduced; original DOCX authoritative"
+    },
+    {
+      "id": "community-terms-text",
+      "file": "windows-crt-1.7-20261011-community-terms.txt",
+      "sha256": "a38d10afc3ef8fb2e64af972a9c64d998ef964de8101b9f7a59703f72fa3a5ab",
+      "size": 19043,
+      "derivedFrom": "windows-crt-1.7-20261011-community-terms.docx",
+      "extraction": "word/document.xml w:p/w:t, UTF-8; numbering/layout not reproduced; original DOCX authoritative"
+    },
+    {
+      "id": "python-original-license",
+      "file": "windows-crt-1.7-20261011-python-original-LICENSE.txt",
+      "size": 22055,
+      "sha256": "76900732e5f075b725f754000ad5cab1b2cf89e355c1570138476956b6413cd3",
+      "sourceAsset": {
+        "filename": "cpython-3.13.16+20261003-x86_64-pc-windows-msvc-install_only.tar.gz",
+        "kind": "download",
+        "sha256": "5e100ee3d592ff500f4408a624f054d202e32d9dba8a12b2226bef81083fd778",
+        "size": 47421192,
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.13.16%2B20261003-x86_64-pc-windows-msvc-install_only.tar.gz"
+      },
+      "member": "python/LICENSE.txt"
+    },
+    {
+      "id": "numpy-original-wheel",
+      "url": "https://files.pythonhosted.org/packages/f3/ec/100f2b1794ede74a9b3d7ec6b9736927f56713414c1dfe19ab6c383494bf/numpy-2.5.3-cp313-cp313-win_amd64.whl",
+      "finalUrl": "https://files.pythonhosted.org/packages/f3/ec/100f2b1794ede74a9b3d7ec6b9736927f56713414c1dfe19ab6c383494bf/numpy-2.5.3-cp313-cp313-win_amd64.whl",
+      "size": 12560965,
+      "sha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+      "file": null
+    },
+    {
+      "id": "numpy-original-license",
+      "file": "windows-crt-1.7-20261011-numpy-original-LICENSE.txt",
+      "size": 45831,
+      "sha256": "a804dff0ead9fadc5293456410bcbfc32bf024be9c4513459663fb7b442d2341",
+      "sourceAsset": {
+        "filename": "numpy-2.5.3-cp313-cp313-win_amd64.whl",
+        "kind": "download",
+        "sha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+        "size": 12560965,
+        "url": "https://files.pythonhosted.org/packages/f3/ec/100f2b1794ede74a9b3d7ec6b9736927f56713414c1dfe19ab6c383494bf/numpy-2.5.3-cp313-cp313-win_amd64.whl"
+      },
+      "member": "numpy-2.5.3.dist-info/licenses/LICENSE.txt"
+    },
+    {
+      "id": "pandas-original-wheel",
+      "url": "https://files.pythonhosted.org/packages/c0/bd/63cb67e6903ef6d9c2871916dbcbc09d254da0fe8b870cf62e16b21945f2/pandas-3.0.6-cp313-cp313-win_amd64.whl",
+      "finalUrl": "https://files.pythonhosted.org/packages/c0/bd/63cb67e6903ef6d9c2871916dbcbc09d254da0fe8b870cf62e16b21945f2/pandas-3.0.6-cp313-cp313-win_amd64.whl",
+      "size": 9638092,
+      "sha256": "f3ce8a6968045481e91a3990e797e348ce13db45ee164a7095bbc824e26c09dd",
+      "file": null
+    },
+    {
+      "id": "pandas-original-license",
+      "file": "windows-crt-1.7-20261011-pandas-original-LICENSE.txt",
+      "size": 1634,
+      "sha256": "9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae",
+      "sourceAsset": {
+        "filename": "pandas-3.0.6-cp313-cp313-win_amd64.whl",
+        "kind": "download",
+        "sha256": "f3ce8a6968045481e91a3990e797e348ce13db45ee164a7095bbc824e26c09dd",
+        "size": 9638092,
+        "url": "https://files.pythonhosted.org/packages/c0/bd/63cb67e6903ef6d9c2871916dbcbc09d254da0fe8b870cf62e16b21945f2/pandas-3.0.6-cp313-cp313-win_amd64.whl"
+      },
+      "member": "pandas-3.0.6.dist-info/LICENSE"
+    }
+  ],
+  "collectionFailures": [],
+  "assessment": {
+    "preciseSourceIdentity": "established for Python archive and fetched exact wheels, subject to collectionFailures",
+    "originalStandaloneCrtLicense": "not established by supplied Python/wheel notices alone",
+    "buildToolsOpenSourceException": "compile/build third-party OSI-approved required dependencies; not a public CRT redistribution grant",
+    "communityRoute": "available for an individual; entitlement must be genuinely acquired/accepted, not inferred from free eligibility",
+    "publicBundledDelivery": "not cleared by this evidence collection",
+    "minimalExternalConditions": [
+      "Real acquisition/acceptance evidence for applicable Microsoft entitlement or exact-source sublicensing/redistribution grant; no commercial letter inherently required.",
+      "For unchanged MSVCP 14.40.33810.0, obtain version/source-specific Microsoft CRT delivery terms or documented applicable licensed-product/REDIST coverage; current 14.44 local counterpart is not exact.",
+      "Ensure end-user/distributor protective terms are actually delivered/agreed and third-party CRT is not relicensed under the project open-source license; notice-only is not acceptance."
+    ],
+    "notPerformed": [
+      "no workflow/policy approval/protected vars edits",
+      "no installers/system upgrades",
+      "no GitHub device authentication",
+      "no brokers/orders/user data access",
+      "no application tests or post-write reread"
+    ]
+  }
+}

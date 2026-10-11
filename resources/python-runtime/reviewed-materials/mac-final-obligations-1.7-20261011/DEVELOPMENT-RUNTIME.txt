@@ -1,0 +1,146 @@
+DEVELOPMENT RUNTIME / MAC / 1.7 / 2026-10-11
+Scope: independent engineering instructions for your own fork and owned development
+runtime. Not legal assurance, official release authorization, or executed relink.
+Do not edit an installed official app, its manifest/lock/policy, or its protections.
+No publisher private key, production account/data, broker, or paid terms are needed.
+The new generator and source edits below are recipient-side instructions, NOT
+existing upstream commands or changes already made by this review.
+
+1. SOURCE AND REPLACEMENT
+Use the retained licenses/third-party/numpy/REBUILD-AND-REPLACE-GCC-RUNTIMES.md
+and target arm64/x64 Conda recipes under recipes/conda-gcc-11.3.0/. Complete GCC
+11.3.0 source: licenses/third-party/numpy/sources/gcc-11.3.0.tar.xz
+SHA256 b47cf2818691f5b1e21df2bb38c795fac2cfbd640ede2d0a5e1c89e338a3ac39.
+That README binds patches, tool/environment pins and replacement procedure.
+Use its .tar.xz URL/SHA adaptation rather than pretending it is the .tar.gz.
+libgcc/libgfortran: GPL with GCC Runtime Library Exception 3.1;
+libquadmath: LGPL-2.1-or-later, NOT covered by that exception.
+Build only your desired ABI-compatible libquadmath with the matching SDK/arch;
+keep LC_ID_DYLIB and dependent @loader_path names compatible. Local ad-hoc sign
+any replacement BEFORE hashing. No full C application rebuild or proprietary
+object files are automatically demanded for this dynamically loaded library.
+Retain LGPL notices; allow library modification/debugging reverse engineering.
+
+2. OWNED COPY (macOS shell; set actual existing paths)
+FORK is your source checkout; ORIGINAL_RUNTIME is a validated matching-target
+runtime directory containing manifest.json; REPLACEMENT is your built dylib.
+Do not put DEV_RES inside the original app or an official bundles directory.
+  export FORK="$HOME/rt-own-fork"
+  export DEV_RES="$HOME/rt-lgpl-development/resources"
+  export TARGET=darwin-arm64   # or darwin-x64 on matching native machine
+  mkdir -p "$DEV_RES"
+  cp -a "$ORIGINAL_RUNTIME" "$DEV_RES/private-python-runtime"
+  cp "$ORIGINAL_RUNTIME/manifest.json" "$DEV_RES/base-manifest.json"
+  for p in akshare mootdx pywencai; do
+    cp "$REPLACEMENT" "$DEV_RES/private-python-runtime/providers/$p/site/numpy/.dylibs/libquadmath.0.dylib"
+  done
+Only compatible dylib replacements are supported below. Leave METADATA/WHEEL,
+dependency reports, bootstrap, adapters, licenses and all other files unchanged.
+Original wheel assets/RECORD remain original-input provenance, not a claim that
+modified files still equal that wheel. The new inventory and derivation ledger
+identify changed bytes. Repacking a new wheel requires a separate actual recipe,
+RECORD, wheel identity and dependency audit, not copied upstream approval labels.
+
+3. RECIPIENT-SIDE MANIFEST GENERATOR
+In YOUR fork create scripts/development-runtime-inventory.py with this code.
+It reuses the existing inventory() and unchanged full runtime validator; it
+accepts no missing/extra/changed files except the exact libquadmath paths.
+
+import hashlib, importlib.util, json, pathlib, subprocess, sys
+fork, root, baseline, target = sys.argv[1:]
+fork, root, baseline = map(lambda s: pathlib.Path(s).resolve(), (fork, root, baseline))
+assert baseline.parent == root.parent and root.name == 'private-python-runtime'
+assert root != pathlib.Path(sys.argv[3]).resolve().parent
+assert not root.is_symlink() and not (root / 'licenses/third-party/numpy/development-derivation.json').exists()
+assert 'bundles' not in root.parts and '.app' not in ''.join(root.parts)
+raw = baseline.read_bytes()
+m = json.loads(raw)
+assert target == m['platform'] + '-' + m['arch'] and target in ('darwin-arm64','darwin-x64')
+spec = importlib.util.spec_from_file_location('prep', fork / 'scripts/prepare-private-python-runtime.py')
+prep = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(prep)
+rows = [r for r in prep.inventory(root) if r['path'] != 'manifest.json']
+old = {r['path']: r for r in m['files']}
+new = {r['path']: r for r in rows}
+assert old.keys() == new.keys()
+allowed = {'providers/' + p + '/site/numpy/.dylibs/libquadmath.0.dylib' for p in ('akshare','mootdx','pywencai')}
+changed = [p for p in old if old[p] != new[p]]
+assert changed and set(changed) <= allowed
+assert all(old[p]['kind'] == new[p]['kind'] == 'file' for p in changed)
+ledger = {'kind':'recipient-owned-development-derivation','finalReleaseAuthorized':False,
+ 'baseManifestSha256':hashlib.sha256(raw).hexdigest(),'baseSourceLockSha256':m['sourceLockSha256'],
+ 'target':target,'originalWheelAssetsAreInputProvenanceOnly':True,
+ 'generatorSha256':hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
+ 'changes':[{'path':p,'before':old[p],'after':new[p]} for p in sorted(changed)]}
+ledgerPath = root / 'licenses/third-party/numpy/development-derivation.json'
+ledgerBytes = (json.dumps(ledger, sort_keys=True, indent=2) + '\n').encode()
+ledgerPath.write_bytes(ledgerBytes)
+m['sourceLockSha256'] = hashlib.sha256(ledgerBytes).hexdigest()
+m['files'] = [r for r in prep.inventory(root) if r['path'] != 'manifest.json']
+m['developmentDerivation'] = {'path':ledgerPath.relative_to(root).as_posix(), 'sha256':m['sourceLockSha256']}
+m['finalReleaseAuthorized'] = False
+payload = (json.dumps(m, sort_keys=True, indent=2) + '\n').encode()
+js = "const fs=require('fs');const c=require(process.argv[1]);c.validateRuntimeTree(process.argv[2],JSON.parse(fs.readFileSync(0,'utf8')),process.argv[3]);"
+subprocess.run(['node','-e',js,str(fork/'electron/shared/privatePythonRuntimeManifest.cjs'),str(root),target],input=payload,check=True)
+(root / 'manifest.json').write_bytes(payload)
+print('OWNED DEVELOPMENT MANIFEST SHA256', hashlib.sha256(payload).hexdigest())
+
+Run in your own workspace after local signing/replacement:
+  cd "$FORK"
+  python3 -B scripts/development-runtime-inventory.py "$FORK" "$DEV_RES/private-python-runtime" "$DEV_RES/base-manifest.json" "$TARGET"
+  node scripts/validate-private-python-runtime.cjs "$DEV_RES/private-python-runtime" "$TARGET"
+preparationPolicySha256 and wheel records describe the inherited base dependency
+inputs only; sourceLockSha256 now hashes your explicit local derivation ledger,
+not the publisher formal lock. This manifest is never official-release evidence.
+Do not run runtime:bundle on the changed tree: assembleInternal() intentionally
+checks original policy/source pins and cannot generate this development ledger.
+
+4. OWN FORK DEVELOPER LAUNCH, KEEP PACKAGED PATH UNCHANGED
+Current source has NO built-in RT_DEVELOPMENT_RUNTIME_RESOURCES option.
+In your fork only, in electron/main/services/pythonDataSourceBridge.ts add:
+  function developerRuntimeResources(): string | undefined {
+    return app.isPackaged ? undefined : process.env.RT_DEVELOPMENT_RUNTIME_RESOURCES
+  }
+Inside callPythonDataSource(), before the existing packaged branch, declare:
+  const devResources = developerRuntimeResources()
+Change that branch to if (app.isPackaged || devResources), and its resolver to:
+  resolvePrivatePythonRuntime(app.isPackaged ? process.resourcesPath : devResources!)
+Keep the existing privatePythonInvocation(), status/version/hash checks intact.
+In installSelectedDataSourceExtensions(), use the same resolver expression with
+its own const devResources = developerRuntimeResources(); keep its version guard.
+These are the TWO exact source entry gaps. Do not alter resolver/bootstrap checks,
+RESEARCH access/license authority, transaction rules or official source policy.
+Use an empty owned development userData directory, not production preferences.
+configureApplicationDataPaths() already appends -dev for unpackaged apps; in your
+fork call app.setName('rt-own-fork-lgpl-dev') before configureApplicationDataPaths()
+runs so even an existing -dev profile is not reused. Confirm the actual resulting
+path before any provider configuration.
+  cd "$FORK"
+  pnpm install --frozen-lockfile
+  RT_DEVELOPMENT_RUNTIME_RESOURCES="$DEV_RES" pnpm run dev
+This builds/starts your UNPACKAGED fork, not a signed publisher app. npm/pnpm dev
+alone without those fork edits uses the external-interpreter branch, NOT the new
+runtime. No authority key is requested here; protected features remain protected.
+Dependency installation may fetch ordinary packages: do not accept paid terms.
+This review executed none of these commands, signatures, imports or relinks.
+
+5. CORRESPONDING SOURCE / DELIVERY BOUNDARY
+LGPL GCC sources, target patches/recipes and notices: reviewed as prepared and
+hash-bound. The bridge wheel's Python/JS sources plus its stdlib build recipe
+are complete for THAT wheel. Immutable bridge archive:
+https://github.com/hzqedison/RT-ResearchFlow/archive/58f0281655364fdad7b8d6b71666806d3e6e3899.zip
+SHA256 e5bf6a33d5f736d5e0f11131026c6f7612a88ce95415f7a2eb5e1e06adc477e9.
+Do not label this four-file bridge source binding as full app Corresponding Source.
+Native stage source is 3a8010408613eebd7654fdc70a89a74f8dc3e65e; its source
+membership proof covers preparation materials, not every app source/build input.
+Concrete remaining delivery evidence: a recipient-accessible immutable full-app
+source snapshot matching the distributed app, including electron/, src/ (or actual
+renderer source roots), package.json, pnpm-lock.yaml, electron.vite.config.ts,
+research-access.vite.config.ts, electron-builder.js, scripts/ and required build
+materials; record its URL/archive SHA and match source revision/build recipe.
+An existing matching public snapshot can satisfy this: no new license questionnaire
+or publisher private key is required. This review has not verified anonymous
+access or complete app source contents for that snapshot, and does not invent it.
+Offer exact source/notices beside binaries with equivalent recipient access;
+include this instruction via the main agent's copyhook. Prepared text is NOT an
+actualcopy receipt. Main-agent afterPack proof must bind the actual copied bytes.

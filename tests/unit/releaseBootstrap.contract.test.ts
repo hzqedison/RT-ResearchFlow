@@ -7,6 +7,7 @@ const workflow = readFileSync(resolve(process.cwd(), '.github/workflows/release.
 const expectedBootstrapTags = {
   'refs/heads/codex/release-1.3': 'v1.3.0',
   'refs/heads/codex/release-1.6': 'v1.6.0',
+  'refs/heads/codex/release-1.7': 'v1.7.0',
 }
 
 function requiredMatch(text: string, pattern: RegExp): RegExpMatchArray {
@@ -65,14 +66,14 @@ function retain(text: string, guards: string[]): void {
 }
 
 describe('bounded release bootstrap authorization', () => {
-  it('adds only the exact 1.6 branch while preserving the 1.3 branch and tag/dispatch triggers', () => {
+  it('adds only the exact 1.7 branch while preserving earlier branches and tag/dispatch triggers', () => {
     const branches = requiredMatch(workflow, /  push:\n    branches:\n([\s\S]*?)    tags:\n/)[1]
-    expect([...branches.matchAll(/^      - '([^']+)'$/gm)].map(match => match[1])).toEqual(['codex/release-1.3', 'codex/release-1.6'])
-    expect(branches.trim().split('\n')).toHaveLength(2)
+    expect([...branches.matchAll(/^      - '([^']+)'$/gm)].map(match => match[1])).toEqual(['codex/release-1.3', 'codex/release-1.6', 'codex/release-1.7'])
+    expect(branches.trim().split('\n')).toHaveLength(3)
     retain(workflow, ["    tags:\n      - 'v*'", '  workflow_dispatch:', '        required: true', '        default: false'])
   })
 
-  it('uses the same two exact maps for prepare and draft creation', () => {
+  it('uses the same three exact maps for prepare and draft creation', () => {
     const maps = [...workflow.matchAll(/const bootstrapTags = (\{[\s\S]*?\});/g)]
       .map(match => JSON.parse(match[1].replaceAll("'", '"').replace(/,\s*\}/, '}')) as Record<string, string>)
     expect(maps).toEqual([expectedBootstrapTags, expectedBootstrapTags])
@@ -88,6 +89,10 @@ describe('bounded release bootstrap authorization', () => {
 
   it.each([
     ['refs/heads/codex/release-1.3', 'v1.6.0'],
+    ['refs/heads/codex/release-1.7', 'v1.6.0'],
+    ['refs/heads/codex/release-1.6', 'v1.7.0'],
+    ['refs/heads/codex/release-1.7', 'v1.7.1'],
+    ['refs/heads/codex/release-1.7', 'v1.7.0-beta.1'],
     ['refs/heads/codex/release-1.6', 'v1.3.0'],
     ['refs/heads/codex/release-1.6', 'v1.6.1'],
     ['refs/heads/codex/release-1.6', 'v1.6.0-beta.1'],
@@ -104,7 +109,7 @@ describe('bounded release bootstrap authorization', () => {
     expect(mayCreateMissingTag(ref, 'v1.6.0')).toBe(false)
   })
 
-  it.each(['v1.3.0', 'v1.3.0-beta.1', 'v1.6.0', 'v1.6.0-beta.1'])('preserves normal tag builds and publish-only recovery for %s', tag => {
+  it.each(['v1.3.0', 'v1.3.0-beta.1', 'v1.6.0', 'v1.6.0-beta.1', 'v1.7.0', 'v1.7.0-beta.1'])('preserves normal tag builds and publish-only recovery for %s', tag => {
     expect(authorize('refs/tags/' + tag, tag)).toEqual({ build: true, bootstrap: false })
     expect(tagFor(tagExpression, 'push', 'refs/tags/' + tag)).toBe(tag)
     expect(tagFor(lockExpression, 'workflow_dispatch', 'refs/heads/codex/release-1.6', tag)).toBe(tag)
@@ -119,6 +124,10 @@ describe('bounded release bootstrap authorization', () => {
 
   it.each([
     ['codex/release-1.3', 'v1.3.0', true], ['codex/release-1.6', 'v1.6.0', true],
+    ['codex/release-1.7', 'v1.7.0', true], ['v1.7.0', 'v1.7.0', true],
+    ['v1.7.0-beta.1', 'v1.7.0-beta.1', true],
+    ['codex/release-1.7', 'v1.6.0', false], ['codex/release-1.6', 'v1.7.0', false],
+    ['codex/release-1.7', 'v1.7.0-beta.1', false],
     ['v1.3.0', 'v1.3.0', true], ['v1.6.0', 'v1.6.0', true],
     ['v1.3.0-beta.1', 'v1.3.0-beta.1', true], ['v1.6.0-beta.1', 'v1.6.0-beta.1', true],
     ['codex/release-1.3', 'v1.6.0', false], ['codex/release-1.6', 'v1.3.0', false],
@@ -188,7 +197,8 @@ describe('release safety gates remain mandatory', () => {
     retain(workflow, ['runner: windows-latest\n            platform: windows\n            arch: x64\n            tests: 2',
       'runner: macos-15\n            platform: macos\n            arch: arm64\n            tests: 3',
       'runner: macos-15-intel\n            platform: macos\n            arch: x64\n            tests: 3',
-      "node-version: '20'", 'version: 10.14.0', 'pnpm install --frozen-lockfile --config.side-effects-cache=false'])
+      "node-version: '20'", 'version: 10.14.0'])
+    retain(step('Install pinned native dependencies'), ['pnpm install', '--frozen-lockfile', '--config.side-effects-cache=false'])
   })
 
   it('preserves all three native builds, installed smoke suites and synthetic-data reinstall evidence', () => {

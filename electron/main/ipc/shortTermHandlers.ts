@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../database/db'
+import { cancelPublicConceptSync, getPublicConceptSyncStatus, syncPublicConceptSnapshots } from '../services/publicConceptSnapshotSyncService'
 import {
   getShortTermActiveSubTab,
   setShortTermActiveSubTab,
@@ -7,6 +8,7 @@ import {
   setConceptSource
 } from '../database/settingsRepository'
 import { getDataSourceConfig } from '../database/dataSourceRepository'
+import { factReceipt, safeFactError } from '../services/diagnosticFactSyncService'
 import { decryptApiKey } from '../utils/apiKeyEncryption'
 import {
   runAfterCloseDailySyncJob,
@@ -132,20 +134,23 @@ export function registerShortTermHandlers(): void {
     if (!payload || !(ALLOWED_TASKS as readonly string[]).includes(payload.task)) {
       return { ok: false as const, error: 'INVALID_PARAM' as const }
     }
-    // Tushare 配置校验：未启用直接报错；cron job 内部也有同样校验
-    const dsConfig = getDataSourceConfig(getDb())
-    if (!dsConfig.tushareEnabled || !dsConfig.tushareTokenEncrypted) {
-      return { ok: false as const, error: 'TUSHARE_DISABLED' as const }
-    }
-    // FR-176: 股票走势图冷启动同步需要等待 stock_basic 写库完成, 以便前端立即重试搜索。
+    // 基础资料服务支持公开源兜底；先等待实际写入，不能被付费接口配置检查拦截。
     if (payload.task === 'stockBasic') {
       try {
-        await runStockBasicSyncJob()
+        const result = await runStockBasicSyncJob()
+        if (!result || !Number.isSafeInteger(result.rowCount) || result.rowCount <= 0) {
+          return { ok: false as const, error: 'SYNC_FAILED' as const }
+        }
       } catch (err) {
         console.error('[shortTerm:syncDataNow] task=stockBasic error:', err)
         return { ok: false as const, error: 'SYNC_FAILED' as const }
       }
       return { ok: true as const }
+    }
+    // 其余任务当前仍依赖 Tushare；配置就绪不代表接口权限或数据写入已确认。
+    const dsConfig = getDataSourceConfig(getDb())
+    if (!dsConfig.tushareEnabled || !dsConfig.tushareTokenEncrypted) {
+      return { ok: false as const, error: 'TUSHARE_DISABLED' as const }
     }
     // 异步触发，不阻塞 IPC 返回；错误在 cron job 内部记录日志
     void (async () => {
@@ -702,26 +707,43 @@ export function registerShortTermHandlers(): void {
     return { ok: true as const }
   })
 
+  ipcMain.handle('shortTerm:getPublicConceptSyncStatus', () => {
+    try { return { ok: true, status: getPublicConceptSyncStatus(getDb()) } }
+    catch { return { ok: false, error: 'PUBLIC_CONCEPT_CACHE_UNAVAILABLE' } }
+  })
+  ipcMain.handle('shortTerm:syncPublicConceptSnapshots', () => {
+    try {
+      const db = getDb()
+      void syncPublicConceptSnapshots(db).catch(() => undefined)
+      return { ok: true, status: getPublicConceptSyncStatus(db) }
+    } catch { return { ok: false, error: 'PUBLIC_CONCEPT_SYNC_UNAVAILABLE' } }
+  })
+  ipcMain.handle('shortTerm:cancelPublicConceptSync', () => {
+    try { return { ok: true, status: cancelPublicConceptSync(getDb()) } }
+    catch { return { ok: false, error: 'PUBLIC_CONCEPT_CANCEL_FAILED' } }
+  })
+
   ipcMain.handle('shortTerm:syncConceptMembers', async (_e, payload: { source: string }) => {
     if (!payload || !['kpl', 'ths', 'dc'].includes(payload.source)) {
       return { ok: false as const, error: 'INVALID_PARAM' as const }
     }
-    const db2 = getDb()
-    const cfg = getDataSourceConfig(db2)
-    if (!cfg.tushareEnabled || !cfg.tushareTokenEncrypted) {
-      console.warn('[shortTerm:syncConceptMembers] Tushare 未配置，跳过同步')
-      return { ok: false as const, error: 'TUSHARE_DISABLED' as const }
-    }
-    console.log(`[shortTerm:syncConceptMembers] 触发 source=${payload.source} 的题材成分同步`)
-    void (async () => {
-      try {
-        await runConceptMembersSyncForSource(payload.source)
-        console.log(`[shortTerm:syncConceptMembers] source=${payload.source} 同步完成`)
-      } catch (err) {
-        console.warn('[shortTerm:syncConceptMembers] error:', err)
+    try {
+      const cfg = getDataSourceConfig(getDb())
+      // 保留真实配置依赖；共享服务现有 singleflight 防止并发重复采集。
+      const receipt = !cfg.tushareEnabled || !cfg.tushareTokenEncrypted
+        ? factReceipt(payload.source, null, 'TUSHARE_DISABLED')
+        : await runConceptMembersSyncForSource(payload.source)
+      if (receipt.outcome === 'success') {
+        console.log(`[shortTerm:syncConceptMembers] source=${payload.source} outcome=${receipt.outcome} reason=${receipt.reasonCode} rows=${receipt.insertedRows}`)
+        return { ok: true as const, ...receipt }
       }
-    })()
-    return { ok: true as const }
+      console.warn(`[shortTerm:syncConceptMembers] source=${payload.source} outcome=${receipt.outcome} reason=${receipt.reasonCode} rows=${receipt.insertedRows}`)
+      return { ok: false as const, error: receipt.reasonCode, ...receipt }
+    } catch (err) {
+      const code = safeFactError(err)
+      console.warn(`[shortTerm:syncConceptMembers] source=${payload.source} reason=${code}`)
+      return { ok: false as const, error: code, ...factReceipt(payload.source, null, code) }
+    }
   })
 
   // FR-153 临时诊断 IPC（排查 THS 数据写入问题，可在 DevTools console 调用）

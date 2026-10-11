@@ -25,6 +25,10 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        env:
+          GIT_CONFIG_COUNT: '1'
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
 
       - name: Check public boundary
         shell: pwsh
@@ -41,8 +45,19 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Set up native Python
+        id: python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: x64
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Verify repository
+        env:
+          DATA_SOURCE_NATIVE_PYTHON: ${{ steps.python.outputs.python-path }}
+          DATA_SOURCE_NATIVE_PYTHON_VERSION: '3.13'
+          DATA_SOURCE_NATIVE_ARCH: x64
         run: pnpm run verify
