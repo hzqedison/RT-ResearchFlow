@@ -1,0 +1,38 @@
+{
+  "version": "1.9.1",
+  "sourceCommit": "67ae2281801e5b7b54e957170a86104c0fbd207c",
+  "sourceMainIntegration": "63d8baa1dd554304bc36a2e91cd83283d5602eb1",
+  "extensionDelivery": "on-demand",
+  "released": true,
+  "artifacts": [
+    { "platform": "win32", "arch": "x64", "file": "RT-ResearchFlow-Setup-1.9.1-x64.exe", "size": 144369277, "sha256": "426627cc438a6314607f7b86986637711cf54ce9f20009c71acaf4df4e5b76d9" },
+    { "platform": "darwin", "arch": "arm64", "file": "RT-ResearchFlow-macOS-1.9.1-arm64.dmg", "size": 201721180, "sha256": "10e7b62fc9fc410164181018a404d896e68160d716ed299c7c7f736ac778ed34" },
+    { "platform": "darwin", "arch": "x64", "file": "RT-ResearchFlow-macOS-1.9.1-x64.dmg", "size": 209862646, "sha256": "ca02433ec13ce4a3813e628196757de6b45dabdcb1a2c5108aa89dbd2a23062c" }
+  ],
+  "acceptance": {
+    "windowsRelatedContractTests": 24,
+    "nodeAndWebTypeChecks": true,
+    "actualPackagedStartupSettingsAndExitAllPlatforms": true,
+    "packagedPdfCanvasSqliteAllPlatforms": true,
+    "actualAkshareFirstUseInstallAllPlatforms": true,
+    "windowsAllThreeExtensionInstallAndImportSeparateEnvironment": true,
+    "windowsNsisExistingInstallationUpgrade": true,
+    "windowsInstalledDatabaseQuickCheck": "ok",
+    "windowsInstalledResourcesEqualIsolatedTestResources": true,
+    "windowsComparedSourceInputs": 624,
+    "macNativeAcceptanceRun": "https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38138615536",
+    "macPublishWithoutRebuildRun": "https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38140085480",
+    "publishedAssetDigestsMatched": true
+  },
+  "limitations": [
+    "First extension installation requires an existing compatible Python and network access.",
+    "Long Windows installation paths can prevent native extension DLL loading.",
+    "Mac uses ad-hoc signing, not Apple notarization.",
+    "Mac mootdx and pywencai full data workflows have not been accepted.",
+    "Import success does not prove every upstream data API or every strategy.",
+    "Incremental update workflows have not been accepted; use manual installers.",
+    "No broker connection or real order was submitted.",
+    "Existing configured news retention remains active; local upgrade backup was retained.",
+    "Owned temporary-environment cleanup was blocked by execution policy and remains incomplete."
+  ]
+}
