@@ -53,10 +53,10 @@ jobs:
       RT_RUNTIME_RELEASE_AUTHORIZATION_SHA256: ${{ vars.RT_RUNTIME_RELEASE_AUTHORIZATION_SHA256 }}
       NODE_OPTIONS: ''
       NODE_PATH: ''
-      FORMAL_INPUTS_RUN_ID: ${{ inputs.formal_inputs_run_id || vars.RT_RUNTIME_STAGE_FORMAL_INPUTS_RUN_ID || '38031988597' }}
-      FORMAL_INPUTS_ARTIFACT_ID: ${{ inputs.formal_inputs_artifact_id || vars.RT_RUNTIME_STAGE_FORMAL_INPUTS_ARTIFACT_ID || '11662740624' }}
-      PREPARE_RUN_ID: ${{ inputs.prepare_run_id || vars.RT_RUNTIME_STAGE_PREPARE_RUN_ID || '38031520327' }}
-      PREPARE_BINDINGS: ${{ inputs.prepare_bindings || vars.RT_RUNTIME_STAGE_PREPARE_BINDINGS || '{"win32-x64":{"artifactId":11661764973,"jobId":114153275620},"darwin-arm64":{"artifactId":11661924798,"jobId":114153275775},"darwin-x64":{"artifactId":11662865031,"jobId":114153275888}}' }}
+      FORMAL_INPUTS_RUN_ID: ${{ inputs.formal_inputs_run_id || vars.RT_RUNTIME_STAGE_FORMAL_INPUTS_RUN_ID || '38086904113' }}
+      FORMAL_INPUTS_ARTIFACT_ID: ${{ inputs.formal_inputs_artifact_id || vars.RT_RUNTIME_STAGE_FORMAL_INPUTS_ARTIFACT_ID || '11682458673' }}
+      PREPARE_RUN_ID: ${{ inputs.prepare_run_id || vars.RT_RUNTIME_STAGE_PREPARE_RUN_ID || '38086414260' }}
+      PREPARE_BINDINGS: ${{ inputs.prepare_bindings || vars.RT_RUNTIME_STAGE_PREPARE_BINDINGS || '{"win32-x64":{"artifactId":11681863167,"jobId":114313752780},"darwin-arm64":{"artifactId":11681947938,"jobId":114313752669},"darwin-x64":{"artifactId":11682448388,"jobId":114313752546}}' }}
     steps:
       - name: Require the existing protected authorization pins
         uses: actions/github-script@v7
@@ -79,23 +79,23 @@ jobs:
                   ![binding.artifactId,binding.jobId].every(v => Number.isSafeInteger(v) && v > 0)) throw new Error('Invalid prepare binding');
             }
             const pinned = {
-              'win32-x64': {artifactId:11661764973,jobId:114153275620},
-              'darwin-arm64': {artifactId:11661924798,jobId:114153275775},
-              'darwin-x64': {artifactId:11662865031,jobId:114153275888},
+              'win32-x64': {artifactId:11681863167,jobId:114313752780},
+              'darwin-arm64': {artifactId:11681947938,jobId:114313752669},
+              'darwin-x64': {artifactId:11682448388,jobId:114313752546},
             };
-            if (Number(e.PREPARE_RUN_ID) !== 38031520327 ||
+            if (Number(e.PREPARE_RUN_ID) !== 38086414260 ||
                 targets.some(t => bindings[t].artifactId !== pinned[t].artifactId || bindings[t].jobId !== pinned[t].jobId)) throw new Error('Final prepare pins mismatch');
-            if (Number(e.FORMAL_INPUTS_RUN_ID) !== 38031988597 || Number(e.FORMAL_INPUTS_ARTIFACT_ID) !== 11662740624) throw new Error('Final formal input pins mismatch');
+            if (Number(e.FORMAL_INPUTS_RUN_ID) !== 38086904113 || Number(e.FORMAL_INPUTS_ARTIFACT_ID) !== 11682458673) throw new Error('Final formal input pins mismatch');
             if (new Set(targets.map(t => bindings[t].artifactId)).size !== 3 ||
                 new Set(targets.map(t => bindings[t].jobId)).size !== 3) throw new Error('Duplicate prepare identities');
             const run = (await github.rest.actions.getWorkflowRun({...context.repo,run_id:Number(e.FORMAL_INPUTS_RUN_ID)})).data;
             const artifact = (await github.rest.actions.getArtifact({...context.repo,artifact_id:Number(e.FORMAL_INPUTS_ARTIFACT_ID)})).data;
             if (run.status !== 'completed' || run.conclusion !== 'success' || run.run_attempt !== 1 ||
-                run.head_sha !== '9c371c71484b373fb0457c58e164c63b781b956b' ||
+                run.head_sha !== '4d7fe22bec940e20bc8308a3190ca5f45a89f2ca' ||
                 run.path !== '.github/workflows/private-runtime-merge.yml' ||
                 run.repository.id !== context.payload.repository.id || run.head_repository.id !== run.repository.id ||
-                artifact.name !== 'private-runtime-structural-merge' || artifact.size_in_bytes !== 15921115 ||
-                artifact.digest !== 'sha256:3d3e972bfed7961afae653d0aa9cb46da4777405a82b2bcd6e2143ccc6eb5e63' ||
+                artifact.name !== 'private-runtime-structural-merge' || artifact.size_in_bytes !== 15927505 ||
+                artifact.digest !== 'sha256:15f02b8bb69a083854e6edb24561bfbb0a40cd50a128a457b560bed5c4dcdb42' ||
                 artifact.expired || artifact.workflow_run.id !== run.id || artifact.workflow_run.head_sha !== run.head_sha) throw new Error('Formal input artifact origin rejected');
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:

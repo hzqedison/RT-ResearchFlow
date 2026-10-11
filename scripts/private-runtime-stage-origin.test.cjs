@@ -4,12 +4,12 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { verifyCandidateOrigin } = require('./run-private-runtime-stage-ci.cjs')
 const repository = 'hzqedison/RT-ResearchFlow'
-const source = 'b91f91ce65fe8bc20e150b770128b62a5fccb98d'
-const runId = 38031520327
+const source = 'b3994908e75c8cec4a8bbc9b0ab7a230e39db35c'
+const runId = 38086414260
 const pins = {
-  'win32-x64': [11661764973, 114153275620, 319285064, 'f49fdd9223c95313e82f79b8a4a14f9b19506d7e1d9703761f11c949b071c837', 'windows-latest'],
-  'darwin-arm64': [11661924798, 114153275775, 308560677, '8264afe0373c793193f3fda76b7fe1d57abf4baf827188ac2742ebba220ce5f9', 'macos-15'],
-  'darwin-x64': [11662865031, 114153275888, 325913545, 'af0d439c901a6376618777f9927f656b893fe6b4230a9798d7e47eb785786a83', 'macos-15-intel'],
+  'win32-x64': [11681863167, 114313752780, 319283710, 'edda78761f4266760340e2add86dd1dae41893b5224473755b6e0fa56839a46b', 'windows-latest'],
+  'darwin-arm64': [11681947938, 114313752669, 308565305, 'f8b674eab4bcf7e49afc3f0830218c55f7e1e3453ec4b853982e30c3b436d30f', 'macos-15'],
+  'darwin-x64': [11682448388, 114313752546, 325921214, '996f5409d96d8b5fc73761a3afb91fb656043304db8646b2184e95c5835e3336', 'macos-15-intel'],
 }
 
 // These are isolated transport fixtures, never release authorization or native evidence.

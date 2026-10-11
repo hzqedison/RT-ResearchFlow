@@ -11,15 +11,15 @@ const ROOT = path.resolve(__dirname, '..')
 const ENTRY = 'scripts/run-private-runtime-stage-ci.cjs'
 const WORKFLOW = '.github/workflows/private-runtime-stage-native.yml'
 const TARGETS = ['win32-x64', 'darwin-arm64', 'darwin-x64']
-const PREPARE_RUN = 38031520327
-const PREPARE_SOURCE = 'b91f91ce65fe8bc20e150b770128b62a5fccb98d'
+const PREPARE_RUN = 38086414260
+const PREPARE_SOURCE = 'b3994908e75c8cec4a8bbc9b0ab7a230e39db35c'
 const PREPARE_PINS = {
-  'win32-x64': { artifactId: 11661764973, jobId: 114153275620, size: 319285064,
-    digest: 'f49fdd9223c95313e82f79b8a4a14f9b19506d7e1d9703761f11c949b071c837' },
-  'darwin-arm64': { artifactId: 11661924798, jobId: 114153275775, size: 308560677,
-    digest: '8264afe0373c793193f3fda76b7fe1d57abf4baf827188ac2742ebba220ce5f9' },
-  'darwin-x64': { artifactId: 11662865031, jobId: 114153275888, size: 325913545,
-    digest: 'af0d439c901a6376618777f9927f656b893fe6b4230a9798d7e47eb785786a83' },
+  'win32-x64': { artifactId: 11681863167, jobId: 114313752780, size: 319283710,
+    digest: 'edda78761f4266760340e2add86dd1dae41893b5224473755b6e0fa56839a46b' },
+  'darwin-arm64': { artifactId: 11681947938, jobId: 114313752669, size: 308565305,
+    digest: 'f8b674eab4bcf7e49afc3f0830218c55f7e1e3453ec4b853982e30c3b436d30f' },
+  'darwin-x64': { artifactId: 11682448388, jobId: 114313752546, size: 325921214,
+    digest: '996f5409d96d8b5fc73761a3afb91fb656043304db8646b2184e95c5835e3336' },
 }
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
 function fail(code) { const error = new Error(code); error.code = code; throw error }
@@ -48,9 +48,9 @@ function read(filename, cap = 8 * 1024 * 1024) {
   if (bytes.length !== stat.size) fail('STAGE_FILE_CHANGED')
   return bytes
 }
+function writeJson(filename, value) { fs.writeFileSync(filename, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' }) }
 const FORMAL_LOCK_BYTE_CAP = 32 * 1024 * 1024
 function readFormalLock(filename) { return read(filename, FORMAL_LOCK_BYTE_CAP) }
-function writeJson(filename, value) { fs.writeFileSync(filename, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' }) }
 function options(argv) {
   const names = { '--target': 'target', '--candidate-proof': 'candidateProof', '--formal-lock': 'formalLock',
     '--derived-cache': 'derivedCache', '--work-root': 'workRoot', '--python': 'python',
