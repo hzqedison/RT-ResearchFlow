@@ -1,80 +1,60 @@
-name: Windows build and installed-app test
-
+name: Owner-only runtime cache transfer
 on:
-  push:
-    branches: [codex/macos-support]
   workflow_dispatch:
-
 permissions:
-  contents: read
-
-concurrency:
-  group: windows-build-${{ github.ref }}
-  cancel-in-progress: false
-
+  actions: read
+  contents: write
 jobs:
-  windows-build:
+  transfer:
     if: github.repository == 'hzqedison/RT-ResearchFlow'
-    runs-on: windows-latest
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: private-runtime-cache-1.7-38086414260
+      SOURCE: b3994908e75c8cec4a8bbc9b0ab7a230e39db35c
     steps:
-      - uses: actions/checkout@v4
-      - name: Check public boundary
-        shell: pwsh
-        run: ./.github/scripts/Test-PublicBoundary.ps1
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.14.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - name: Install Electron native dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Verify source and isolated unit tests
-        run: pnpm run verify
-      - name: Package Windows x64 installer
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: pnpm exec electron-builder --win --x64 --config electron-builder.js --config.nsis.runAfterFinish=false
-      - name: Check installer and create checksum
-        shell: pwsh
+      - name: Verify exact completed producer and private artifact
+        shell: bash
         run: |
-          $package = Get-Content -Raw package.json | ConvertFrom-Json
-          $name = "RT-ResearchFlow-Setup-$($package.version)-x64.exe"
-          $installer = Get-Item -LiteralPath (Join-Path release $name)
-          $unexpected = @(Get-ChildItem -LiteralPath release -Filter '*.exe' -File | Where-Object Name -ne $name)
-          if ($unexpected.Count -ne 0) { throw "Unexpected installer artifacts." }
-          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $name" | Set-Content -LiteralPath release/SHA256SUMS.txt -Encoding ascii
-          ./.github/scripts/Test-PublicBoundary.ps1 -ArtifactDirectory release
-      - name: Install only inside the isolated runner directory
-        shell: pwsh
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/38086414260" > "$RUNNER_TEMP/run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/11681863167" > "$RUNNER_TEMP/artifact.json"
+          node - "$RUNNER_TEMP" <<'NODE'
+          const fs = require('node:fs'); const path = require('node:path');
+          const root = process.argv[2];
+          const run = JSON.parse(fs.readFileSync(path.join(root, 'run.json')));
+          const artifact = JSON.parse(fs.readFileSync(path.join(root, 'artifact.json')));
+          if (run.id !== 38086414260 || run.run_attempt !== 1 || run.status !== 'completed' || run.conclusion !== 'success' ||
+              run.head_sha !== process.env.SOURCE || run.repository.id !== 1408465497 || run.head_repository.id !== 1408465497 ||
+              run.path !== '.github/workflows/private-runtime-prepare-native.yml' || artifact.id !== 11681863167 ||
+              artifact.name !== 'private-runtime-prepare-win32-x64' || artifact.expired || artifact.size_in_bytes !== 319283710 ||
+              artifact.workflow_run.id !== run.id || artifact.workflow_run.head_sha !== run.head_sha ||
+              artifact.digest !== 'sha256:edda78761f4266760340e2add86dd1dae41893b5224473755b6e0fa56839a46b') {
+            throw new Error('Exact private input origin rejected');
+          }
+          NODE
+      - name: Transfer unchanged bytes to an owner-only draft cache
+        shell: bash
         run: |
-          $package = Get-Content -Raw package.json | ConvertFrom-Json
-          $installer = (Get-Item -LiteralPath "release/RT-ResearchFlow-Setup-$($package.version)-x64.exe").FullName
-          $install = Join-Path $env:RUNNER_TEMP "RT-ResearchFlow-installed-$($package.version)"
-          $process = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$install") -WindowStyle Hidden -Wait -PassThru
-          if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
-          $executable = Join-Path $install 'RT-ResearchFlow.exe'
-          if (-not (Test-Path -LiteralPath $executable)) { throw "Installed executable is missing." }
-          "TRADE_WATCH_PACKAGED_EXECUTABLE=$executable" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
-      - name: Check installed startup, SQLite, AI save and platform safety
-        run: pnpm exec playwright test tests/e2e/packaged-app-smoke.spec.ts tests/e2e/windows-integrated-app.spec.ts --reporter=line --workers=1
-      - name: Upload tested Windows packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: RT-ResearchFlow-Windows-x64-${{ github.sha }}
-          path: |
-            release/RT-ResearchFlow-Setup-*-x64.exe
-            release/SHA256SUMS.txt
-          if-no-files-found: error
-          retention-days: 14
-      - name: Upload isolated test evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: RT-ResearchFlow-Windows-checks-${{ github.sha }}
-          path: test-results/
-          if-no-files-found: ignore
-          retention-days: 14
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/11681863167/zip" > prepare-11681863167.zip
+          echo 'edda78761f4266760340e2add86dd1dae41893b5224473755b6e0fa56839a46b  prepare-11681863167.zip' | sha256sum --check --strict
+          test "$(stat -c %s prepare-11681863167.zip)" = 319283710
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft > state.txt 2>/dev/null; then
+            test "$(cat state.txt)" = true
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --target "$SOURCE" \
+              --title 'Private runtime cache 1.7 (not an application release)' \
+              --notes 'Owner-only byte-identical dependency cache. Not an installer, not public redistribution approval, and not the 1.7 product release. Do not publish this draft.'
+          fi
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" = true
+          existing="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[] | select(.name == "prepare-11681863167.zip") | .id')"
+          if test -n "$existing"; then
+            gh api "repos/$GITHUB_REPOSITORY/releases/assets/$existing" > existing.json
+            node -e "const a=require('./existing.json'); if(a.size!==319283710 || a.digest!=='sha256:edda78761f4266760340e2add86dd1dae41893b5224473755b6e0fa56839a46b')throw Error('Existing private cache mismatch')"
+          else
+            gh release upload "$TAG" prepare-11681863167.zip --repo "$GITHUB_REPOSITORY"
+          fi
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" = true
