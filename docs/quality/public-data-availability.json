@@ -73,7 +73,7 @@
     "Real broker acceptance, execution or cancellation",
     "Pending Playwright live harness integration: exit-variable collision still requires correction"
   ],
-  "interpretation": "Tencent and Sina each returned 480 written daily rows in the sampled stocks. Eastmoney report indexing returned 50 fresh metadata records; native public limit-pool retrieval returned 46 source-dated rows. Actual packaged IPC saved those rows and completed all three built-in public rules without synthetic market or calendar injection. The pool remains partial because same-day local daily-price cross-checking is incomplete. Eastmoney daily still failed before an HTTP response under both tested parameter sets. This is not proof of permanent source unavailability, all product modules being usable, Mac connectivity, or released 1.20 source connectivity.",
+  "interpretation": "Tencent and Sina each returned 480 written daily rows in the sampled stocks. Eastmoney report indexing returned 50 fresh metadata records; native public limit-pool retrieval returned 46 source-dated rows. Actual packaged IPC saved those rows and completed all three built-in public rules without synthetic market or calendar injection. The pool remains partial because same-day local daily-price cross-checking is incomplete. Eastmoney daily still failed before an HTTP response under both tested parameter sets. This is not proof of permanent source unavailability, all product modules being usable, Mac connectivity, or released 1.20 source connectivity. Normal visible UI controls also completed each of the three free rules exactly once per click, displayed the actual result counts, and opened evidence containing the selected stock code and input date. The initial UI observation failed on an incorrect test locator, not a demonstrated product defect.",
   "additionalProbes": {
     "researchReports": {
       "provider": "eastmoney-reports",
@@ -156,6 +156,60 @@
       "normalExit": true,
       "pageErrors": [],
       "passed": true
+    }
+  },
+  "userInterfaceValidation": {
+    "driver": "ad-hoc actual packaged Playwright UI acceptance",
+    "packagedVersion": "1.21.0",
+    "releaseCandidate": true,
+    "navigation": [
+      "短线策略",
+      "策略实验室"
+    ],
+    "checks": [
+      {
+        "strategy": "builtin-public-limit-earlyFirst",
+        "label": "免费 · 早封首板",
+        "runEnabledWithoutKey": true,
+        "newRunCount": 1,
+        "completed": true,
+        "displayedMatches": 11,
+        "evidenceOpened": true,
+        "visibleEvidenceCode": "301419",
+        "visibleEvidenceDate": "20261012"
+      },
+      {
+        "strategy": "builtin-public-limit-secondBoard",
+        "label": "免费 · 二板观察",
+        "runEnabledWithoutKey": true,
+        "newRunCount": 1,
+        "completed": true,
+        "displayedMatches": 11,
+        "evidenceOpened": true,
+        "visibleEvidenceCode": "601595",
+        "visibleEvidenceDate": "20261012"
+      },
+      {
+        "strategy": "builtin-public-limit-continuous",
+        "label": "免费 · 连板观察",
+        "runEnabledWithoutKey": true,
+        "newRunCount": 1,
+        "completed": true,
+        "displayedMatches": 1,
+        "evidenceOpened": true,
+        "visibleEvidenceCode": "600825",
+        "visibleEvidenceDate": "20261012"
+      }
+    ],
+    "normalExit": true,
+    "pageErrors": [],
+    "userCredentialUsed": false,
+    "productionUserDataTouched": false,
+    "brokerOrdersSubmitted": false,
+    "initialHarnessFailure": {
+      "cause": "Incorrect assumed accessible name for the visible onboarding close glyph",
+      "productCodeChanged": false,
+      "correctedUsingObservedVisibleText": true
     }
   }
 }
