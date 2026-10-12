@@ -70,7 +70,7 @@
 
 - 本地 Windows 在原生 Electron 环境中使用与 1.22 同源的现有网络安全客户端和 PDF 解析器，真实下载公开研报并通过文本提取检查：文件 755,540 字节，提取文本 8,476 字符。没有调用大模型或操作券商账户。
 - 解析沿用前 24 页的原有限制，不承诺整份长报告全文；本项是源代码管线验收，不是正式安装包的研报阅读页面或完整研究流程验收。[下载本地 Windows 管线回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/native-public-pdf-local-windows-1.22.json)。
-- 新增 Mac PDF 管线验收尚未完成。云端第一次因脚本变量位置错误未启动，修正后又因检出环境未包含历史源码提交而在源码一致性检查阶段退出，尚未执行 PDF 测试；不将此记录宣称为 Mac PDF 通过。[保留本次云端记录](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38286028469)。
+- 后续已补取固定的已发布源码提交，保留源码一致性检查；三端原生 PDF 管线验收现已通过，详情见下节。此前变量位置和历史源码缺失导致的两次测试前失败仍保留，不将它们解释为 PDF 解析失败，也不删除失败记录。[历史流程记录](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38286028469)。
 - 上述增补只涉及检查脚本、上传方式和说明，没有重新编译、替换安装包或修改交易逻辑。
 
 
@@ -81,9 +81,22 @@
 - 每端先用股票 000333 核验真实东财索引及重复读取缓存，再在「配置中心 → 数据源」填写股票 601318 并点击「查询研报」。
 - 每端页面查询取得 50 条真实索引，核对了前三条报告标题确实显示在页面中；随后 API 复读状态为 cached。等待的是原查询按钮，不因界面临时出现同名按钮而定位到别处。
 - 三端均正常退出，页面错误数为 0，无真实用户 Key、行情或报告注入、个人数据修改和券商订单操作。
-- 本项证明的是研报索引查询页面及缓存，不是 PDF 阅读界面、整份报告全文、AI 分析结论或实盘成交。Mac 原生 PDF 管线的未完成边界仍保留在上节。
+- 本项证明的是研报索引查询页面及缓存，不是 PDF 阅读界面、整份报告全文、AI 分析结论或实盘成交。另行完成的三端原生 PDF 管线检查见下节，两项验证范围不混用。
 
 [三端正式安装包页面测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38286878349) · [下载页面验收回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/research-ui-acceptance-1.22.json)
+
+
+## 三端真实公开研报 PDF 管线验收
+
+2026-10-13，Windows x64、Apple Silicon Mac、Intel Mac 均使用与正式 1.22 相同的产品源码和锁定依赖，在各自原生 Electron 环境中通过真实公开研报检查。没有重编译或替换公开安装包。
+
+- 沿用现有网络安全客户端及解析器，无网络响应或 PDF 正文模拟，不绕过网络限制或源码一致性检查。
+- 三端均下载 755,540 字节的同一公开 PDF，提取 8,476 字符；文件哈希和文本哈希分别一致。每端一项测试通过，未跳过。
+- 只保存长度、哈希、平台和验证状态，不上传 PDF 或提取正文，不调用大模型、不操作个人数据或券商订单。
+- 这是原生源代码管线验收，不是正式安装包 PDF 阅读界面或完整研究智能体流程验收。解析仍限前 24 页，不把它称为整份长报告全文。
+- 两次先前的流程配置失败均发生于 PDF 测试之前；失败历史随永久回执保留。
+
+[三端原生 PDF 管线测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38287571344) · [下载永久验收回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/native-public-pdf-acceptance-1.22.json)
 
 </details>
 
