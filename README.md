@@ -1,91 +1,58 @@
 <h1 align="center">RT-ResearchFlow</h1>
 
 <!-- CURRENT-RELEASE-START -->
-## 当前正式版本：1.21
+## 当前正式版本：1.22
 
 同一产品，按系统和芯片选择安装包；无需再解压源码压缩包。
 
-- [Windows x64 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.21.0/RT-ResearchFlow-Setup-1.21.0-x64.exe)
-- [Mac Apple Silicon 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.21.0/RT-ResearchFlow-macOS-1.21.0-arm64.dmg)
-- [Mac Intel 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.21.0/RT-ResearchFlow-macOS-1.21.0-x64.dmg)
+- [Windows x64 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/RT-ResearchFlow-Setup-1.22.0-x64.exe)
+- [Mac Apple Silicon 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/RT-ResearchFlow-macOS-1.22.0-arm64.dmg)
+- [Mac Intel 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/RT-ResearchFlow-macOS-1.22.0-x64.dmg)
 
-[发布说明与验收范围](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.21.0) · [对应版本源码](https://github.com/hzqedison/RT-ResearchFlow/tree/v1.21.0)
+[发布说明与验收范围](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.22.0) · [对应版本源码](https://github.com/hzqedison/RT-ResearchFlow/tree/v1.22.0)
 
 <details>
 <summary>本版本更新与使用限制</summary>
 
-# RT-ResearchFlow 1.21
-> 最新补充复核：11 项通过、1 项失败。三端 Tushare 绑定入口正常；Intel Mac 本轮东方财富日线取数失败，腾讯和新浪正常。下方此前通过的记录保留为历史证据，不代表公开接口持续可用。
+# RT-ResearchFlow 1.22
 
-本轮聚焦已有功能的使用引导与可靠验收，不新增未经确认的大模块。
+本轮改善已有日线数据功能的失败解释，让用户分清网络问题、接口拒绝和缺少凭证，继续使用其他可用来源。研究、策略和本人确认交易仍属于同一个产品；本轮不新增交易方式或改变策略规则。
 
 ## 更新内容
 
-- 短线数据管理区明确区分免费观察与专业同步，避免未配置 Tushare 时误以为所有短线功能都不能使用。
-- 补充免费涨停池同步路径，以及早封首板、二板观察、连板观察三个模板的使用步骤。
-- 明确标出「配置中心 → 数据源 → Tushare Key 绑定与验证」；保存 Token 不代表已获得所有专业接口权限。
-- 修正实际包测试的退出变量和命中数引用；退出期间上下文暂时丢失时，只重试只读观察，不重复发请求或写入夹具。
-- 发布安装包后自动同步 GitHub 默认首页的正式版本、三个直接下载链接、源码标签和更新说明。文档同步失败可单独重试，不必重新构建安装包。
+- 东方财富日线失败不再只显示泛化提示：区分连接中断、超时、域名解析、安全连接验证、HTTP 拒绝或限流，以及响应解析失败。
+- 多数据源调用保留安全的分类说明，不再把所有失败混成“连接、权限或接口不可用”。
+- 未配置 Tushare 与公开行情网络失败分开说明；无有效日线时提示核查交易日或切换来源。
+- 保留所选日线来源的顺序回退。一个来源失败，不会阻止后面的已选来源取数；所有来源失败时分别列出说明。
+- 对外提示仅使用固定文案和受限的 HTTP 状态码，不复制上游异常正文、Token、Cookie 或本地路径。此边界不等于全部内部日志已完成脱敏审计。
+- 应用版本递进为 1.22.0，不替换或改名重发 1.21 的安装包。
 
-## 免费功能从哪里开始
+## 出现取数失败时
 
-1. 打开「配置中心 → 数据源」，选择已收盘的交易日并同步免费涨停池。
-2. 打开「短线策略 → 策略实验室」，选择免费早封首板、二板观察或连板观察模板。
-3. 运行扫描，查看命中结果与原始事实证据。没有命中与数据未齐备是两种状态。
-4. 需要集合竞价、龙虎榜、筹码等专业数据时，再绑定并验证 Tushare Token，按诊断提示核查具体接口权限。
+1. 到「配置中心 → 数据源」保留腾讯或新浪等备用日线来源，按需要选择优先顺序。
+2. 连接中断、超时或 HTTP 限流时，稍后再试或切换来源，不必反复重装软件。
+3. Tushare 未配置时，到同页顶部「Tushare Key 绑定与验证」绑定金融数据 Token；大模型 Key 在 AI 配置中单独设置。
+4. 仅完成 Token 保存或交易日历验证，不代表已经取得竞价、龙虎榜、筹码等全部专业接口权限。
 
-免费涨停规则不需要 Python 或 Tushare Key，但不能补齐全部集合竞价、筹码、完整题材和历史回测数据。它不是实盘委托，也不提供未经数据支持的收益回测。
+## 安装与使用
 
-## 验收说明
+- Windows、Apple Silicon Mac、Intel Mac 均提供直接安装包，无需先解压源码压缩包。
+- 升级前退出正在运行的旧程序，沿用原安装目录，不按版本新建多套产品目录。
+- 默认卸载保留本地数据；可选数据扩展仍按需安装，不自动删除其他软件共用的系统 Python。
+- 本轮不改个人数据、数据库结构、策略算法或交易逻辑；真实订单仍需本人确认，并受客户端实际能力限制。
 
-发布前必须完成 Windows、Apple Silicon Mac、Intel Mac 的新安装包验收，以及 Windows 同目录升级和保留数据卸载检查。发布流水线核对源代码、安装包 SHA-256 与验收回执，不重新命名旧安装包冒充新版本。
+## 验收范围
 
-上一正式版本 1.20 已完成独立真实数据复核：Windows 的腾讯、新浪日线可用；两种 Mac 环境的腾讯、新浪、东方财富日线及三个免费策略均可用。两种 Mac 各读取 46 条真实涨停事实，没有注入行情或交易日历。[查看上一版双架构真实数据测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38235739112)。这些记录用于说明已验证范围，不冒充 1.21 新安装包的验收结果。
+- 本地 Node 与 Web 类型检查通过，四个定向测试文件共 36 项通过，涵盖错误分类、敏感正文屏蔽、失败不写行情和所选来源顺序回退。这些服务测试使用隔离数据和受控响应，不是真实用户凭证测试。
+- Windows、两种原生 Mac 的新安装包检查全部通过，包含实际安装、启动退出、原生依赖及首次按需扩展安装；[查看三端检查](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38271118933)。
+- Windows 的默认非系统盘安装、同目录同版本重装保留合成数据、默认卸载保留数据以及共享 Python 不变检查通过；[查看安装生命周期检查](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38271480469)。
+- 三端安装包与安装生命周期使用同一应用源码提交：`ca75705093bfc31ff8ad05465f80099f546dfc3a`。发布复用这批已经过检查的字节，不再次编译。
 
-公开接口受网络、限流和上游变化影响。Windows 本机曾出现东方财富日线连接重置，不能保证所有网络环境都可用；可在数据源配置中选择已验证可用的腾讯或新浪。
+## 已知边界
 
-未使用真实用户 Key 验证 Tushare 或大模型调用；未操作券商账户、提交真实订单或验证成交。本轮不改变交易逻辑，不把研究扫描、接口连通或安装成功当作实盘成交证明。
+提示改善不等于东方财富公共接口故障已经修复，也不能保证所有网络、全部股票或所有用户旧数据库都已验证。1.21 的一次 Intel 日线检查失败及后续诊断记录保留，不通过反复重跑抹去失败事实。
 
-## 安装与数据
-
-- 同一产品，选择对应系统和芯片的安装包即可，无需再解压一层压缩包。
-- Windows 升级沿用原安装目录，不为每个版本新建一套目录；默认卸载保留本地数据。
-- 可选 Python 数据扩展仍按需安装。Windows 的产品专属环境与缓存跟随产品数据目录，不自动删除其他软件共用的系统 Python。
-- 上游许可和第三方声明保留，不改个人数据。
-
-## 1.21 发布后真实数据复核
-
-2026-10-12，使用已公开的 Windows、Apple Silicon Mac、Intel Mac 安装包完成 6 项真实联网测试，未重新构建产品。
-
-- 三端均读取 46 条真实涨停事实，并完成早封首板、二板观察、连板观察的扫描、证据落库及正常退出。
-- 每端抽样检查腾讯、新浪、东方财富日线：分别返回 480、480、149 个交易日，最近日期均为 2026-10-12。
-- 未注入模拟行情或交易日历，未操作个人数据、绑定真实 Key 或提交券商订单。
-- 隔离 Windows 的东方财富正常；本机先前连接重置的具体原因仍未确定，不能保证全部网络环境一致。
-
-这些结果不代表全市场、专业竞价、筹码、分钟历史、真实模型调用或券商成交都已验证。
-
-[三端真实数据测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38253847793) · [机器可读验收记录](https://github.com/hzqedison/RT-ResearchFlow/blob/cccca414f20b6aa5e4879b76860ae08076eb9c2a/docs/quality/public-data-availability.json)
-
-## 无 Tushare Key 的股票图表使用复核
-
-2026-10-12，直接使用已发布的 Windows、Apple Silicon Mac、Intel Mac 安装包复核，三端共 9 项测试通过，没有重新打包产品。
-
-- 选择 Tushare 和腾讯、但不绑定 Tushare Key 时，真实图表拉取接口自动使用腾讯，抽样股票 600036 返回 480 条日线，最近日期为 2026-10-12。
-- 行情写入隔离缓存，分页读取返回 20 条记录，实际股票图表显示「当前 30 日·已加载 149 日」。测试后恢复隔离配置并正常退出。
-- 免费涨停事实、三个规则及三家日线源也在本次三端测试中再次通过。
-- 未修改个人数据、使用真实用户 Key 或提交券商订单。仅证明上述抽样链路，不保证全市场数据、专业接口、全部图表视觉表现或全部用户网络环境。
-
-[本次三端测试与日志](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38266366006) · [机器可读回执](https://github.com/hzqedison/RT-ResearchFlow/blob/codex/release-1.21/docs/quality/released-stock-chart-consumer-1.21.json)
-## 最新凭证入口复核与日线源失败记录
-
-2026-10-12，对已发布的三个 1.21 安装包新增实际界面检查，产品未重新编译。
-
-- Windows 与 Apple Silicon Mac 各 4 项通过；Intel Mac 3 项通过、1 项失败，整轮结论为失败，不跳过或弱化断言。
-- 三端均确认仅选腾讯时 Tushare Key 绑定区仍可见，输入框为密码类型；空白 Key 无法绑定，未保存草稿不会存为凭证，无 Key 的实际验证返回「未绑定」。
-- Intel 的东方财富日线抽样本轮取数失败，同次腾讯、新浪可用，腾讯接替后的图表链路正常。具体原因未确定，不能直接归因于用户配置、凭证或某个操作系统。
-- 未验证真实 Tushare 认证、专业接口权限或券商实盘。此前 9 项全部通过的记录保留，不冒充本轮全部成功。
-
-[最新测试与失败日志](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38267640795) · [脱敏机器回执](https://github.com/hzqedison/RT-ResearchFlow/blob/codex/release-1.21/docs/quality/released-tushare-entry-1.21.json)
+本轮未核验每个用户的跨版本迁移，未用真实用户 Key 验证 Tushare 或大模型服务，未验证 Apple 公证，也未操作券商账户或证明实盘成交。
 
 </details>
 
@@ -256,7 +223,7 @@ flowchart LR
 
 这些只是同一产品的系统与架构安装包，不是按功能拆分的产品。交易执行的平台限制见上方交易功能说明。
 
-**当前正式版本为 1.21，直接下载链接见本文顶部。Python 数据扩展按需安装；发布说明与实际附件是交付依据，不能用源码标签代替安装验收。**
+**当前正式版本为 1.22，直接下载链接见本文顶部。Python 数据扩展按需安装；发布说明与实际附件是交付依据，不能用源码标签代替安装验收。**
 
 升级时沿用原安装目录并保留数据；Windows 可以安装到 K、D 等非系统盘，Mac 替换应用而不是保留多份副本。当前仍通过完整安装包升级，GitHub 增量更新尚未接入。测试包未配置商业代码签名或 Apple 公证，不应为了安装而全局关闭系统安全保护。
 
@@ -314,10 +281,10 @@ Windows 与 Mac 仍是同一款投研产品；本机交易执行代码路径仅�
 <details>
 <summary>开发与自行编译</summary>
 
-正式版本源码见 [v1.21.0 标签](https://github.com/hzqedison/RT-ResearchFlow/tree/v1.21.0)。[当前开发分支](https://github.com/hzqedison/RT-ResearchFlow/tree/codex/public-product-runtime-1.10)可能包含尚未批准或尚未发布的候选；自行编译正式版本时使用对应发布标签。默认首页用于产品介绍，不代表默认分支代码就是最新安装包源码。
+正式版本源码见 [v1.22.0 标签](https://github.com/hzqedison/RT-ResearchFlow/tree/v1.22.0)。[当前开发分支](https://github.com/hzqedison/RT-ResearchFlow/tree/codex/public-product-runtime-1.10)可能包含尚未批准或尚未发布的候选；自行编译正式版本时使用对应发布标签。默认首页用于产品介绍，不代表默认分支代码就是最新安装包源码。
 
 ```sh
-git clone --branch v1.21.0 https://github.com/hzqedison/RT-ResearchFlow.git
+git clone --branch v1.22.0 https://github.com/hzqedison/RT-ResearchFlow.git
 cd RT-ResearchFlow
 corepack enable
 corepack prepare pnpm@10.14.0 --activate
