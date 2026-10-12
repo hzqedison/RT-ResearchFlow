@@ -136,6 +136,70 @@ test('released package can read each configured public daily provider', async ()
   } finally { if (!normalExit) await c.application.close().catch(() => {}) }
 })
 
+test('Tushare binding remains accessible with only a free provider and rejects an empty credential', async () => {
+  test.setTimeout(120_000)
+  const c = await launch()
+  let previousProviders: Array<'tushare' | 'tencent' | 'eastmoney' | 'sina' | 'tdx' | 'akshare'> | undefined
+  let normalExit = false
+  try {
+    const before = await c.page.evaluate(() => window.api.datasource.getConfig())
+    previousProviders = before.dailyProviders
+    expect(before.hasTushareToken).toBe(false)
+    expect(await c.page.evaluate(() => window.api.datasource.saveConfig({ dailyProviders: ['tencent'] }))).toEqual({ ok: true })
+    await expect(async () => {
+      const guide = c.page.getByTestId('cold-start-guide')
+      if (await guide.isVisible()) await guide.getByLabel('关闭引导').click({ timeout: 2_000 })
+      if (!await c.page.getByTestId('config-tab-datasource').isVisible()) {
+        await c.page.getByTestId('open-config-drawer-btn').click({ timeout: 2_000 })
+      }
+      await c.page.getByTestId('config-tab-datasource').click({ timeout: 2_000 })
+      await expect(c.page.locator('#tushare-key-binding')).toBeVisible({ timeout: 2_000 })
+    }).toPass({ timeout: 30_000 })
+    const panel = c.page.locator('#tushare-key-binding')
+    const token = panel.getByLabel('Tushare Pro Token', { exact: true })
+    const bind = panel.getByRole('button', { name: '绑定并验证新 Key', exact: true })
+    const recheck = panel.getByRole('button', { name: '复查已绑定 Key', exact: true })
+    await expect(token).toHaveAttribute('type', 'password')
+    await expect(token).toHaveValue('')
+    await expect(bind).toBeDisabled()
+    await expect(recheck).toBeDisabled()
+    await expect(panel.getByRole('status')).toContainText('未绑定')
+    await expect(panel.getByRole('link', { name: '前往 Tushare 获取 Token', exact: true })).toHaveAttribute('href', 'https://tushare.pro/user/token')
+    await token.fill('   ')
+    await expect(bind).toBeDisabled()
+    await token.fill('offline-unsaved-draft-not-a-real-key')
+    await expect(bind).toBeEnabled()
+    await expect(panel.getByRole('status')).toContainText('新 Key 尚未绑定')
+    expect((await c.page.evaluate(() => window.api.datasource.getConfig())).hasTushareToken).toBe(false)
+    await token.fill('')
+    const verification = await c.page.evaluate(() => window.api.datasource.validateTushare(''))
+    expect(verification.state).toBe('unbound')
+    const after = await c.page.evaluate(() => window.api.datasource.getConfig())
+    expect(after.hasTushareToken).toBe(false)
+    expect(after.dailyProviders).toEqual(['tencent'])
+    expect(after.tushareEnabled).toBe(false)
+    expect(await c.page.evaluate(providers => window.api.datasource.saveConfig({ dailyProviders: providers }), previousProviders)).toEqual({ ok: true })
+    expect((await c.page.evaluate(() => window.api.datasource.getConfig())).dailyProviders).toEqual(previousProviders)
+    await quit(c.application)
+    normalExit = true
+    expect(c.errors).toEqual([])
+    const receipt = {
+      kind: 'released-tushare-binding-entry-acceptance', version: c.version, platform: process.platform, arch: process.arch,
+      enabledProvider: 'tencent', bindingEntryVisible: true, passwordInputEditable: true, emptyBindingDisabled: true,
+      unsavedDraftPersisted: false, unboundVerificationState: verification.state, actualAuthenticationVerified: false,
+      professionalApiPermissionsVerified: false, isolatedPreferenceRestored: true, normalExit,
+      productionUserDataTouched: false, brokerOrdersSubmitted: false,
+    }
+    writeFileSync(join(c.root, 'released-tushare-binding-entry-receipt.json'), JSON.stringify(receipt, null, 2))
+    console.log(JSON.stringify(receipt))
+  } finally {
+    if (!normalExit) {
+      if (previousProviders) await c.page.evaluate(providers => window.api.datasource.saveConfig({ dailyProviders: providers }), previousProviders).catch(() => {})
+      await c.application.close().catch(() => {})
+    }
+  }
+})
+
 test('selected free source supplies the real stock-chart consumer when Tushare has no credential', async () => {
   test.setTimeout(120_000)
   const c = await launch()
