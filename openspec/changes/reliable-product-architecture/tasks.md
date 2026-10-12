@@ -135,3 +135,7 @@ Dedicated calendar ownership now stops admission, aborts requests and waits for 
 ### Partial 4.4: manually started chip monitoring
 
 Chip monitoring now owns cancellable daily/chip requests, drains its concurrent batch and stops admission before stock-pool changes. Windows actual application-directory tests passed all five cancellation cases (15.8s). The targeted unit run is 166 passed / 1 failed: the introduced positive-fixture cache omission remains pending permission to correct, not skipped. The full native release gates now include this failed case and the new chip E2E cases. New chip changes are not yet native-Mac verified; legacy chip-structure/institution work is outside this owner. Full 4.4 stays unchecked and 1.18 stays unpublished. Evidence: docs/quality/chip-shutdown-1.18-candidate.md.
+
+### Partial 4.4: native chip-monitor runtime evidence
+
+Run 38189320881 verified source 5f78b5cbca95e83020818b36f507ffe00bd258bf. Both native Mac application-directory suites passed all five quit cases (ARM 26.6s; Intel 23.6s), matching Windows runtime scope. Both native unit suites reproduced the same fixture omission: 166 passed / 1 failed. Overall CI and both jobs remain FAILED; the diagnostic workflow explicitly fails after gathering proof. Twelve JSON files and both logs were inspected and deny unit completeness, release eligibility, installer verification, real authentication and broker orders. Full 4.4 stays unchecked. Fixture correction and rolling recovery remain unresolved; no 1.18 release. See docs/quality/chip-shutdown-1.18-candidate.md.

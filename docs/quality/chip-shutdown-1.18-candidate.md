@@ -45,11 +45,30 @@ This does not add a free replacement for Tushare chip-distribution facts.
 
 ## Not achieved
 
-The newly added chip cases have not yet run on either native Mac architecture.
-The earlier Mac run 38187750694 covers the preceding calendar/public/private
-history source, not these chip changes. Both full native release gate variants
-now include all new unit cases (including the currently failing fixture) and
-both new packaged cases. No known failure is bypassed for publication.
+The newly added chip cases now have native Mac evidence from run
+38189320881 on source 5f78b5cbca95e83020818b36f507ffe00bd258bf. Apple Silicon
+passed all five actual application-directory cases in 26.6s; Intel passed
+them in 23.6s. Native jobs took 2m36s and 5m11s respectively. The overall run
+and both jobs FAILED because the same positive-test fixture omission was
+reproduced on each architecture. The 167 unit cases per architecture report
+166 passed / 1 failed, not an all-green suite. The diagnostic workflow carries
+on only to gather actual application evidence and then explicitly fails.
+
+All twelve downloaded proof/summary JSON files and both job logs were
+inspected. Summary architecture, source commit and run ID match; both set
+unitContractsPassed=false, releaseEligible=false, installerVerified=false,
+realTushareAuthentication=false, brokerOrdersSubmitted=false and published=false.
+Both chip-stage pairs preserve the four complete table fingerprints across
+quit, observe exactly one aborted request, emit no completion event and keep
+zero new chips/results. The committed daily row remains in each chip-stage
+case. Both calendar proofs preserve 1,096 rows and the same content hash.
+Public/private history proofs preserve their pending/partial or interrupted-day
+state without new prices. This is narrow runtime evidence, not a release waiver.
+
+Both full native release gate variants include all new unit cases (including
+the currently failing fixture) and both new packaged cases. No known failure
+is bypassed for publication. The earlier Mac run 38187750694 remains evidence
+for the preceding source, not the newly added chip work.
 
 The separate chip-structure and institution synchronization jobs are not
 covered by this owner. Legacy direct chip fetches without a caller signal are
