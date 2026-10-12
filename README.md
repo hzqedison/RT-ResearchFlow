@@ -15,6 +15,7 @@
 <summary>本版本更新与使用限制</summary>
 
 # RT-ResearchFlow 1.21
+> 最新补充复核：11 项通过、1 项失败。三端 Tushare 绑定入口正常；Intel Mac 本轮东方财富日线取数失败，腾讯和新浪正常。下方此前通过的记录保留为历史证据，不代表公开接口持续可用。
 
 本轮聚焦已有功能的使用引导与可靠验收，不新增未经确认的大模块。
 
@@ -75,6 +76,16 @@
 - 未修改个人数据、使用真实用户 Key 或提交券商订单。仅证明上述抽样链路，不保证全市场数据、专业接口、全部图表视觉表现或全部用户网络环境。
 
 [本次三端测试与日志](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38266366006) · [机器可读回执](https://github.com/hzqedison/RT-ResearchFlow/blob/codex/release-1.21/docs/quality/released-stock-chart-consumer-1.21.json)
+## 最新凭证入口复核与日线源失败记录
+
+2026-10-12，对已发布的三个 1.21 安装包新增实际界面检查，产品未重新编译。
+
+- Windows 与 Apple Silicon Mac 各 4 项通过；Intel Mac 3 项通过、1 项失败，整轮结论为失败，不跳过或弱化断言。
+- 三端均确认仅选腾讯时 Tushare Key 绑定区仍可见，输入框为密码类型；空白 Key 无法绑定，未保存草稿不会存为凭证，无 Key 的实际验证返回「未绑定」。
+- Intel 的东方财富日线抽样本轮取数失败，同次腾讯、新浪可用，腾讯接替后的图表链路正常。具体原因未确定，不能直接归因于用户配置、凭证或某个操作系统。
+- 未验证真实 Tushare 认证、专业接口权限或券商实盘。此前 9 项全部通过的记录保留，不冒充本轮全部成功。
+
+[最新测试与失败日志](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38267640795) · [脱敏机器回执](https://github.com/hzqedison/RT-ResearchFlow/blob/codex/release-1.21/docs/quality/released-tushare-entry-1.21.json)
 
 </details>
 
