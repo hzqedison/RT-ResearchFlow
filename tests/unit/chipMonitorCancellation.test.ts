@@ -10,12 +10,21 @@ vi.mock('../../electron/main/database/dailyCloseCacheRepository', () => ({ upser
 const db = { prepare: (sql: string) => sql.includes('MAX(trade_date)') ? { get: () => ({ trade_date: '20260814' }) } : { all: () => [{ trade_date: '20260814', close: 10, pct_chg: 1, turnover_rate: 1 }] } } as never
 const stock = (code: string) => ({ tsCode: code, source: 'watchlist', stockName: null, addedAt: 1 })
 const chips = (code: string) => [5, 7, 10].map(price => ({ tsCode: code, tradeDate: '20260814', price, percent: 30 }))
+const cache = new Map<string, ReturnType<typeof chips>>()
 type Service = typeof import('../../electron/main/services/chipMonitorService')
 let service: Service
 beforeEach(async () => {
   vi.resetModules(); vi.resetAllMocks()
+  cache.clear()
   m.daily.mockResolvedValue([]); m.chips.mockImplementation((_token, code) => Promise.resolve(chips(code)))
-  m.stocks.mockReturnValue([stock('600000')]); m.dates.mockReturnValue(['20260814']); m.query.mockReturnValue([])
+  m.stocks.mockReturnValue([stock('600000')]); m.dates.mockReturnValue(['20260814'])
+  m.query.mockImplementation((_db, code: string, date: string) => cache.get(`${code}|${date}`) ?? [])
+  m.writeChips.mockImplementation((_db, rows: ReturnType<typeof chips>) => {
+    for (const row of rows) {
+      const key = `${row.tsCode}|${row.tradeDate}`
+      cache.set(key, [...(cache.get(key) ?? []), row])
+    }
+  })
   service = await import('../../electron/main/services/chipMonitorService')
 })
 it('owns the daily and chip transport signals for a manually invoked job', async () => {
