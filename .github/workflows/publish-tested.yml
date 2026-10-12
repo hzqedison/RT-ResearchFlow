@@ -123,3 +123,26 @@ jobs:
           if(published.draft||ref.object.type!=='commit'||ref.object.sha!==process.env.WINDOWS_COMMIT)throw Error('PUBLICATION_NOT_CONFIRMED')
           console.log(JSON.stringify({url:published.html_url,version,rebuilt:false,assets:files.map(f=>({name:f.name,digest:f.digest}))}))
           NODE
+  sync_homepage:
+    name: Synchronize default homepage with the published release
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: product-homepage
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPOSITORY: hzqedison/RT-ResearchFlow
+      RELEASE_VERSION: ${{ inputs.release_version }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      DOC_SYNC_COMMIT: ${{ github.sha }}
+    steps:
+      - name: Update README only after verified installers are public
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPOSITORY/contents/.github/scripts/sync-release-homepage.mjs?ref=$DOC_SYNC_COMMIT" --jq .content | base64 --decode > sync-release-homepage.mjs
+          node sync-release-homepage.mjs

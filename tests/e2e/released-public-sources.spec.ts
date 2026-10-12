@@ -1,0 +1,137 @@
+import { expect, test, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
+import { waitForPackagedRuntime } from './packagedRuntimeObservation'
+
+function context() {
+  const executable = process.env.RT_PACKAGED_EXE ?? ''
+  const root = process.env.RT_PACKAGED_TEST_ROOT ?? ''
+  const version = process.env.RT_PACKAGED_VERSION ?? ''
+  const date = process.env.RT_PUBLIC_LIMIT_POOL_DATE ?? ''
+  if (process.env.RT_RELEASED_PUBLIC_DATA_LIVE !== '1' || !isAbsolute(executable) ||
+      !isAbsolute(root) || !/^\d+\.\d+\.\d+$/.test(version) || !/^\d{8}$/.test(date)) {
+    throw Error('EXPLICIT_RELEASED_PUBLIC_DATA_ACCEPTANCE_REQUIRED')
+  }
+  if (process.platform === 'win32') {
+    if (!resolve(executable).replace(/\\/g, '/').includes('/release/win-unpacked/')) {
+      throw Error('PRODUCTION_WINDOWS_DATA_FORBIDDEN')
+    }
+  } else if (process.platform === 'darwin') {
+    const runnerRoot = process.env.RUNNER_TEMP
+    if (process.env.GITHUB_ACTIONS !== 'true' || !runnerRoot ||
+        !resolve(root).startsWith(resolve(runnerRoot) + sep) ||
+        !resolve(executable).startsWith(resolve(runnerRoot) + sep) ||
+        !executable.endsWith('.app/Contents/MacOS/RT-ResearchFlow')) {
+      throw Error('OWNED_MAC_CI_APPLICATION_REQUIRED')
+    }
+  } else throw Error('UNSUPPORTED_ACCEPTANCE_PLATFORM')
+  mkdirSync(root, { recursive: true })
+  return { executable, root, version, date }
+}
+
+async function launch() {
+  const config = context()
+  const profile = mkdtempSync(join(config.root, 'released-public-'))
+  const env = { ...process.env, TEMP: config.root, TMP: config.root }
+  delete env.ELECTRON_RUN_AS_NODE
+  delete env.ELECTRON_RENDERER_URL
+  delete env.NODE_OPTIONS
+  delete env.NODE_PATH
+  const application = await electron.launch({ executablePath: config.executable,
+    args: [`--user-data-dir=${profile}`], env, timeout: 30_000 })
+  const errors: string[] = []
+  try {
+    const page = await application.firstWindow()
+    page.on('pageerror', error => errors.push(error.message))
+    await expect(page.getByTestId('nav-tab-feed')).toBeVisible({ timeout: 30_000 })
+    const runtime = await waitForPackagedRuntime(application, config.version)
+    const expectedData = process.platform === 'win32' ? join(dirname(config.executable), 'data') : profile
+    expect(resolve(runtime.dataPath)).toBe(resolve(expectedData))
+    return { ...config, profile, application, page, errors }
+  } catch (error) {
+    await application.close().catch(() => {})
+    throw error
+  }
+}
+
+async function quit(application: ElectronApplication) {
+  const child = application.process()
+  const exited = application.waitForEvent('close', { timeout: 15_000 })
+  await application.evaluate(({ app }) => { setTimeout(() => app.quit(), 0) })
+  await exited
+  await expect.poll(() => child.exitCode, { timeout: 5_000 }).toBe(0)
+}
+
+test('released package synchronizes real public facts and persists all three free rules', async () => {
+  test.setTimeout(120_000)
+  const c = await launch()
+  let normalExit = false
+  try {
+    const calendar = await c.page.evaluate(() => window.api.diagnostics.runCheck('syncTradeCalendar'))
+    expect(calendar).toMatchObject({ ok: true })
+    const saved = await c.page.evaluate(date => window.api.datasource.syncPublicLimitPool(date), c.date)
+    expect(saved.ok).toBe(true)
+    if (!saved.ok) throw Error('PUBLIC_SYNC_FAILED')
+    expect(saved.rows).toBeGreaterThan(0)
+    const cache = await c.page.evaluate(() => window.api.datasource.listVerifiedPublicLimitPool())
+    expect(cache).toMatchObject({ source: 'eastmoney_public', tradeDate: c.date, dateBasis: 'source-reported' })
+    expect(cache.rows).toHaveLength(saved.rows)
+    const catalog = await c.page.evaluate(() => window.api.strategyLab.listStrategies())
+    expect(catalog.ok).toBe(true)
+    if (!catalog.ok) throw Error('STRATEGY_CATALOG_FAILED')
+    const templates = catalog.strategies.filter(item => item.strategyKey.startsWith('builtin-public-limit-'))
+    expect(templates).toHaveLength(3)
+    const reports = []
+    for (const template of templates) {
+      const submitted = await c.page.evaluate(id => window.api.strategyLab.runStrategy(id), template.id)
+      expect(submitted.ok).toBe(true)
+      if (!submitted.ok) throw Error('PUBLIC_RULE_RUN_FAILED')
+      const result = await c.page.evaluate(id => window.api.strategyLab.getRun(id), submitted.runId)
+      expect(result.ok).toBe(true)
+      if (!result.ok) throw Error('PUBLIC_RULE_RESULT_FAILED')
+      expect(result.run.status).toBe('completed')
+      const matches = await c.page.evaluate(id => window.api.strategyLab.listMatches({ runId: id, limit: 500 }), submitted.runId)
+      expect(matches.ok).toBe(true)
+      if (!matches.ok) throw Error('PUBLIC_RULE_EVIDENCE_FAILED')
+      expect(matches.matches).toHaveLength(submitted.matchedCount)
+      for (const match of matches.matches) {
+        expect(JSON.parse(match.evidenceJson)).toMatchObject({ source: 'eastmoney_public', sourceDate: c.date, scoreMeaning: 'rule-pass-only' })
+      }
+      const backtest = await c.page.evaluate(id => window.api.strategyLab.createBacktestFromRun(id), submitted.runId)
+      expect(backtest).toMatchObject({ ok: false, code: 'PUBLIC_LIMIT_BACKTEST_UNAVAILABLE' })
+      reports.push({ strategy: template.strategyKey, matched: submitted.matchedCount })
+    }
+    await quit(c.application)
+    normalExit = true
+    expect(c.errors).toEqual([])
+    const receipt = { kind: 'released-public-rule-acceptance', version: c.version, platform: process.platform,
+      arch: process.arch, date: c.date, rows: cache.rows.length, reports, calendarFixtureInjected: false,
+      marketRowsMocked: false, normalExit, productionUserDataTouched: false, brokerOrdersSubmitted: false }
+    writeFileSync(join(c.root, 'released-public-rule-receipt.json'), JSON.stringify(receipt, null, 2) + '\n')
+    console.log(JSON.stringify(receipt))
+  } finally { if (!normalExit) await c.application.close().catch(() => {}) }
+})
+
+test('released package can read each configured public daily provider', async () => {
+  test.setTimeout(90_000)
+  const c = await launch()
+  let normalExit = false
+  try {
+    const results = []
+    for (const provider of ['tencent', 'eastmoney', 'sina'] as const) {
+      const code = provider === 'eastmoney' ? '600519' : provider === 'sina' ? '600000' : '000001'
+      const result = await c.page.evaluate(({ provider, code }) => window.api.datasource.probe(provider, code), { provider, code })
+      results.push({ provider, stockCode: code, ...result })
+      expect.soft(result.ok, `${provider} must return real daily data`).toBe(true)
+      expect.soft(result.rows, `${provider} daily rows`).toBeGreaterThan(0)
+    }
+    await quit(c.application)
+    normalExit = true
+    expect(c.errors).toEqual([])
+    const receipt = { kind: 'released-public-daily-acceptance', version: c.version, platform: process.platform,
+      arch: process.arch, results, allProvidersAvailable: results.every(item => item.ok && item.rows > 0),
+      normalExit, marketRowsMocked: false, productionUserDataTouched: false, brokerOrdersSubmitted: false }
+    writeFileSync(join(c.root, 'released-public-daily-receipt.json'), JSON.stringify(receipt, null, 2) + '\n')
+    console.log(JSON.stringify(receipt))
+  } finally { if (!normalExit) await c.application.close().catch(() => {}) }
+})

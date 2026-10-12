@@ -1,29 +1,39 @@
 import { expect, test, _electron as electron } from '@playwright/test'
-import { mkdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { observePackagedProcess, waitForPackagedRuntime } from './packagedRuntimeObservation'
 
 test('opt-in public data reaches actual packaged free-strategy IPC and persisted evidence', async () => {
   test.skip(process.env.RT_PUBLIC_LIMIT_POOL_LIVE !== '1', 'Explicit public-network acceptance opt-in required')
   test.setTimeout(90_000)
-  const executable = resolve(process.env.RT_PACKAGED_EXE ?? '')
-  if (process.platform !== 'win32' || !executable.replaceAll('\\', '/').includes('/release/win-unpacked/')) {
+  const executable = process.env.RT_PACKAGED_EXE ?? ''
+  const version = process.env.RT_PACKAGED_VERSION ?? ''
+  const rootInput = process.env.RT_PACKAGED_TEST_ROOT ?? ''
+  if (process.platform !== 'win32' || !isAbsolute(executable) ||
+      !resolve(executable).replaceAll('\\', '/').includes('/release/win-unpacked/') ||
+      !isAbsolute(rootInput) || !/^\d+\.\d+\.\d+$/.test(version)) {
     throw new Error('Live fixture is restricted to the isolated Windows distribution directory')
   }
   const date = process.env.RT_PUBLIC_LIMIT_POOL_DATE ?? ''
   if (!/^\d{8}$/.test(date)) throw new Error('Explicit fixture date required')
-  const root = resolve(process.env.RT_PACKAGED_TEST_ROOT ?? '.cache/free-limit-live')
+  const root = resolve(rootInput)
   mkdirSync(root, { recursive: true })
+  const profile = mkdtempSync(join(root, 'free-limit-live-'))
   const env = { ...process.env, TEMP: root, TMP: root }
   delete env.ELECTRON_RUN_AS_NODE
   delete env.ELECTRON_RENDERER_URL
   delete env.NODE_OPTIONS
   delete env.NODE_PATH
-  const application = await electron.launch({ executablePath: executable, args: [`--user-data-dir=${join(root, 'profile')}`], env })
+  const application = await electron.launch({ executablePath: executable, args: [`--user-data-dir=${profile}`], env })
+  const reportProcess = observePackagedProcess(application)
+  const errors: string[] = []
+  let closed = false
   try {
     const page = await application.firstWindow()
+    page.on('pageerror', error => errors.push(error.message))
     await expect(page.getByTestId('nav-tab-feed')).toBeVisible({ timeout: 30_000 })
-    expect(await application.evaluate(({ app }) => app.isPackaged)).toBe(true)
-    expect(await application.evaluate(({ app }) => app.getVersion())).toBe('1.12.0')
+    const runtime = await waitForPackagedRuntime(application, version)
+    expect(resolve(runtime.dataPath).toLowerCase()).toBe(resolve(dirname(executable), 'data').toLowerCase())
     // Explicit synthetic calendar gate, only in win-unpacked/data. This does not
     // claim live exchange-calendar verification, nor write to the installed app.
     await application.evaluate(({ app }, fixtureDate) => {
@@ -67,12 +77,18 @@ test('opt-in public data reaches actual packaged free-strategy IPC and persisted
       expect(backtest).toMatchObject({ ok: false, code: 'PUBLIC_LIMIT_BACKTEST_UNAVAILABLE' })
       reports.push({ strategy: template.strategyKey, matched: result.matchedCount })
     }
-    console.log(JSON.stringify({ kind: 'packaged-free-limit-lab-live', date, reports, calendarGate: 'synthetic-fixture',
-      publicNetworkUsed: true, actualPackagedIpc: true, productionUserDataTouched: false, brokerOrdersSubmitted: false }))
     const processHandle = application.process()
-    const closed = application.waitForEvent('close', { timeout: 15_000 })
+    const exited = application.waitForEvent('close', { timeout: 15_000 })
     await application.evaluate(({ app }) => { setTimeout(() => app.quit(), 0) })
-    await closed
+    await exited
+    closed = true
     await expect.poll(() => processHandle.exitCode).toBe(0)
-  } finally { await application.close().catch(() => {}) }
+    expect(errors).toEqual([])
+    const receipt = { kind: 'packaged-free-limit-lab-live', version, date, reports,
+      source: cached.source, sourceDate: cached.tradeDate, inputRows: cached.rows.length,
+      calendarGate: 'synthetic-fixture', publicNetworkUsed: true, actualPackagedIpc: true,
+      normalExit: true, productionUserDataTouched: false, brokerOrdersSubmitted: false }
+    writeFileSync(join(root, 'public-limit-live-receipt.json'), JSON.stringify(receipt, null, 2) + '\n')
+    console.log(JSON.stringify(receipt))
+  } finally { if (!closed) { reportProcess(); await application.close().catch(() => {}) } }
 })
