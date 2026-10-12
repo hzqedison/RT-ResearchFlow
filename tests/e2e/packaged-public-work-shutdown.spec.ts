@@ -1,6 +1,7 @@
 import { test, expect, _electron as electron } from '@playwright/test'
 import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { observePackagedProcess, waitForPackagedRuntime } from './packagedRuntimeObservation'
 test('actual packaged quit cancels a manually started public history request and retains its checkpoint', async () => {
   test.setTimeout(90000)
   const executable = process.env.RT_PACKAGED_EXE, root = process.env.RT_PACKAGED_TEST_ROOT
@@ -10,11 +11,12 @@ test('actual packaged quit cancels a manually started public history request and
   mkdirSync(root, { recursive: true }); const profile = mkdtempSync(join(root, 'public-work-shutdown-')), proofFile = join(profile, 'isolated-shutdown-proof.json')
   const { ELECTRON_RUN_AS_NODE: _node, ELECTRON_RENDERER_URL: _url, NODE_PATH: _path, NODE_OPTIONS: _options, ...env } = process.env
   const app = await electron.launch({ executablePath: executable, args: [`--user-data-dir=${profile}`], env })
+  const reportProcess = observePackagedProcess(app), errors: string[] = []
   let closed = false
   try {
-    const page = await app.firstWindow(); await expect(page.getByTestId('nav-tab-feed')).toBeVisible({ timeout: 30000 })
-    expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true); expect(await app.evaluate(({ app }) => app.getVersion())).toBe(process.env.RT_PACKAGED_VERSION)
-    const actual = await app.evaluate(({ app }) => app.getPath('userData'))
+    const page = await app.firstWindow(); page.on('pageerror', error => errors.push(error.message)); await expect(page.getByTestId('nav-tab-feed')).toBeVisible({ timeout: 30000 })
+    const runtime = await waitForPackagedRuntime(app, process.env.RT_PACKAGED_VERSION!)
+    const actual = runtime.dataPath
     const expected = process.platform === 'win32' ? resolve(dirname(executable), 'data') : resolve(profile)
     expect(process.platform === 'win32' ? resolve(actual).toLowerCase() : resolve(actual)).toBe(process.platform === 'win32' ? expected.toLowerCase() : expected)
     await app.evaluate(({ app }, destination) => {
@@ -55,5 +57,6 @@ test('actual packaged quit cancels a manually started public history request and
     expect(proof).toMatchObject({ historicalRequests: 1, abortedRequests: 1, willQuitSeen: true,
       job: { status: 'partial', processed_items: 0, written_rows: 0 }, checkpoint: { status: 'pending', last_error: null }, rows: { n: 0 } })
     expect(proof.abortedAt - proof.requestedAt).toBeLessThan(10000)
-  } finally { if (!closed) await app.close() }
+    expect(errors).toEqual([])
+  } finally { if (!closed) { reportProcess(); await app.close() } }
 })

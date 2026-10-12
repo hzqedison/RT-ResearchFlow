@@ -59,7 +59,7 @@ jobs:
           pnpm exec electron-vite build
           pnpm exec vite build --config research-access.vite.config.ts
           pnpm exec electron-builder --mac --${{ matrix.arch }} --dir --config electron-builder.js --publish never --config.mac.identity=null
-      - name: Verify real application, native key storage and cancelled requests
+      - name: Verify real application, prepared calendar and cancelled requests
         shell: bash
         run: |
           set -euo pipefail

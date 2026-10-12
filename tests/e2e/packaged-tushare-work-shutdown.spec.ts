@@ -2,6 +2,7 @@ import { test, expect, _electron as electron } from '@playwright/test'
 import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { isolatedPackagedExecutable } from './isolatedPackagedExecutable'
+import { observePackagedProcess, waitForPackagedRuntime } from './packagedRuntimeObservation'
 test('packaged quit cancels synthetic Tushare history without committing the interrupted date', async () => {
   test.setTimeout(90000)
   const executable = process.env.RT_PACKAGED_EXE, root = process.env.RT_PACKAGED_TEST_ROOT
@@ -12,11 +13,14 @@ test('packaged quit cancels synthetic Tushare history without committing the int
   const { ELECTRON_RUN_AS_NODE: _node, ELECTRON_RENDERER_URL: _url, NODE_PATH: _path, NODE_OPTIONS: _options, ...env } = process.env
   const isolatedExecutable = isolatedPackagedExecutable(executable, profile)
   const app = await electron.launch({ executablePath: isolatedExecutable, args: [`--user-data-dir=${profile}`], env }); let closed = false
+  const reportProcess = observePackagedProcess(app), errors: string[] = []
   try {
-    const page = await app.firstWindow(); await expect(page.getByTestId('nav-tab-feed')).toBeVisible({ timeout: 30000 })
-    expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true); expect(await app.evaluate(({ app }) => app.getVersion())).toBe(process.env.RT_PACKAGED_VERSION)
-    const actual = resolve(await app.evaluate(({ app }) => app.getPath('userData'))), expected = process.platform === 'win32' ? resolve(dirname(isolatedExecutable), 'data') : resolve(profile)
+    const page = await app.firstWindow(); page.on('pageerror', error => errors.push(error.message)); await expect(page.getByTestId('nav-tab-feed')).toBeVisible({ timeout: 30000 })
+    const runtime = await waitForPackagedRuntime(app, process.env.RT_PACKAGED_VERSION!)
+    const actual = resolve(runtime.dataPath), expected = process.platform === 'win32' ? resolve(dirname(isolatedExecutable), 'data') : resolve(profile)
     expect(process.platform === 'win32' ? actual.toLowerCase() : actual).toBe(process.platform === 'win32' ? expected.toLowerCase() : expected)
+    const calendar = await page.evaluate(() => window.api.diagnostics.runCheck('syncTradeCalendar'))
+    expect(calendar.ok).toBe(true)
     await app.evaluate(({ app, BrowserWindow, safeStorage }, destination) => {
       const load = process.mainModule!.require.bind(process.mainModule!), path = load('node:path'), fs = load('node:fs'), Database = load(path.join(app.getAppPath(), 'node_modules/better-sqlite3'))
       if (!safeStorage.isEncryptionAvailable()) throw Error('ISOLATED_STORAGE_REQUIRED')
@@ -66,5 +70,6 @@ test('packaged quit cancels synthetic Tushare history without committing the int
     expect(proof).toMatchObject({ dailyRequests: 1, abortedRequests: 1, rows: { n: 0 }, willQuitSeen: true, syntheticCredentialOnly: true,
       stoppedProgress: { processedTradeDays: 0, failedTradeDays: 0, syncedTradeDays: 0 } })
     expect(proof.abortedAt - proof.requestedAt).toBeLessThan(10000)
-  } finally { if (!closed) await app.close() }
+    expect(errors).toEqual([])
+  } finally { if (!closed) { reportProcess(); await app.close() } }
 })
