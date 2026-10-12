@@ -128,6 +128,8 @@ export interface MacThsProductState {
   serviceState: MacThsServiceState; code: MacThsCode; recoveryReason: MacThsRecoveryReason | null
   liveEnabled: boolean; executorState: 'idle' | 'running' | 'unproven' | 'stopping'
   unknownPending: boolean; canPrepare: boolean; canConfirm: boolean; canRecover: boolean
+  /** Session authorization is not order preparation; absent on older projections. */
+  canAuthorizeLive?: boolean
   canReview: boolean; canInitialize: boolean; canProvisionLegacy: boolean
   coverage: { kind: 'fresh' | 'legacy'; since: number; legacyIds: number; earlierIds: 'unavailable' } | null
   intents: MacThsIntentSummary[]; recovery: MacThsRecoveryPlan | null; capabilities: MacThsCapabilities | null

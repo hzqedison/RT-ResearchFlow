@@ -1,15 +1,15 @@
 <h1 align="center">RT-ResearchFlow</h1>
 
 <!-- CURRENT-RELEASE-START -->
-## 当前正式版本：1.12
+## 当前正式版本：1.19
 
-1.13 正在开发验收中，尚未发布。源码构建版本为 1.13.0；以下下载链接仍指向已验收的正式 1.12。
+1.20 正在开发验收中，尚未发布。源码候选版本为 1.20.0；以下下载链接指向已验收的正式 1.19。
 
 同一产品，选择对应系统即可直接安装，不需要再解压安装包：
 
-- [Windows x64 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.16.0/RT-ResearchFlow-Setup-1.16.0-x64.exe)
-- [Mac Apple Silicon 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.16.0/RT-ResearchFlow-macOS-1.16.0-arm64.dmg)
-- [Mac Intel 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.16.0/RT-ResearchFlow-macOS-1.16.0-x64.dmg)
+- [Windows x64 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.19.0/RT-ResearchFlow-Setup-1.19.0-x64.exe)
+- [Mac Apple Silicon 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.19.0/RT-ResearchFlow-macOS-1.19.0-arm64.dmg)
+- [Mac Intel 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.19.0/RT-ResearchFlow-macOS-1.19.0-x64.dmg)
 
 **明确的凭证入口**：配置中心 → 数据源 → 顶部“Tushare Key 绑定与验证”。可绑定新 Token、复查已有 Token，显示验证时间、检查接口与权限受限提示。免费数据源不会隐藏此入口；Tushare Token 与大模型 API Key 分开配置。
 
@@ -17,9 +17,11 @@
 
 Windows 和两种 Mac 均通过实际安装、启动、设置页与退出验收。Key 验证只代表实际测试的接口，不承诺全部付费权限；本轮没有有效用户 Key，因此不宣称已完成线上 Tushare 认证。
 
-[更新说明与安装包验收](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.14.0) · [真实公开数据隔离验收](docs/quality/packaged-free-limit-1.12-live.md)
+[更新说明与安装包验收](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.19.0) · [真实公开数据隔离验收](docs/quality/packaged-free-limit-1.12-live.md)
 
-以下原有说明中的旧安装包和验收信息保留作为历史记录；当前下载以上方 1.12 为准。
+当前已包括本地账户账本、组合资金约束研究、样本外滚动验证，以及历史数据和筹码任务的取消退出保护。回测假设、市场事实缺口和客户端兼容限制分别说明，不把研究结果当作实盘成交。
+
+以下旧版本摘要保留作为历史记录；当前下载以上方 1.19 为准。
 <!-- CURRENT-RELEASE-END -->
 <p align="center"><strong>从市场线索到研究、验证、执行与复盘，一个工作台完成。</strong></p>
 <p align="center">多来源行情 · AI 研究 · 研报与选股 · 策略验证 · 本人确认交易 · 本地研究记录</p>
@@ -244,10 +246,10 @@ Windows 与 Mac 仍是同一款投研产品；本机交易执行代码路径仅�
 <details>
 <summary>开发与自行编译</summary>
 
-完整产品源码位于[当前开发分支](https://github.com/hzqedison/RT-ResearchFlow/tree/codex/release-1.3)。默认首页用于产品介绍，开发时使用该分支，不把其他历史分支当成最新构建源码。
+完整产品源码位于[当前开发分支](https://github.com/hzqedison/RT-ResearchFlow/tree/codex/public-product-runtime-1.10)。开发分支可能包含尚未发布的候选；编译正式版本时使用对应发布标签，不把历史分支当成最新源码。
 
 ```sh
-git clone --branch codex/macos-support https://github.com/hzqedison/RT-ResearchFlow.git
+git clone --branch v1.19.0 https://github.com/hzqedison/RT-ResearchFlow.git
 cd RT-ResearchFlow
 corepack enable
 corepack prepare pnpm@10.14.0 --activate
@@ -274,11 +276,11 @@ Windows 构建：`pnpm run dist:win`。Mac 构建在对应架构上执行 `node 
 
 ## 1.14.0 免费初始化与能力状态
 
-当前正式版本为 1.14.0。优先免费初始化、保留明确的 Tushare/AI 绑定入口，按本地事实与模块能力展示状态；详情见 [发布说明](docs/releases/v1.14.0.md) 和 [验收记录](docs/quality/release-1.14-acceptance.md)。基础可使用不代表竞价、筹码或全部历史策略已齐备。
+1.14.0 历史版本优先免费初始化、保留明确的 Tushare/AI 绑定入口，按本地事实与模块能力展示状态；详情见 [发布说明](docs/releases/v1.14.0.md) 和 [验收记录](docs/quality/release-1.14-acceptance.md)。基础可使用不代表竞价、筹码或全部历史策略已齐备。
 
 ## 1.15 数据范围与初始化改进
 
-[当前正式版本 1.15](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.15.0) 已提供 Windows、Apple 芯片 Mac 和 Intel Mac 的直接安装包，同属一个产品。新增缓存诊断与关键数据质量结果对齐，初始化不再仅凭正常标签跳过未核验任务；个股历史不冒充全市场底座，长假与结算时点按实际交易日判断。Tushare 绑定及只读验证入口继续保留在配置中心的数据源页。
+[历史版本 1.15](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.15.0) 已提供 Windows、Apple 芯片 Mac 和 Intel Mac 的直接安装包，同属一个产品。新增缓存诊断与关键数据质量结果对齐，初始化不再仅凭正常标签跳过未核验任务；个股历史不冒充全市场底座，长假与结算时点按实际交易日判断。Tushare 绑定及只读验证入口继续保留在配置中心的数据源页。
 
 [本轮发布说明](docs/releases/v1.15.0.md)与[验收证据](docs/quality/release-1.15-acceptance.md)区分已经测试和仍未完成的范围。真实供应商认证、全部历史升级和真实券商兼容不由安装测试代替；新版本不覆盖旧的公开安装包。
 ## 1.16：核对成交和资金事实

@@ -313,6 +313,7 @@ export default function MacTradingPanel({ confirmationHost }: { confirmationHost
       <strong>{view.title}</strong><p>{view.description}</p>
       {state && <p>{macThsCodeMessage(state.code)} 已存意图 {state.intents.length} 条，待核对 {view.pendingIntents.length} 条。</p>}
       <p className="mt-small">{reading ? '正在只读同步权威状态…' : synchronized ? '已读取持久投影，不代表真实设备或券商成交已验证。' : '当前状态未核验，保持保护。'}</p>
+      {view.canEnable && !view.canPreview && <p>下一步：核实当前同花顺账户后，勾选风险确认并申请重新授权本次会话；不会恢复或重发旧订单。</p>}
       {state?.coverage && <p className="mt-small">记录范围：{state.coverage.kind === 'legacy' ? '含旧来源' : '新域记录'}，已知旧 ID {state.coverage.legacyIds} 条；更早 ID 不可得，不宣称旧源迁移完整。</p>}
       <button type="button" disabled={reading} data-testid="mac-ths-refresh-state" onClick={() => void readState()}>读取最新状态（不控制同花顺）</button>
     </section>

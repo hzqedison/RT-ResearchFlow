@@ -252,6 +252,7 @@ export class MacThsOrderService {
     return { schemaVersion: 1, adapterVersion: '3', sessionId: this.sessionId, stateSequence: this.sequence,
       serviceState, code, recoveryReason: reason, liveEnabled: this.liveEnabled,
       executorState, unknownPending, canPrepare,
+      canAuthorizeLive: base && !this.busy && !unknownPending && !this.ticket && !this.liveEnabled,
       canConfirm: base && !this.busy && !unknownPending && !!this.ticket &&
         this.now() >= this.ticket.wallFloor && this.now() < this.ticket.expiresAt && this.monotonic() < this.ticket.deadline,
       canProvisionLegacy: this.platform === 'darwin' && this.started && this.sealedUnprovisioned &&

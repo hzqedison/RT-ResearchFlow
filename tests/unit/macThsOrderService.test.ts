@@ -183,6 +183,7 @@ describe('1.3 real supervised-source recovery', () => {
     expect(reviewed.unknownPending).toBe(false)
     expect(reviewed.liveEnabled).toBe(false)
     expect(reviewed.canPrepare).toBe(false) // A fresh native account/session authorization is still required.
+    expect(reviewed.canAuthorizeLive).toBe(true)
     expect(reviewed.intents.every(i => i.executionForbidden)).toBe(true)
     expect(reviewed.intents.some(i => i.state === 'LEGACY_UNKNOWN')).toBe(true)
     expect(readdirSync(dir)).toContain('mac-ths-intents.lock')
@@ -246,6 +247,52 @@ function orderRequest(mode: 'live' | 'simulation' = 'live'): MacThsRequest {
   return { action: mode === 'live' ? 'submitLive' : 'submitSimulation', mode, requestId,
     order: { requestId, mode, side: 'buy', symbol: '600000', price: '10.00', quantity: 100, maxNotional: '1000.00' } }
 }
+describe('1.20 recovered session authorization', () => {
+  it('reauthorizes only after review and native confirmation, without executing old intents', async () => {
+    const dir = join(directory(), 'reauthorization')
+    const coordinator = MacThsRecoveryCoordinator.createLegacySource(dir, 'i120-controlled-writer')
+    const path = join(dir, 'mac-ths-experiment-journal.json')
+    const raw = JSON.stringify({ unknownPending: true, usedRequests: [randomUUID()] })
+    coordinator.launchLegacy(process.execPath, ['-e', 'require("node:fs").writeFileSync(' + JSON.stringify(path) + ',' + JSON.stringify(raw) + ')'])
+    const seal = await coordinator.retireLegacyEntry()
+    const initial = MacThsIntentStore.open({ directory: dir, initialize: true, legacyQuiescence: seal,
+      testHooks: { nativeBinding: binding } })
+    initial.close()
+    const { service, scenario, spawnLog } = await chain(dir)
+    const plan = service.getState().recovery!
+    await service.recover({ kind: 'apply', recoveryId: plan.recoveryId, manifestHash: plan.manifestHash, expectedRevision: plan.revision }, caller)
+    expect(service.getState()).toMatchObject({ unknownPending: true, canPrepare: false, canAuthorizeLive: false, liveEnabled: false })
+    for (const intent of service.getState().intents.filter(i => i.recoveryQuarantine)) {
+      await service.reviewIntent({ intentId: intent.intentId, snapshotHash: intent.snapshotHash,
+        expectedRevision: intent.revision, recoveryId: intent.recoveryId!, reviewRequestId: randomUUID(),
+        observation: { statement: 'no_order_seen', scope: ['orders', 'deals', 'confirmation'], releaseGate: true } }, caller)
+    }
+    const reviewed = service.getState()
+    expect(reviewed).toMatchObject({ serviceState: 'READY_DISABLED', unknownPending: false,
+      canAuthorizeLive: true, canPrepare: false, liveEnabled: false })
+    const request: MacThsRequest = { action: 'authorizeLive', mode: 'live', liveRiskAcknowledged: true, requestId: randomUUID() }
+    const offered = await service.execute(request, caller)
+    expect(offered.code).toBe('CONFIRMATION_REQUIRED')
+    expect(service.getState()).toMatchObject({ canAuthorizeLive: false, canPrepare: false, liveEnabled: false })
+    scenario.approved = false
+    const cancelled = await service.execute({ ...request, confirmationToken: offered.confirmation!.token }, caller)
+    expect(cancelled.code).toBe('USER_CANCELLED')
+    expect(service.getState()).toMatchObject({ canAuthorizeLive: true, canPrepare: false, liveEnabled: false })
+    scenario.approved = true
+    const second = await service.execute(request, caller)
+    const enabled = await service.execute({ ...request, confirmationToken: second.confirmation!.token }, caller)
+    expect(enabled.code).toBe('LIVE_ENABLED')
+    expect(service.getState()).toMatchObject({ canAuthorizeLive: false, canPrepare: true, liveEnabled: true })
+    expect(service.getState().intents).toEqual(reviewed.intents)
+    expect(scenario.commands).toEqual(['observe_context'])
+    expect(existsSync(spawnLog)).toBe(false)
+    expect(readFileSync(path, 'utf8')).toBe(raw)
+    await service.shutdown()
+    const restarted = await start(dir)
+    expect(restarted.getState().liveEnabled).toBe(false)
+    expect(restarted.getState().intents.every(i => i.executionForbidden)).toBe(true)
+  }, 20000)
+})
 async function offer(service: MacThsOrderService, request: MacThsRequest): Promise<MacThsRequest> {
   const result = await service.execute(request, caller)
   expect(result.code).toBe('CONFIRMATION_REQUIRED')

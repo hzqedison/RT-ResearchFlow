@@ -56,6 +56,7 @@ export function isMacThsProductState(value: unknown): value is MacThsProductStat
     && Number.isSafeInteger(s.stateSequence) && s.stateSequence >= 0 && typeof s.code === 'string'
     && Object.prototype.hasOwnProperty.call(STATES, s.serviceState) && ['idle', 'running', 'unproven', 'stopping'].includes(s.executorState)
     && [s.liveEnabled, s.unknownPending, s.canPrepare, s.canConfirm, s.canRecover, s.canReview, s.canInitialize].every(x => typeof x === 'boolean')
+    && (s.canAuthorizeLive === undefined || typeof s.canAuthorizeLive === 'boolean')
     && Array.isArray(s.intents) && s.intents.every(i => i && text(i.intentId) && Number.isSafeInteger(i.revision) && i.revision >= 0
       && ['PREPARED', 'CONFIRMED', 'UNKNOWN', 'ABANDONED', 'NOT_SUBMITTED', 'ACCEPTED_OBSERVED', 'CANCEL_OBSERVED', 'LEGACY_UNKNOWN'].includes(i.state)
       && [i.gateReleased, i.executionForbidden, i.recoveryQuarantine].every(x => typeof x === 'boolean'))
@@ -127,12 +128,15 @@ export function buildMacThsProductView(state: MacThsProductState | null, options
   }
   const ready = phase === 'READY_DISABLED' || phase === 'READY_ENABLED'
   const preparation = available && ready && idle && !pending && !options.uncertainOperation && s?.canPrepare === true
+  const authorization = available && ready && idle && !pending && !options.uncertainOperation
+    && s?.liveEnabled === false && (s.canAuthorizeLive === true || (s.canAuthorizeLive === undefined && s.canPrepare === true))
   const nativeViews = available && idle && (ready || phase === 'REVIEW_REQUIRED')
   const p = s?.recovery
   const messages = phase === 'UNAVAILABLE' ? ['权威状态尚未读取成功', '保持保护；不能把旧结果或调用失败当作没有送出。'] : STATES[phase]
-  return { phase, title: messages[0], description: messages[1], pendingIntents,
+  return { phase, title: messages[0], description: authorization && !preparation
+    ? '本机记录已核对，仍需本人重新授权本次交易会话。授权前不能准备或提交订单，原意图仍禁止重试。' : messages[1], pendingIntents,
     canInspect: nativeViews, canPreview: preparation,
-    canEnable: preparation && phase === 'READY_DISABLED' && s?.liveEnabled === false,
+    canEnable: authorization && phase === 'READY_DISABLED',
     canDisable: available && s?.liveEnabled === true && phase !== 'STOPPING' && phase !== 'UNSUPPORTED_PLATFORM',
     canSubmit: preparation && phase === 'READY_ENABLED' && s?.liveEnabled === true,
     canConfirm: available && idle && phase === 'AWAITING_CONFIRMATION' && !pending && s?.canConfirm === true,

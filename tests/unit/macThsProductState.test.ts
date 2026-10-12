@@ -78,6 +78,24 @@ describe('authoritative product gates, not last execute success', () => {
     expect(view(state({ serviceState: 'READY_ENABLED', liveEnabled: false })).canSubmit).toBe(false)
     expect(view(state({ liveEnabled: true })).canSubmit).toBe(false)
   })
+  it('allows explicit reauthorization after review without restoring order preparation', () => {
+    const recovered = state({ canPrepare: false, canAuthorizeLive: true })
+    expect(view(recovered)).toMatchObject({ canEnable: true, canPreview: false, canSubmit: false })
+    expect(view(recovered).description).toContain('重新授权')
+    expect(view(state({ canPrepare: true, canAuthorizeLive: false })).canEnable).toBe(false)
+    expect(isMacThsProductState(state({ canAuthorizeLive: 'yes' as never }))).toBe(false)
+  })
+  it.each(['running', 'unproven', 'stopping'] as const)('does not authorize a recovered session with %s execution', executorState => {
+    expect(view(state({ canPrepare: false, canAuthorizeLive: true, executorState })).canEnable).toBe(false)
+  })
+  it('keeps unsynchronized, uncertain and still-unreviewed recovery closed', () => {
+    const recovered = state({ canPrepare: false, canAuthorizeLive: true })
+    expect(view(recovered, { synchronized: false }).canEnable).toBe(false)
+    expect(view(recovered, { uncertainOperation: true }).canEnable).toBe(false)
+    expect(view(state({ ...recovered, unknownPending: true })).canEnable).toBe(false)
+    expect(view(state({ ...recovered, serviceState: 'RECOVERY_REQUIRED' })).canEnable).toBe(false)
+    expect(view(recovered, { isMac: false }).canEnable).toBe(false)
+  })
   it.each(['running', 'unproven', 'stopping'] as const)('overrides a stale ready label with %s', executorState => {
     const v = view(state({ serviceState: 'READY_ENABLED', liveEnabled: true, executorState }))
     expect(v.phase).toBe({ running: 'EXECUTING', unproven: 'EXECUTOR_UNPROVEN', stopping: 'STOPPING' }[executorState])
