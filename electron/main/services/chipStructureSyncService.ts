@@ -10,12 +10,14 @@ import {
 } from './tushareService'
 import { getChipStructureSummaries, normalizeChipStructureTsCode } from './chipStructureService'
 import { fetchCyqChipsSingleflight } from './cyqChipsFetchService'
+import { chipStructureWorkOwner } from './chipStructureWorkOwner'
+import { checkLocalWork, isLocalWorkCancelled } from './publicMarketWorkOwner'
 import {
   getChipInstitutionEvidence,
   syncChipInstitutionEvidenceTradeDate,
 } from './chipInstitutionEvidenceService'
 
-export type ChipStructureSyncState = 'idle' | 'running' | 'completed' | 'partial' | 'failed'
+export type ChipStructureSyncState = 'idle' | 'running' | 'completed' | 'partial' | 'failed' | 'cancelled'
 export type ChipStructureSyncScope = 'structure' | 'institution' | 'all'
 export type ChipStructureSyncStage = 'structure' | 'institution'
 
@@ -42,6 +44,7 @@ export interface StartChipStructureSyncOptions {
   scope?: ChipStructureSyncScope
   force?: boolean
   webContents?: WebContents
+  signal?: AbortSignal
 }
 
 export type ChipStructureStockSyncResult = 'success' | 'partial' | 'failed'
@@ -118,12 +121,16 @@ async function refreshDailyClose(
   tsCodes: string[],
   endDate: string,
   failureReasons: Map<string, number>,
+  signal?: AbortSignal,
 ): Promise<void> {
+  checkLocalWork(signal)
   try {
-    const rows = await fetchDailyForCandidates(token, tsCodes, offsetDate(endDate, -45))
+    const rows = await fetchDailyForCandidates(token, tsCodes, offsetDate(endDate, -45), undefined, signal)
+    checkLocalWork(signal)
     if (rows.length > 0) upsertDailyClose(db, rows)
     else addFailureReason(failureReasons, 'DAILY_CLOSE_EMPTY')
   } catch (error) {
+    if (signal?.aborted || isLocalWorkCancelled(error)) throw error
     console.warn('[ChipStructure] Daily close refresh failed:', error instanceof Error ? error.message : String(error))
     addFailureReason(failureReasons, 'DAILY_CLOSE_FAILED')
   }
@@ -137,7 +144,9 @@ async function syncOneStock(
   targetDate: string | undefined,
   force: boolean,
   failureReasons: Map<string, number>,
+  signal?: AbortSignal,
 ): Promise<ChipStructureStockSyncResult> {
+  checkLocalWork(signal)
   const cachedTargetPerf = targetDate ? getCyqPerf(db, tsCode, targetDate) : null
   const cachedHistory = listCyqPerfHistory(db, tsCode, HISTORY_POINT_COUNT)
   const shouldFetchPerf = force || (targetDate ? cachedTargetPerf == null : cachedHistory.length < HISTORY_POINT_COUNT)
@@ -150,7 +159,9 @@ async function syncOneStock(
         targetDate,
         targetDate ? undefined : offsetDate(endDate, -45),
         targetDate ? undefined : endDate,
+        signal,
       )
+      checkLocalWork(signal)
       if (rows.length > 0) {
         upsertCyqPerf(db, rows)
         perfAvailable = true
@@ -158,11 +169,13 @@ async function syncOneStock(
         addFailureReason(failureReasons, 'CYQ_PERF_EMPTY')
       }
     } catch (error) {
+      if (signal?.aborted || isLocalWorkCancelled(error)) throw error
       console.warn(`[ChipStructure] cyq_perf refresh failed for ${tsCode}:`, error instanceof Error ? error.message : String(error))
       addFailureReason(failureReasons, 'CYQ_PERF_FAILED')
     }
   }
 
+  checkLocalWork(signal)
   const cachedChipDates = targetDate
     ? (queryChips(db, tsCode, targetDate).length > 0 ? [targetDate] : [])
     : listChipTradeDates(db, tsCode, HISTORY_POINT_COUNT)
@@ -172,7 +185,8 @@ async function syncOneStock(
   let chipsAvailable = !shouldFetchChips && cachedChipDates.length > 0
   if (shouldFetchChips) {
     try {
-      const rows = await fetchCyqChipsSingleflight(token, tsCode, targetDate)
+      const rows = await fetchCyqChipsSingleflight(token, tsCode, targetDate, signal)
+      checkLocalWork(signal)
       if (rows.length > 0) {
         upsertChips(db, rows)
         chipsAvailable = true
@@ -180,6 +194,7 @@ async function syncOneStock(
         addFailureReason(failureReasons, 'CYQ_CHIPS_EMPTY')
       }
     } catch (error) {
+      if (signal?.aborted || isLocalWorkCancelled(error)) throw error
       const targetLabel = targetDate ?? 'latest-history'
       console.warn(`[ChipStructure] cyq_chips refresh failed for ${tsCode} ${targetLabel}:`, error instanceof Error ? error.message : String(error))
       addFailureReason(failureReasons, 'CYQ_CHIPS_FAILED')
@@ -189,6 +204,7 @@ async function syncOneStock(
 }
 
 function emitProgress(options: StartChipStructureSyncOptions, currentStock: string): void {
+  if (options.signal?.aborted || options.webContents?.isDestroyed?.()) return
   options.webContents?.send('chipStructure:progress', {
     taskId: currentStatus.taskId,
     scope: currentStatus.scope,
@@ -209,12 +225,14 @@ async function runStructureStage(
   tsCodes: string[],
   options: StartChipStructureSyncOptions,
 ): Promise<void> {
+  checkLocalWork(options.signal)
   currentStatus.stage = 'structure'
   const failureReasons = new Map<string, number>()
   const endDate = options.tradeDate ?? getBjTodayYmd()
-  await refreshDailyClose(db, token, tsCodes, endDate, failureReasons)
+  await refreshDailyClose(db, token, tsCodes, endDate, failureReasons, options.signal)
 
   for (const tsCode of tsCodes) {
+    checkLocalWork(options.signal)
     currentStatus.currentStock = tsCode
     const result = await syncOneStock(
       db,
@@ -224,7 +242,9 @@ async function runStructureStage(
       options.tradeDate,
       options.force === true,
       failureReasons,
+      options.signal,
     )
+    checkLocalWork(options.signal)
     currentStatus[result]++
     currentStatus.done++
     currentStatus.failureReasons = [...failureReasons.entries()].map(([code, count]) => ({ code, count }))
@@ -282,10 +302,12 @@ async function runInstitutionStage(
   tsCodes: string[],
   options: StartChipStructureSyncOptions,
 ): Promise<void> {
+  checkLocalWork(options.signal)
   currentStatus.stage = 'institution'
   const targetsByDate = new Map<string, string[]>()
   const tradeDates = resolveInstitutionTradeDates(db, tsCodes, options.tradeDate)
   for (const tsCode of tsCodes) {
+    checkLocalWork(options.signal)
     const tradeDate = tradeDates.get(tsCode)
     if (!tradeDate) {
       currentStatus.currentStock = tsCode
@@ -301,12 +323,15 @@ async function runInstitutionStage(
   }
 
   for (const [tradeDate, targetCodes] of targetsByDate) {
+    checkLocalWork(options.signal)
     const syncResult = await syncChipInstitutionEvidenceTradeDate(
       db,
       token,
       tradeDate,
       options.force === true,
+      options.signal,
     )
+    checkLocalWork(options.signal)
     for (const tsCode of targetCodes) {
       currentStatus.currentStock = tsCode
       if (syncResult.status === 'failed') {
@@ -328,6 +353,7 @@ async function runInstitutionStage(
 }
 
 function completeSync(options: StartChipStructureSyncOptions): void {
+  checkLocalWork(options.signal)
   currentStatus.currentStock = null
   currentStatus.stage = null
   currentStatus.completedAt = Date.now()
@@ -336,7 +362,7 @@ function completeSync(options: StartChipStructureSyncOptions): void {
     : currentStatus.partial > 0 || currentStatus.failed > 0
       ? 'partial'
       : 'completed'
-  options.webContents?.send('chipStructure:done', {
+  if (!options.webContents?.isDestroyed?.()) options.webContents?.send('chipStructure:done', {
     taskId: currentStatus.taskId,
     scope: currentStatus.scope,
     stage: currentStatus.stage,
@@ -356,6 +382,7 @@ async function runSync(
   tsCodes: string[],
   options: StartChipStructureSyncOptions,
 ): Promise<void> {
+  checkLocalWork(options.signal)
   const scope = options.scope ?? 'structure'
   if (scope === 'structure' || scope === 'all') {
     await runStructureStage(db, token, tsCodes, options)
@@ -371,6 +398,7 @@ function launchChipStructureSync(
   token: string,
   options: StartChipStructureSyncOptions = {},
 ): { taskId: string; total: number; completion: Promise<ChipStructureSyncStatus> } {
+  chipStructureWorkOwner.assertAccepting(options.signal)
   if (currentStatus.state === 'running') throw new Error('JOB_RUNNING')
   const tsCodes = resolveStockCodes(db, options.tsCodes)
   if (tsCodes.length === 0) throw new Error('EMPTY_STOCK_POOL')
@@ -384,8 +412,15 @@ function launchChipStructureSync(
     total: tsCodes.length * (scope === 'all' ? 2 : 1),
     startedAt: Date.now(),
   }
-  const completion = runSync(db, token, tsCodes, options)
+  const completion = chipStructureWorkOwner.run(signal => runSync(db, token, tsCodes, { ...options, signal }), options.signal)
     .catch((error) => {
+      if (isLocalWorkCancelled(error) || options.signal?.aborted || chipStructureWorkOwner.snapshot().admissionClosed) {
+        currentStatus.state = 'cancelled'
+        currentStatus.stage = null
+        currentStatus.currentStock = null
+        currentStatus.completedAt = Date.now()
+        return
+      }
       console.error('[ChipStructure] Sync job failed:', error)
       currentStatus.state = 'failed'
       currentStatus.stage = null
@@ -394,7 +429,7 @@ function launchChipStructureSync(
       currentStatus.failed += currentStatus.total - currentStatus.done
       currentStatus.done = currentStatus.total
       currentStatus.failureReasons = [{ code: 'JOB_FAILED', count: 1 }]
-      options.webContents?.send('chipStructure:done', {
+      if (!options.webContents?.isDestroyed?.()) options.webContents?.send('chipStructure:done', {
         taskId,
         scope: currentStatus.scope,
         stage: currentStatus.stage,

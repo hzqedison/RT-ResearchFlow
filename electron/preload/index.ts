@@ -86,7 +86,7 @@ interface ChipStructureSyncStatus {
   taskId: string
   scope: 'structure' | 'institution' | 'all'
   stage: 'structure' | 'institution' | null
-  state: 'idle' | 'running' | 'completed' | 'partial' | 'failed'
+  state: 'idle' | 'running' | 'completed' | 'partial' | 'failed' | 'cancelled'
   done: number
   total: number
   success: number

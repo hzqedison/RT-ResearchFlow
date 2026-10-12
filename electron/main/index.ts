@@ -1,3 +1,4 @@
+import { stopChipStructureWork, waitForChipStructureWorkIdle } from './services/chipStructureWorkOwner'
 import { app, BrowserWindow, shell, net, ipcMain, Menu } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
@@ -125,6 +126,7 @@ async function stopApplication(): Promise<void> {
   macThsOrderService?.beginStop()
   stopHeartbeat()
   stopChipMonitorWork()
+  stopChipStructureWork()
   stopTradeCalendarWork()
   stopTushareHistoricalWork()
   stopPublicMarketWork()
@@ -144,6 +146,7 @@ async function stopApplication(): Promise<void> {
       waitForPublicMarketWorkIdle(5000),
       waitForTushareHistoricalWorkIdle(5000),
       waitForChipMonitorWorkIdle(5000),
+      waitForChipStructureWorkIdle(5000),
       waitForTradeCalendarWorkIdle(5000),
       waitForScanIdle(5000),
       stopResearchAccessTransport(),

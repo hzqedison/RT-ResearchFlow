@@ -1610,12 +1610,13 @@ export async function fetchTopList(
  */
 export async function fetchTopInst(
   token: string,
-  tradeDate?: string
+  tradeDate?: string,
+  signal?: AbortSignal,
 ): Promise<TopInstDailyRow[]> {
   const params: Record<string, string> = {}
   if (tradeDate) params.trade_date = tradeDate
   const fields = 'trade_date,ts_code,exalter,side,buy,buy_rate,sell,sell_rate,net_buy,reason'
-  const json = await callTushareApi(token, 'top_inst', params, fields)
+  const json = await callHistoricalTushareApi(token, 'top_inst', params, fields, signal)
   if (!json.data) return []
   const { fields: fs, items } = json.data
   const idx = (n: string) => fs.indexOf(n)
@@ -2366,6 +2367,7 @@ export async function fetchCyqPerf(
   tradeDate?: string,
   startDate?: string,
   endDate?: string,
+  signal?: AbortSignal,
 ): Promise<CyqPerfRow[]> {
   const params: Record<string, string> = { ts_code: tsCode }
   if (tradeDate) params.trade_date = tradeDate
@@ -2384,7 +2386,7 @@ export async function fetchCyqPerf(
     'weight_avg',
     'winner_rate',
   ].join(',')
-  const json = await callTushareApi(token, 'cyq_perf', params, fields)
+  const json = await callHistoricalTushareApi(token, 'cyq_perf', params, fields, signal)
   if (!json.data) return []
   const { fields: responseFields, items } = json.data
   const idx = (name: string) => responseFields.indexOf(name)

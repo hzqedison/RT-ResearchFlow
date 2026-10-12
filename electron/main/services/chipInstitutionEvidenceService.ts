@@ -12,6 +12,8 @@ import {
   replaceTopInstForTradeDate,
 } from '../database/topInstDailyRepository'
 import { fetchTopInst } from './tushareService'
+import { chipStructureWorkOwner } from './chipStructureWorkOwner'
+import { checkLocalWork, isLocalWorkCancelled } from './publicMarketWorkOwner'
 
 const EVIDENCE_LIMITATION = '机构席位记录来自龙虎榜公开披露，仅代表上榜席位行为，不代表全部机构交易，也不参与筹码身份比例计算。'
 
@@ -130,7 +132,10 @@ export async function syncChipInstitutionEvidenceTradeDate(
   token: string,
   tradeDate: string,
   force = false,
+  signal?: AbortSignal,
 ): Promise<ChipInstitutionTradeDateSyncResult> {
+  return chipStructureWorkOwner.run(async ownedSignal => {
+  checkLocalWork(ownedSignal)
   const cachedCoverage = getTopInstCoverage(db, tradeDate)
   if (!force && cachedCoverage?.status === 'success') {
     return {
@@ -142,13 +147,16 @@ export async function syncChipInstitutionEvidenceTradeDate(
     }
   }
   try {
-    const rows = await fetchTopInst(token, tradeDate)
+    const rows = await fetchTopInst(token, tradeDate, ownedSignal)
+    checkLocalWork(ownedSignal)
     const rowCount = replaceTopInstForTradeDate(db, tradeDate, rows)
     return { tradeDate, status: 'success', rowCount, requested: true, errorCode: null }
   } catch (error) {
+    if (ownedSignal.aborted || isLocalWorkCancelled(error)) throw error
     const code = errorCode(error)
     recordTopInstSyncFailure(db, tradeDate, code)
     console.warn(`[ChipInstitutionEvidence] top_inst refresh failed for ${tradeDate}:`, error)
     return { tradeDate, status: 'failed', rowCount: 0, requested: true, errorCode: code }
   }
+  }, signal)
 }

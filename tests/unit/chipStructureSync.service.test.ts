@@ -121,6 +121,7 @@ describe('chipStructureSyncService', () => {
       'token',
       '20260710',
       false,
+      expect.any(AbortSignal),
     )
 
     const progress = events
@@ -254,7 +255,7 @@ describe('chipStructureSyncService', () => {
 
     await done
 
-    expect(mocks.fetchCyqChips).toHaveBeenCalledWith('token', '600000.SH', undefined, undefined)
+    expect(mocks.fetchCyqChips).toHaveBeenCalledWith('token', '600000.SH', undefined, expect.any(AbortSignal))
     expect(events.find((event) => event.channel === 'chipStructure:done')?.payload).toMatchObject({
       state: 'partial',
       success: 0,
