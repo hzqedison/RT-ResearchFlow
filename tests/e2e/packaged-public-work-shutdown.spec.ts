@@ -49,7 +49,15 @@ test('actual packaged quit cancels a manually started public history request and
     }, proofFile)
     const started = await page.evaluate(() => window.api.diagnostics.runCheck('syncHistoricalDaily'))
     expect(started.ok).toBe(true)
-    await expect.poll(() => app.evaluate(() => (globalThis as unknown as { __rtPublicQuitFixture: { historicalRequests: number } }).__rtPublicQuitFixture.historicalRequests), { timeout: 30000 }).toBe(1)
+    await expect.poll(async () => {
+      try {
+        return await app.evaluate(() => (globalThis as unknown as { __rtPublicQuitFixture: { historicalRequests: number } }).__rtPublicQuitFixture.historicalRequests)
+      } catch (error) {
+        if (app.process().exitCode !== null || !/Execution context was destroyed|Cannot find context/i.test(String(error))) throw error
+        // Retry only the read-only observation, never fixture installation or the request.
+        return 'observation-pending'
+      }
+    }, { timeout: 30000 }).toBe(1)
     const child = app.process(), exited = app.waitForEvent('close'), at = Date.now()
     await app.evaluate(({ app }) => { setTimeout(() => app.quit(), 25) }); await exited; closed = true
     await expect.poll(() => child.exitCode).toBe(0); expect(Date.now() - at).toBeLessThan(10000)

@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "checkedOn": "2026-10-12",
+  "scope": "Individual public daily-history samples through actual packaged Windows IPC",
+  "packagedVersion": "1.21.0",
+  "releaseCandidate": true,
+  "sourceCommitAttested": false,
+  "productionUserDataTouched": false,
+  "brokerOrdersSubmitted": false,
+  "userCredentialUsed": false,
+  "normalExit": true,
+  "results": [
+    {
+      "kind": "isolated-public-provider-probe",
+      "provider": "tencent",
+      "stockCode": "000001",
+      "ok": true,
+      "rows": 480,
+      "latestTradeDate": "20261012",
+      "message": "tencent · 截至 20261012 · 480 日",
+      "elapsedMs": 1151
+    },
+    {
+      "kind": "isolated-public-provider-probe",
+      "provider": "eastmoney",
+      "stockCode": "600519",
+      "ok": false,
+      "rows": 0,
+      "latestTradeDate": null,
+      "message": "所选日线来源均未完成取数：eastmoney: 连接、权限或接口不可用",
+      "elapsedMs": 4468
+    },
+    {
+      "kind": "isolated-public-provider-probe",
+      "provider": "sina",
+      "stockCode": "600000",
+      "ok": true,
+      "rows": 480,
+      "latestTradeDate": "20261012",
+      "message": "sina · 截至 20261012 · 480 日",
+      "elapsedMs": 138
+    }
+  ],
+  "connectionDiagnostic": {
+    "kind": "eastmoney-public-protocol-comparison",
+    "source": "AKShare upstream stock_hist_em.py",
+    "keyUsed": false,
+    "results": [
+      {
+        "label": "current-adapter",
+        "error": "TypeError",
+        "causeCode": "UND_ERR_SOCKET",
+        "elapsedMs": 264
+      },
+      {
+        "label": "akshare-current-protocol",
+        "error": "TypeError",
+        "causeCode": "UND_ERR_SOCKET",
+        "elapsedMs": 130
+      }
+    ]
+  },
+  "primaryReference": {
+    "url": "https://github.com/akfamily/akshare/blob/main/akshare/stock_feature/stock_hist_em.py",
+    "fileBlobSha": "eee3667df6fea86e76bef4b0874502d11bc4946d"
+  },
+  "notVerified": [
+    "Released 1.20.0 package source connectivity",
+    "Mac source connectivity",
+    "Whole-market initialization and completeness",
+    "Auction, chip and minute data",
+    "Live Tushare authentication and account entitlements",
+    "End-to-end free strategy live test (fixture variable collision pending correction)",
+    "Real broker acceptance, execution or cancellation"
+  ],
+  "interpretation": "Tencent and Sina each returned 480 written rows in these samples. Eastmoney daily failed before an HTTP response under both tested parameter sets; this is not proof of permanent unavailability. These probes do not attest that all product modules are usable."
+}
