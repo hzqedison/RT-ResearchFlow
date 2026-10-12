@@ -1,0 +1,139 @@
+name: Released 1.22 actual free short-term UI (no rebuild)
+
+on:
+  push:
+    branches: [codex/release-1.22]
+    paths: [.github/workflows/released-1.22-product-workflows.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: released-1.22-free-ui-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: released public data (${{ matrix.platform }}, ${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+            arch: x64
+            bytes: 176041607
+            sha256: 18230fc1183ea36f96a208c7307b2d2abda3544aacf17bc3edbba1ccd905c0f4
+          - os: macos-15
+            platform: darwin
+            arch: arm64
+            bytes: 201789027
+            sha256: b7b5d0bb0dd8fc2c2f19e45c780822a234f7bb09d7eefafae996239571fd84d7
+          - os: macos-15-intel
+            platform: darwin
+            arch: x64
+            bytes: 209900210
+            sha256: 8b59b8076818997b3404e5af9c0df8eed37b6e484a8d1ae332b0483b0e8939c5
+    env:
+      RT_PACKAGED_VERSION: 1.22.0
+      RT_PUBLIC_LIMIT_POOL_DATE: '20261012'
+      RT_RELEASED_PUBLIC_UI_LIVE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.18.0
+      - name: Prepare only the Mac acceptance driver
+        if: matrix.platform == 'darwin'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/public-acceptance-tools"
+          npm install --prefix "$tools" --ignore-scripts --no-audit --no-fund @playwright/test@1.58.2
+          test ! -e node_modules
+          ln -s "$tools/node_modules" node_modules
+      - name: Verify and extract published Mac DMG
+        if: matrix.platform == 'darwin'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCH: ${{ matrix.arch }}
+          EXPECTED_BYTES: ${{ matrix.bytes }}
+          EXPECTED_SHA256: ${{ matrix.sha256 }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/released-public-data-darwin-$ARCH"
+          mkdir -p "$root/download" "$root/mount" "$root/application" "$root/evidence"
+          asset="RT-ResearchFlow-macOS-1.22.0-$ARCH.dmg"
+          gh release download v1.22.0 --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$root/download"
+          dmg="$root/download/$asset"
+          test "$(stat -f %z "$dmg")" = "$EXPECTED_BYTES"
+          test "$(shasum -a 256 "$dmg" | cut -d ' ' -f 1)" = "$EXPECTED_SHA256"
+          hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$root/mount"
+          trap 'hdiutil detach "$root/mount"' EXIT
+          test -d "$root/mount/RT-ResearchFlow.app"
+          ditto "$root/mount/RT-ResearchFlow.app" "$root/application/RT-ResearchFlow.app"
+          printf 'RT_PACKAGED_EXE=%s\n' "$root/application/RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow" >> "$GITHUB_ENV"
+          printf 'RT_PACKAGED_TEST_ROOT=%s\n' "$root/evidence" >> "$GITHUB_ENV"
+          printf '{"version":"1.22.0","arch":"%s","asset":"%s","bytes":%s,"sha256":"%s","publishedDigestMatched":true,"productRebuilt":false,"brokerOrdersSubmitted":false}\n' "$ARCH" "$asset" "$EXPECTED_BYTES" "$EXPECTED_SHA256" > "$root/evidence/published-asset.json"
+      - name: Prepare driver and verify published Windows installer without installing
+        if: matrix.platform == 'win32'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_BYTES: ${{ matrix.bytes }}
+          EXPECTED_SHA256: ${{ matrix.sha256 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tools = Join-Path $env:RUNNER_TEMP 'public-acceptance-tools'
+          npm install --prefix $tools --ignore-scripts --no-audit --no-fund @playwright/test@1.58.2 7zip-bin@5.2.0
+          if ($LASTEXITCODE -ne 0) { throw 'ACCEPTANCE_DRIVER_INSTALL_FAILED' }
+          if (Test-Path -LiteralPath 'node_modules') { throw 'UNEXPECTED_EXISTING_DEPENDENCIES' }
+          New-Item -ItemType Junction -Path 'node_modules' -Target (Join-Path $tools 'node_modules') | Out-Null
+          $root = Join-Path $env:RUNNER_TEMP 'released-public-data-win32-x64'
+          if (Test-Path -LiteralPath $root) { throw 'OWNED_FIXTURE_ALREADY_EXISTS' }
+          $download = Join-Path $root 'download'
+          $evidence = Join-Path $root 'evidence'
+          New-Item -ItemType Directory -Path $download,$evidence | Out-Null
+          $asset = 'RT-ResearchFlow-Setup-1.22.0-x64.exe'
+          gh release download v1.22.0 --repo $env:GITHUB_REPOSITORY --pattern $asset --dir $download
+          if ($LASTEXITCODE -ne 0) { throw 'RELEASE_DOWNLOAD_FAILED' }
+          $file = Join-Path $download $asset
+          $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne $env:EXPECTED_SHA256 -or (Get-Item -LiteralPath $file).Length -ne [long]$env:EXPECTED_BYTES) { throw 'PUBLISHED_INSTALLER_IDENTITY_MISMATCH' }
+          $unpacked = Join-Path $root 'release/win-unpacked'
+          & 'node_modules/7zip-bin/win/x64/7za.exe' x $file ('-o' + $unpacked) -y -bsp0
+          if ($LASTEXITCODE -ne 0) { throw 'PUBLISHED_INSTALLER_EXTRACTION_FAILED' }
+          $exe = Join-Path $unpacked 'RT-ResearchFlow.exe'
+          if (-not (Test-Path -LiteralPath $exe)) { throw 'PACKAGED_EXECUTABLE_MISSING' }
+          "RT_PACKAGED_EXE=$exe" | Add-Content -LiteralPath $env:GITHUB_ENV
+          "RT_PACKAGED_TEST_ROOT=$evidence" | Add-Content -LiteralPath $env:GITHUB_ENV
+          @{ version='1.22.0'; arch='x64'; asset=$asset; bytes=[long]$env:EXPECTED_BYTES; sha256=$hash; publishedDigestMatched=$true; productRebuilt=$false; brokerOrdersSubmitted=$false } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence 'published-asset.json') -Encoding utf8
+      - name: Test actual Mac free-rule buttons and evidence
+        if: matrix.platform == 'darwin'
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset ELECTRON_RUN_AS_NODE ELECTRON_RENDERER_URL NODE_OPTIONS NODE_PATH
+          node node_modules/@playwright/test/cli.js test tests/e2e/released-public-ui.spec.ts --workers=1 --retries=0 --reporter=line --output "$RT_PACKAGED_TEST_ROOT/playwright"
+      - name: Test actual Windows free-rule buttons and evidence
+        if: matrix.platform == 'win32'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Remove-Item Env:ELECTRON_RUN_AS_NODE,Env:ELECTRON_RENDERER_URL,Env:NODE_OPTIONS,Env:NODE_PATH -ErrorAction SilentlyContinue
+          node node_modules/@playwright/test/cli.js test tests/e2e/released-public-ui.spec.ts --workers=1 --retries=0 --reporter=line --output (Join-Path $env:RT_PACKAGED_TEST_ROOT 'playwright')
+          if ($LASTEXITCODE -ne 0) { throw 'RELEASED_WINDOWS_LIVE_DATA_NOT_ACCEPTED' }
+      - name: Preserve real receipts and failures only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: released-free-ui-1.22.0-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/released-public-data-${{ matrix.platform }}-${{ matrix.arch }}/evidence/*.json
+            ${{ runner.temp }}/released-public-data-${{ matrix.platform }}-${{ matrix.arch }}/evidence/playwright/**/error-context.md
+          if-no-files-found: error
+          retention-days: 14
