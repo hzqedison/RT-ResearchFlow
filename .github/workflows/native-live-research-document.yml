@@ -39,7 +39,11 @@ jobs:
           node-version: '20'
           cache: pnpm
       - name: Require unchanged production sources from the released application
-        run: git diff --exit-code ca75705093bfc31ff8ad05465f80099f546dfc3a HEAD -- electron package.json pnpm-lock.yaml
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin ca75705093bfc31ff8ad05465f80099f546dfc3a
+          git diff --exit-code ca75705093bfc31ff8ad05465f80099f546dfc3a HEAD -- electron package.json pnpm-lock.yaml
       - name: Install the existing locked native dependencies
         run: pnpm install --frozen-lockfile --config.side-effects-cache=false
       - name: Use the existing parser and safe outlet on a real public document
