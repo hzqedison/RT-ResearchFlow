@@ -44,15 +44,23 @@ jobs:
           set -euo pipefail
           pnpm install --frozen-lockfile
           pnpm exec electron-builder install-app-deps
-      - name: Check source and cancellation contracts
+      - name: Check source without waiving compiler failures
         shell: bash
         run: |
           set -euo pipefail
           node -e "if(require('./package.json').version!=='1.18.0')throw Error('DIAGNOSTIC_CANDIDATE_VERSION_MISMATCH')"
           pnpm exec tsc -p tsconfig.node.json --noEmit
           pnpm exec tsc -p tsconfig.web.json --noEmit
+      - name: Record all cancellation contracts, including the known fixture failure
+        id: unit-contracts
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/tushareHistoricalCancellation.test.ts tests/unit/tushareCancellationTransport.test.ts tests/unit/tradeCalCancellation.test.ts tests/unit/diagnosticsCancellationHandlers.test.ts tests/unit/historicalDailySync.service.test.ts tests/unit/tradeCalSync.service.test.ts tests/unit/tushareAccessError.test.ts tests/unit/tushare.diagnosticBounds.test.ts tests/unit/historicalSyncCancellation.test.ts tests/unit/publicMarketWorkOwner.test.ts tests/unit/publicHistoricalDailySync.service.test.ts tests/unit/publicMarketRequestGovernor.test.ts tests/unit/publicStockUniverse.service.test.ts --maxWorkers=1 --minWorkers=1 --silent
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/tradeCalOwnership.test.ts --maxWorkers=1 --minWorkers=1 --silent
+          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/tushareCredentialVerification.test.tsx --maxWorkers=1 --minWorkers=1 --silent
+          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/chipMonitorCancellation.test.ts tests/unit/cyqChipsCancellationScopes.test.ts tests/unit/chipCancellationTransport.test.ts tests/unit/chipMonitorAdmission.contract.test.ts tests/unit/chipMonitor.service.test.ts tests/unit/chipStructureSync.service.test.ts --maxWorkers=1 --minWorkers=1 --silent
       - name: Build actual native application directory without publishing
         shell: bash
         run: |
@@ -72,10 +80,12 @@ jobs:
           export RT_PUBLIC_WORK_FIXTURE_ALLOWED=1
           export RT_TUSHARE_WORK_FIXTURE_ALLOWED=1
           mkdir -p "$RT_PACKAGED_TEST_ROOT"
-          pnpm exec playwright test tests/e2e/packaged-public-work-shutdown.spec.ts tests/e2e/packaged-tushare-work-shutdown.spec.ts tests/e2e/packaged-calendar-work-shutdown.spec.ts --workers=1 --retries=0 --reporter=line
+          pnpm exec playwright test tests/e2e/packaged-public-work-shutdown.spec.ts tests/e2e/packaged-tushare-work-shutdown.spec.ts tests/e2e/packaged-calendar-work-shutdown.spec.ts tests/e2e/packaged-chip-work-shutdown.spec.ts --workers=1 --retries=0 --reporter=line
           mkdir -p diagnostic-evidence
           find "$RT_PACKAGED_TEST_ROOT" -maxdepth 2 -type f -name '*shutdown-proof.json' -exec cp {} diagnostic-evidence/ \;
-          node -e "const fs=require('fs');const names=['isolated-shutdown-proof.json','isolated-tushare-shutdown-proof.json','isolated-calendar-shutdown-proof.json'];for(const name of names)if(!fs.existsSync('diagnostic-evidence/'+name))throw Error('DIAGNOSTIC_PROOF_MISSING');fs.writeFileSync('diagnostic-evidence/summary.json',JSON.stringify({schema:1,version:'1.18.0',sourceCommit:process.env.GITHUB_SHA,runId:process.env.GITHUB_RUN_ID,platform:process.platform,arch:process.arch,tests:['public-manual-quit','synthetic-tushare-quit','standalone-calendar-quit'],applicationDirectoryOnly:true,installerVerified:false,realTushareAuthentication:false,brokerOrdersSubmitted:false,published:false,releaseEligible:false},null,2)+'\n')"
+          node -e "const fs=require('fs');const names=['isolated-shutdown-proof.json','isolated-tushare-shutdown-proof.json','isolated-calendar-shutdown-proof.json','isolated-chip-daily-shutdown-proof.json','isolated-chip-chips-shutdown-proof.json'];for(const name of names)if(!fs.existsSync('diagnostic-evidence/'+name))throw Error('DIAGNOSTIC_PROOF_MISSING');fs.writeFileSync('diagnostic-evidence/summary.json',JSON.stringify({schema:1,version:'1.18.0',sourceCommit:process.env.GITHUB_SHA,runId:process.env.GITHUB_RUN_ID,platform:process.platform,arch:process.arch,tests:['public-manual-quit','synthetic-tushare-quit','standalone-calendar-quit','chip-daily-quit','chip-distribution-quit'],unitContractsPassed:process.env.RT_UNIT_OUTCOME==='success',applicationDirectoryOnly:true,installerVerified:false,realTushareAuthentication:false,brokerOrdersSubmitted:false,published:false,releaseEligible:false},null,2)+'\n')"
+        env:
+          RT_UNIT_OUTCOME: ${{ steps.unit-contracts.outcome }}
       - name: Upload diagnostic evidence only, never application files
         if: always()
         uses: actions/upload-artifact@v4
@@ -84,3 +94,9 @@ jobs:
           path: diagnostic-evidence/*.json
           if-no-files-found: ignore
           retention-days: 14
+      - name: Preserve a failed diagnostic outcome when any unit contract failed
+        if: ${{ !cancelled() && steps.unit-contracts.outcome != 'success' }}
+        shell: bash
+        run: |
+          echo 'Diagnostic evidence is not a release waiver: unit contracts failed.' >&2
+          exit 1
