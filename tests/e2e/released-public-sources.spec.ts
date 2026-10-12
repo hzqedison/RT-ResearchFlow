@@ -135,3 +135,65 @@ test('released package can read each configured public daily provider', async ()
     console.log(JSON.stringify(receipt))
   } finally { if (!normalExit) await c.application.close().catch(() => {}) }
 })
+
+test('selected free source supplies the real stock-chart consumer when Tushare has no credential', async () => {
+  test.setTimeout(120_000)
+  const c = await launch()
+  let normalExit = false
+  const previous = await c.page.evaluate(() => window.api.datasource.getConfig())
+  try {
+    expect(previous.hasTushareToken).toBe(false)
+    const saved = await c.page.evaluate(() => window.api.datasource.saveConfig({ dailyProviders: ['tushare', 'tencent'] }))
+    expect(saved).toMatchObject({ ok: true })
+    const selected = await c.page.evaluate(() => window.api.datasource.getConfig())
+    expect(selected.dailyProviders).toEqual(['tushare', 'tencent'])
+    expect(selected.hasTushareToken).toBe(false)
+
+    const fetched = await c.page.evaluate(() => window.api.datasource.fetchStock('600036'))
+    expect(fetched.error).toBeUndefined()
+    expect(fetched.stockCode).toBeTruthy()
+    expect(fetched.provider).toBe('tencent')
+    expect(fetched.totalRows).toBeGreaterThan(0)
+    expect(fetched.latestTradeDate).toBe(c.date)
+    const pageOfPrices = await c.page.evaluate(code => window.api.datasource.getStockPricePage(code, undefined, 20), fetched.stockCode!)
+    expect(pageOfPrices.ok).toBe(true)
+    if (!pageOfPrices.ok) throw Error('REAL_CHART_PRICE_PAGE_FAILED')
+    expect(pageOfPrices.rows.length).toBeGreaterThan(0)
+    expect(pageOfPrices.rows.every(row => Number.isFinite(row.close) && row.close > 0)).toBe(true)
+
+    await expect(async () => {
+      const guide = c.page.getByTestId('cold-start-guide')
+      if (await guide.isVisible()) await guide.getByLabel('关闭引导').click({ timeout: 2_000 })
+      if (!await c.page.getByTestId('stock-chart-root').isVisible()) {
+        await c.page.getByText('股票走势图', { exact: true }).first().click({ timeout: 2_000 })
+      }
+      await expect(c.page.getByTestId('stock-chart-root')).toBeVisible({ timeout: 2_000 })
+    }).toPass({ timeout: 30_000 })
+    await c.page.getByTestId(`stock-list-item-${fetched.stockCode}`).click()
+    await expect(c.page.getByTestId('stock-chart-history-summary')).toContainText(/[1-9]\d*/, { timeout: 30_000 })
+    await expect(c.page.getByTestId('daily-chart-container')).toBeVisible()
+    const historySummary = await c.page.getByTestId('stock-chart-history-summary').innerText()
+    const restored = await c.page.evaluate(providers => window.api.datasource.saveConfig({ dailyProviders: providers }), previous.dailyProviders)
+    expect(restored).toMatchObject({ ok: true })
+    const after = await c.page.evaluate(() => window.api.datasource.getConfig())
+    expect(after.dailyProviders).toEqual(previous.dailyProviders)
+    expect(after.hasTushareToken).toBe(false)
+    await quit(c.application)
+    normalExit = true
+    expect(c.errors).toEqual([])
+    const receipt = { kind: 'released-stock-chart-consumer-acceptance', version: c.version,
+      platform: process.platform, arch: process.arch, configuredProviders: ['tushare', 'tencent'],
+      tushareCredentialPresent: false, actualProvider: fetched.provider, stockCode: fetched.stockCode,
+      totalRows: fetched.totalRows, latestTradeDate: fetched.latestTradeDate,
+      pricePageRows: pageOfPrices.rows.length, visibleHistorySummary: historySummary,
+      isolatedPreferenceRestored: true, marketRowsMocked: false, normalExit,
+      productionUserDataTouched: false, brokerOrdersSubmitted: false }
+    writeFileSync(join(c.root, 'released-stock-chart-consumer-receipt.json'), JSON.stringify(receipt, null, 2) + '\n')
+    console.log(JSON.stringify(receipt))
+  } finally {
+    if (!normalExit) {
+      await c.page.evaluate(providers => window.api.datasource.saveConfig({ dailyProviders: providers }), previous.dailyProviders).catch(() => {})
+      await c.application.close().catch(() => {})
+    }
+  }
+})
