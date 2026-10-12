@@ -60,7 +60,7 @@
 
 - 免费短线页面：三端各读取 2026-10-12 的 46 条真实涨停事实，通过按钮运行早封首板、二板观察和连板观察。每个模板只产生一条新记录，显示命中分别为 11、11、1 条，证据中的股票和日期对应同次扫描；三端共 9 次按钮扫描。
 - 东财研报接口与缓存：三端对样本股票 000333 均取得 50 条真实研报索引及 PDF 引用，最新索引日期为 2026-09-10；首次状态 ready，复读状态 cached，内容一致，不需要真实用户 Key。
-- 研报结果明确为 metadataOnly。本次研报检查不是页面查询、PDF 下载或全文解析验收，不把索引列表当成已读全文；i问财及 AKShare 的真实查询亦未据此宣称通过。
+- 研报结果明确为 metadataOnly。最初的研报接口与缓存测试未覆盖页面，随后已补做下方的三端页面查询验收；两项均不证明 PDF 下载或全文解析，i问财及 AKShare 的真实查询亦未据此宣称通过。
 - 未注入行情、报告或交易日历，正常退出，未操作个人数据或券商订单。不代表投资收益、专业竞价或实盘成交已经验证。
 - 免费短线与研报接口的永久回执已上传：[短线页面回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/public-rule-ui-acceptance-1.22.json)、[研报接口及缓存回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/research-source-acceptance-1.22.json)。回执仅包含公开样本、检查结果和验证边界，不含个人账户或密钥。
 
@@ -72,6 +72,18 @@
 - 解析沿用前 24 页的原有限制，不承诺整份长报告全文；本项是源代码管线验收，不是正式安装包的研报阅读页面或完整研究流程验收。[下载本地 Windows 管线回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/native-public-pdf-local-windows-1.22.json)。
 - 新增 Mac PDF 管线验收尚未完成。云端第一次因脚本变量位置错误未启动，修正后又因检出环境未包含历史源码提交而在源码一致性检查阶段退出，尚未执行 PDF 测试；不将此记录宣称为 Mac PDF 通过。[保留本次云端记录](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38286028469)。
 - 上述增补只涉及检查脚本、上传方式和说明，没有重新编译、替换安装包或修改交易逻辑。
+
+
+## 正式安装包研报查询页面验收
+
+2026-10-13，直接复用公开的 1.22 安装包，通过 Windows、Apple Silicon Mac 与 Intel Mac 三端检查，不重编译、不替换安装包。
+
+- 每端先用股票 000333 核验真实东财索引及重复读取缓存，再在「配置中心 → 数据源」填写股票 601318 并点击「查询研报」。
+- 每端页面查询取得 50 条真实索引，核对了前三条报告标题确实显示在页面中；随后 API 复读状态为 cached。等待的是原查询按钮，不因界面临时出现同名按钮而定位到别处。
+- 三端均正常退出，页面错误数为 0，无真实用户 Key、行情或报告注入、个人数据修改和券商订单操作。
+- 本项证明的是研报索引查询页面及缓存，不是 PDF 阅读界面、整份报告全文、AI 分析结论或实盘成交。Mac 原生 PDF 管线的未完成边界仍保留在上节。
+
+[三端正式安装包页面测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38286878349) · [下载页面验收回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/research-ui-acceptance-1.22.json)
 
 </details>
 
