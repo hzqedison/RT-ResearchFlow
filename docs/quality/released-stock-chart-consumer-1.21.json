@@ -1,0 +1,299 @@
+{
+  "schema": 1,
+  "checkedOn": "2026-10-12",
+  "version": "1.21.0",
+  "publishedSourceCommit": "249f90cade57026e3bc9a85b2e21427b634dfbed",
+  "testSourceCommit": "4df20ea14713d92dbf052951dd978d921dcfe7c0",
+  "run": "https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38266366006",
+  "productRebuilt": false,
+  "passedTests": 9,
+  "failedTests": 0,
+  "skippedTests": 0,
+  "artifacts": [
+    {
+      "platform": "win32",
+      "arch": "x64",
+      "bytes": 176036625,
+      "sha256": "70234a27549181e2d8ccd4ac357e46f388d2f739b7cefa6e876c1688a384add5"
+    },
+    {
+      "platform": "darwin",
+      "arch": "arm64",
+      "bytes": 201798388,
+      "sha256": "2bf5e8d41804eaa9f409d4b70924fa478c66279180eea1674debca5fa1276bb2"
+    },
+    {
+      "platform": "darwin",
+      "arch": "x64",
+      "bytes": 209896609,
+      "sha256": "ccae390a0dd7a878fc9612225673b86d00daf9ca90cd363659660df104bcc25c"
+    }
+  ],
+  "receipts": [
+    {
+      "kind": "released-public-rule-acceptance",
+      "version": "1.21.0",
+      "platform": "win32",
+      "arch": "x64",
+      "date": "20261012",
+      "rows": 46,
+      "reports": [
+        {
+          "strategy": "builtin-public-limit-continuous",
+          "matched": 1
+        },
+        {
+          "strategy": "builtin-public-limit-secondBoard",
+          "matched": 11
+        },
+        {
+          "strategy": "builtin-public-limit-earlyFirst",
+          "matched": 11
+        }
+      ],
+      "calendarFixtureInjected": false,
+      "marketRowsMocked": false,
+      "normalExit": true,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false
+    },
+    {
+      "kind": "released-public-daily-acceptance",
+      "version": "1.21.0",
+      "platform": "win32",
+      "arch": "x64",
+      "results": [
+        {
+          "provider": "tencent",
+          "stockCode": "000001",
+          "ok": true,
+          "rows": 480,
+          "latestTradeDate": "20261012",
+          "message": "tencent · 截至 20261012 · 480 日"
+        },
+        {
+          "provider": "eastmoney",
+          "stockCode": "600519",
+          "ok": true,
+          "rows": 149,
+          "latestTradeDate": "20261012",
+          "message": "eastmoney · 截至 20261012 · 149 日"
+        },
+        {
+          "provider": "sina",
+          "stockCode": "600000",
+          "ok": true,
+          "rows": 480,
+          "latestTradeDate": "20261012",
+          "message": "sina · 截至 20261012 · 480 日"
+        }
+      ],
+      "allProvidersAvailable": true,
+      "normalExit": true,
+      "marketRowsMocked": false,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false
+    },
+    {
+      "kind": "released-stock-chart-consumer-acceptance",
+      "version": "1.21.0",
+      "platform": "win32",
+      "arch": "x64",
+      "configuredProviders": [
+        "tushare",
+        "tencent"
+      ],
+      "tushareCredentialPresent": false,
+      "actualProvider": "tencent",
+      "stockCode": "600036",
+      "totalRows": 480,
+      "latestTradeDate": "20261012",
+      "pricePageRows": 20,
+      "visibleHistorySummary": "当前 30 日·已加载 149 日",
+      "isolatedPreferenceRestored": true,
+      "marketRowsMocked": false,
+      "normalExit": true,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false
+    },
+    {
+      "kind": "released-public-rule-acceptance",
+      "version": "1.21.0",
+      "platform": "darwin",
+      "arch": "arm64",
+      "date": "20261012",
+      "rows": 46,
+      "reports": [
+        {
+          "strategy": "builtin-public-limit-continuous",
+          "matched": 1
+        },
+        {
+          "strategy": "builtin-public-limit-secondBoard",
+          "matched": 11
+        },
+        {
+          "strategy": "builtin-public-limit-earlyFirst",
+          "matched": 11
+        }
+      ],
+      "calendarFixtureInjected": false,
+      "marketRowsMocked": false,
+      "normalExit": true,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false
+    },
+    {
+      "kind": "released-public-daily-acceptance",
+      "version": "1.21.0",
+      "platform": "darwin",
+      "arch": "arm64",
+      "results": [
+        {
+          "provider": "tencent",
+          "stockCode": "000001",
+          "ok": true,
+          "rows": 480,
+          "latestTradeDate": "20261012",
+          "message": "tencent · 截至 20261012 · 480 日"
+        },
+        {
+          "provider": "eastmoney",
+          "stockCode": "600519",
+          "ok": true,
+          "rows": 149,
+          "latestTradeDate": "20261012",
+          "message": "eastmoney · 截至 20261012 · 149 日"
+        },
+        {
+          "provider": "sina",
+          "stockCode": "600000",
+          "ok": true,
+          "rows": 480,
+          "latestTradeDate": "20261012",
+          "message": "sina · 截至 20261012 · 480 日"
+        }
+      ],
+      "allProvidersAvailable": true,
+      "normalExit": true,
+      "marketRowsMocked": false,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false
+    },
+    {
+      "kind": "released-stock-chart-consumer-acceptance",
+      "version": "1.21.0",
+      "platform": "darwin",
+      "arch": "arm64",
+      "configuredProviders": [
+        "tushare",
+        "tencent"
+      ],
+      "tushareCredentialPresent": false,
+      "actualProvider": "tencent",
+      "stockCode": "600036",
+      "totalRows": 480,
+      "latestTradeDate": "20261012",
+      "pricePageRows": 20,
+      "visibleHistorySummary": "当前 30 日·已加载 149 日",
+      "isolatedPreferenceRestored": true,
+      "marketRowsMocked": false,
+      "normalExit": true,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false
+    },
+    {
+      "kind": "released-public-rule-acceptance",
+      "version": "1.21.0",
+      "platform": "darwin",
+      "arch": "x64",
+      "date": "20261012",
+      "rows": 46,
+      "reports": [
+        {
+          "strategy": "builtin-public-limit-continuous",
+          "matched": 1
+        },
+        {
+          "strategy": "builtin-public-limit-secondBoard",
+          "matched": 11
+        },
+        {
+          "strategy": "builtin-public-limit-earlyFirst",
+          "matched": 11
+        }
+      ],
+      "calendarFixtureInjected": false,
+      "marketRowsMocked": false,
+      "normalExit": true,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false
+    },
+    {
+      "kind": "released-public-daily-acceptance",
+      "version": "1.21.0",
+      "platform": "darwin",
+      "arch": "x64",
+      "results": [
+        {
+          "provider": "tencent",
+          "stockCode": "000001",
+          "ok": true,
+          "rows": 480,
+          "latestTradeDate": "20261012",
+          "message": "tencent · 截至 20261012 · 480 日"
+        },
+        {
+          "provider": "eastmoney",
+          "stockCode": "600519",
+          "ok": true,
+          "rows": 149,
+          "latestTradeDate": "20261012",
+          "message": "eastmoney · 截至 20261012 · 149 日"
+        },
+        {
+          "provider": "sina",
+          "stockCode": "600000",
+          "ok": true,
+          "rows": 480,
+          "latestTradeDate": "20261012",
+          "message": "sina · 截至 20261012 · 480 日"
+        }
+      ],
+      "allProvidersAvailable": true,
+      "normalExit": true,
+      "marketRowsMocked": false,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false
+    },
+    {
+      "kind": "released-stock-chart-consumer-acceptance",
+      "version": "1.21.0",
+      "platform": "darwin",
+      "arch": "x64",
+      "configuredProviders": [
+        "tushare",
+        "tencent"
+      ],
+      "tushareCredentialPresent": false,
+      "actualProvider": "tencent",
+      "stockCode": "600036",
+      "totalRows": 480,
+      "latestTradeDate": "20261012",
+      "pricePageRows": 20,
+      "visibleHistorySummary": "当前 30 日·已加载 149 日",
+      "isolatedPreferenceRestored": true,
+      "marketRowsMocked": false,
+      "normalExit": true,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false
+    }
+  ],
+  "notVerified": [
+    "All-market daily coverage, historical adjustment factors, minute history and paid interfaces",
+    "Real user Tushare or AI credentials",
+    "Broker authentication, order submission, execution or reconciliation",
+    "All user network environments or production installation replacement"
+  ],
+  "interpretation": "The released chart consumer falls back from selected Tushare without credentials to selected Tencent for sampled stock 600036, persists 480 daily rows, returns cached pages and displays its visible history summary. This is not proof of all stocks, full chart visual correctness, or live broker trading."
+}
