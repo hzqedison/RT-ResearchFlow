@@ -77,3 +77,7 @@ incomplete. No real credential entitlement or broker connectivity is verified.
 The rolling-report recovery defect is still unresolved; 1.18 remains an
 unpublished candidate. Production data, shared Python, installers and real
 broker accounts were not modified. No cleanup or production overwrite occurred.
+
+## Later correction with user approval
+
+The positive test-cache fixture omission is corrected: mocked writes now populate mocked reads. Expected success and signal assertions are unchanged. All 167 related unit cases passed locally, and the broader local suite passed 284 cases. Native diagnostic run 38190130632 is successful on fixture-only source 05abd5a40d7c6141a1ebfcbd12fffac4a0af45cf. It does not verify the later rolling renderer correction; full native release gates remain required. Earlier failed runs above remain historical evidence and were not reclassified. See rolling-recovery-1.18.md.

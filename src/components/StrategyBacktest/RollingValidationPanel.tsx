@@ -35,7 +35,21 @@ export function RollingValidationPanel() {
   async function load(id: string) {
     if (!id) return
     setBusy(true); setError('')
-    try { const r = await window.api.rollingValidation.get(id); if (!mounted.current) return; if (r.ok) { setStudy(r.data); setUncertain(null); preparing.current = null } else setError(r.message) }
+    try {
+      const r = await window.api.rollingValidation.get(id)
+      if (!mounted.current) return
+      if (r.ok) { setStudy(r.data); setUncertain(null); preparing.current = null }
+      else {
+        setError(r.message)
+        // Only a confirmed absence for the pending ID resolves an unknown save.
+        // Storage/transport failures must retain the lock to avoid duplicate work.
+        if (r.code === 'NOT_FOUND' && uncertain === id) {
+          setUncertain(null); preparing.current = null
+          setStudy(current => current?.id === id ? null : current)
+          setError('该编号没有已保存协议。参数已保留，可核对后重新保存。')
+        }
+      }
+    }
     catch { if (mounted.current) setError('读取结果未知，请保留研究编号。') } finally { if (mounted.current) setBusy(false) }
   }
   async function run() {

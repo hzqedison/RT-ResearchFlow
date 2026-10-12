@@ -1,6 +1,8 @@
 import { test, expect, _electron as electron } from '@playwright/test'
 import { mkdirSync, mkdtempSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { isolatedPackagedExecutable } from './isolatedPackagedExecutable'
+import { observePackagedProcess, waitForPackagedRuntime } from './packagedRuntimeObservation'
 test('packaged rolling protocol can recover a failed save without permanently locking its form', async () => {
   test.setTimeout(90000)
   const executable = process.env.RT_PACKAGED_EXE, root = process.env.RT_PACKAGED_TEST_ROOT
@@ -9,10 +11,15 @@ test('packaged rolling protocol can recover a failed save without permanently lo
   if (process.platform === 'darwin' && process.env.GITHUB_ACTIONS !== 'true') throw Error('MAC_ROLLING_REQUIRES_ISOLATED_CI')
   mkdirSync(root, { recursive: true }); const profile = mkdtempSync(join(root, 'rolling-recovery-'))
   const { ELECTRON_RUN_AS_NODE: _node, ELECTRON_RENDERER_URL: _url, NODE_PATH: _path, NODE_OPTIONS: _options, ...env } = process.env
-  const app = await electron.launch({ executablePath: executable, args: [`--user-data-dir=${profile}`], env })
+  const isolatedExecutable = isolatedPackagedExecutable(executable, profile)
+  const app = await electron.launch({ executablePath: isolatedExecutable, args: [`--user-data-dir=${profile}`], env })
+  const reportProcess = observePackagedProcess(app), errors: string[] = []
   try {
-    const page = await app.firstWindow(); await expect(page.getByTestId('nav-tab-feed')).toBeVisible({ timeout: 30000 })
-    expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true); expect(await app.evaluate(({ app }) => app.getVersion())).toBe(process.env.RT_PACKAGED_VERSION)
+    const page = await app.firstWindow(); page.on('pageerror', error => errors.push(error.message))
+    await expect(page.getByTestId('nav-tab-feed')).toBeVisible({ timeout: 30000 })
+    const runtime = await waitForPackagedRuntime(app, process.env.RT_PACKAGED_VERSION!)
+    const actual = resolve(runtime.dataPath), expected = process.platform === 'win32' ? resolve(dirname(isolatedExecutable), 'data') : resolve(profile)
+    expect(process.platform === 'win32' ? actual.toLowerCase() : actual).toBe(process.platform === 'win32' ? expected.toLowerCase() : expected)
     await app.evaluate(({ app }) => {
       const load = process.mainModule!.require.bind(process.mainModule!), path = load('node:path'), Database = load(path.join(app.getAppPath(), 'node_modules/better-sqlite3'))
       const db = new Database(path.join(app.getPath('userData'), 'trade-watch.db'))
@@ -51,7 +58,16 @@ test('packaged rolling protocol can recover a failed save without permanently lo
     await panel.getByRole('button', { name: '按编号恢复', exact: true }).click()
     await expect(panel.getByLabel('滚动验证起始日', { exact: true })).toBeEnabled()
     await expect(panel.getByRole('button', { name: '保存新验证协议', exact: true })).toBeEnabled()
+    await expect(panel.getByRole('button', { name: '按编号恢复', exact: true })).toHaveCount(0)
+    await expect(panel.getByRole('alert')).toContainText('参数已保留')
+    await expect(panel.getByLabel('滚动验证起始日', { exact: true })).toHaveValue('2026-06-01')
+    await expect(panel.getByLabel('每窗研究预算', { exact: true })).toHaveValue('100000')
     await panel.getByRole('button', { name: '保存新验证协议', exact: true }).click()
     await expect(panel.getByTestId('rolling-validation-report')).toContainText('报告 0 / 2')
-  } finally { await app.close() }
+    const persisted = await page.evaluate(() => window.api.rollingValidation.list())
+    expect(persisted.ok).toBe(true)
+    if (persisted.ok) expect(persisted.data).toHaveLength(1)
+    expect(errors).toEqual([])
+  } catch (error) { reportProcess(); throw error }
+  finally { await app.close() }
 })
