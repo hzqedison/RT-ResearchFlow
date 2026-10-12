@@ -29,7 +29,22 @@ the underlying task settles, even if a transport ignores abort.
 - The actual Windows application-directory suite passed all three quit
   cases (public history, synthetic private history and standalone calendar)
   in 9.8 seconds. Calendar row count and full-content hash were unchanged.
-- Revised native Apple Silicon and Intel checks: pending.
+- Revised native Apple Silicon and Intel application-directory suites
+  passed all three cases. Run `38187750694` succeeded for source commit
+  `a514f2e8ee39bf39857c5206fe4aa74b86f7f8a4`; ARM took 2m28s and Intel 3m52s.
+
+All eight downloaded JSON files were inspected. Both summaries match the
+source commit, run ID and native architecture, and explicitly deny release
+eligibility, installer verification, real authentication and order submission.
+Both calendar proofs retain 1,096 rows with the same before/after SHA-256:
+
+`f03d5bf54e3e285d654765b797ac9bb5a18fa0c2b814b0b35da1df2425fab023`
+
+Each calendar request aborted once (77ms ARM, 143ms Intel), with normal
+quit observed. Public proofs retain the pending checkpoint and partial job
+with zero written prices; private-history proofs retain zero interrupted-day
+prices and zero processed/failed/synced progress. These are synthetic tests,
+not market-data entitlement or broker connectivity evidence.
 
 The new packaged check uses the actual trusted diagnostics entry point,
 an OS-encrypted synthetic credential in isolated storage, and a controlled

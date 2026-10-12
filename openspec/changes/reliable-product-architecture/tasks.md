@@ -127,3 +127,7 @@ Mac 取消诊断首轮 Intel 成功、Apple 前置失败；修订测试观察与
 - [x] Mac arm64 与 x64 分别使用真实 OS Keychain 验证单提供方凭证保存、应用退出重启后读取与凭证状态，明确区分无 Key 配置和 mock 密钥路径；仅记录脱敏结果，不导出凭证原文。
 
 - [x] 8.4 明确保留 Tushare 绑定入口，新增只读验证、已绑定凭证复查与权限分级；1.11 三平台安装包和本机覆盖验收通过。有效用户 Key 暂缺，不冒充已完成线上认证。证据：docs/quality/1.11-publication.md。
+
+### Partial 4.4: independently started calendar work
+
+Dedicated calendar ownership now stops admission, aborts requests and waits for actual settlement at application quit. Seven new ownership cases plus existing cancellation tests passed (119 total); actual Windows and both native Mac architectures passed standalone-calendar, public-history and synthetic-private-history quit cases. Run 38187750694 proofs match source a514f2e8ee39bf39857c5206fe4aa74b86f7f8a4 and preserve the complete calendar hash. Full 4.4 remains unchecked: this does not audit every service or prove whole-product shutdown. Known rolling recovery defect remains unresolved; no 1.18 publication. Evidence: docs/quality/calendar-shutdown-1.18-candidate.md.
