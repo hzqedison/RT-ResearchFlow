@@ -15,6 +15,7 @@ import type {
   MoneyFlowDailyRow
 } from '../database/types'
 import { withRetry } from '../utils/retry'
+import { describePublicDataFailure } from '../utils/publicDataFailure'
 import {
   inspectTrendBenchmarkHealth,
   type TrendBenchmarkErrorCode,
@@ -276,7 +277,7 @@ export async function fetchEastmoneySingleStockDaily(
 
     const response = await withRetry(() => fetch(url.toString()))
     if (!response.ok) {
-      return { ok: false, code: 'FETCH_FAILED', message: '公开行情请求失败，请稍后重试' }
+      return { ok: false, code: 'FETCH_FAILED', message: describePublicDataFailure(undefined, response.status) }
     }
     const json = (await response.json()) as EastmoneyKlineResponse
     const rows = parseEastmoneyDailyRows(normalized.stockCode, json.data?.klines ?? [], Date.now())
@@ -345,8 +346,8 @@ export async function fetchEastmoneySingleStockDaily(
       benchmark,
       message: `东方财富公开行情 · 截至 ${formatTradeDate(latestTradeDate)} · ${coverage}${benchmarkGap}`,
     }
-  } catch {
-    return { ok: false, code: 'FETCH_FAILED', message: '公开行情请求失败，请稍后重试' }
+  } catch (error) {
+    return { ok: false, code: 'FETCH_FAILED', message: describePublicDataFailure(error) }
   }
 }
 

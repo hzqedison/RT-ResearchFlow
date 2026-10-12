@@ -57,6 +57,37 @@ describe('FR-252 zero-key single-stock daily fetch', () => {
     db.close()
   })
 
+  it.each([403, 429])('reports HTTP %s without reading or exposing a response body', async (status) => {
+    const json = vi.fn(async () => ({ token: 'SECRET' }))
+    fetchMock.mockResolvedValue({ ok: false, status, json })
+    const result = await fetchEastmoneySingleStockDaily(db, '600519')
+    expect(result).toMatchObject({ ok: false, code: 'FETCH_FAILED' })
+    expect(result.message).toContain('HTTP ' + status)
+    expect(result.message).not.toContain('SECRET')
+    expect(json).not.toHaveBeenCalled()
+    expect(db.prepare('SELECT COUNT(*) AS count FROM stock_price_cache').get()).toEqual({ count: 0 })
+  })
+
+  it('reports a nested socket interruption without leaking request details', async () => {
+    fetchMock.mockRejectedValue(Object.assign(new Error('Token=SECRET Cookie=SECRET'), { cause: { code: 'UND_ERR_SOCKET' } }))
+    const result = await fetchEastmoneySingleStockDaily(db, '600519')
+    expect(result).toMatchObject({ ok: false, code: 'FETCH_FAILED' })
+    expect(result.message).toContain('连接中断')
+    expect(result.message).not.toMatch(/SECRET|Cookie/)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(db.prepare('SELECT COUNT(*) AS count FROM stock_price_cache').get()).toEqual({ count: 0 })
+  }, 15_000)
+
+  it('reports invalid JSON without copying the parser payload', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => { throw new SyntaxError('SECRET') } })
+    const result = await fetchEastmoneySingleStockDaily(db, '600519')
+    expect(result).toMatchObject({ ok: false, code: 'FETCH_FAILED' })
+    expect(result.message).toContain('解析')
+    expect(result.message).not.toContain('SECRET')
+    expect(db.prepare('SELECT COUNT(*) AS count FROM stock_price_cache').get()).toEqual({ count: 0 })
+  })
+
+
   it('caps the response at 149 bars and writes the same facts to both existing caches', async () => {
     fetchMock.mockResolvedValue({
       ok: true,

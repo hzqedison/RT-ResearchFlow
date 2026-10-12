@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { describePublicDataFailure } from '../utils/publicDataFailure'
 import { getDataSourceConfig, getMultiSourcePreference } from '../database/dataSourceRepository'
 import { getCachedPrices, getStockInfo, insertPrices, upsertStockInfo } from '../database/stockPriceCacheRepository'
 import { upsertDailyClose } from '../database/dailyCloseCacheRepository'
@@ -136,7 +137,7 @@ export async function fetchSelectedStockDaily(
       }
     } catch (error) {
       // Do not retain upstream exception bodies that could contain a Token or Cookie.
-      failures.push(provider + ': ' + (error instanceof Error && /^(Tushare 未|未返回)/.test(error.message) ? error.message : '连接、权限或接口不可用'))
+      failures.push(provider + ': ' + describePublicDataFailure(error))
     }
   }
   throw new Error(providers.length === 0 ? '请至少选择一个日线数据源' : '所选日线来源均未完成取数：' + failures.join('；'))
