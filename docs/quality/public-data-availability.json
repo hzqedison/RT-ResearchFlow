@@ -70,8 +70,92 @@
     "Whole-market initialization and completeness",
     "Auction, chip and minute data",
     "Live Tushare authentication and account entitlements",
-    "End-to-end free strategy live test (fixture variable collision pending correction)",
-    "Real broker acceptance, execution or cancellation"
+    "Real broker acceptance, execution or cancellation",
+    "Pending Playwright live harness integration: exit-variable collision still requires correction"
   ],
-  "interpretation": "Tencent and Sina each returned 480 written rows in these samples. Eastmoney daily failed before an HTTP response under both tested parameter sets; this is not proof of permanent unavailability. These probes do not attest that all product modules are usable."
+  "interpretation": "Tencent and Sina each returned 480 written daily rows in the sampled stocks. Eastmoney report indexing returned 50 fresh metadata records; native public limit-pool retrieval returned 46 source-dated rows. Actual packaged IPC saved those rows and completed all three built-in public rules without synthetic market or calendar injection. The pool remains partial because same-day local daily-price cross-checking is incomplete. Eastmoney daily still failed before an HTTP response under both tested parameter sets. This is not proof of permanent source unavailability, all product modules being usable, Mac connectivity, or released 1.20 source connectivity.",
+  "additionalProbes": {
+    "researchReports": {
+      "provider": "eastmoney-reports",
+      "stockCode": "600519",
+      "ok": true,
+      "rows": 50,
+      "metadataOnly": true,
+      "reportNetworkObserved": true,
+      "cacheBefore": {
+        "exists": false,
+        "rows": 0,
+        "fetchedAt": null
+      },
+      "cacheAfter": {
+        "exists": true,
+        "rows": 50,
+        "fetchedAt": 1791793827707
+      }
+    },
+    "publicLimitPool": {
+      "provider": "akshare-limit-pool",
+      "requestedDate": "20261012",
+      "ok": true,
+      "rows": 46,
+      "message": "源站声明日期 20261012，取得 46 条，拒收 0 条。免 Key、免 Python；未写入缓存，不代表全市场覆盖。"
+    }
+  },
+  "productWorkflows": {
+    "publicLimitRuleSelection": {
+      "driver": "ad-hoc actual packaged IPC acceptance; not the pending Playwright harness",
+      "date": "20261012",
+      "calendarBefore": {
+        "cal_date": "20261012",
+        "is_open": 1
+      },
+      "calendarAfter": {
+        "cal_date": "20261012",
+        "is_open": 1
+      },
+      "calendarFixtureInjected": false,
+      "marketRowsMocked": false,
+      "saved": {
+        "ok": true,
+        "rows": 46,
+        "quality": "partial",
+        "dateBasis": "source-reported",
+        "priceCheck": "not-complete",
+        "message": "已保存 46 条独立公开涨停资料；源站声明日期 20261012；本地同日日线未完整核对。不代表全市场涨跌停、竞价或筹码齐备；未提交交易。"
+      },
+      "cache": {
+        "source": "eastmoney_public",
+        "tradeDate": "20261012",
+        "dateBasis": "source-reported",
+        "priceCheck": "not-complete",
+        "rows": 46
+      },
+      "rules": [
+        {
+          "strategy": "builtin-public-limit-continuous",
+          "matched": 1,
+          "totalStocks": 46,
+          "evidenceDate": "20261012",
+          "unsupportedBacktestRejected": true
+        },
+        {
+          "strategy": "builtin-public-limit-secondBoard",
+          "matched": 11,
+          "totalStocks": 46,
+          "evidenceDate": "20261012",
+          "unsupportedBacktestRejected": true
+        },
+        {
+          "strategy": "builtin-public-limit-earlyFirst",
+          "matched": 11,
+          "totalStocks": 46,
+          "evidenceDate": "20261012",
+          "unsupportedBacktestRejected": true
+        }
+      ],
+      "normalExit": true,
+      "pageErrors": [],
+      "passed": true
+    }
+  }
 }
