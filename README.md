@@ -1,29 +1,23 @@
 <h1 align="center">RT-ResearchFlow</h1>
 
-## 1.22 候选：取数失败解释（尚未发布）
-
-本轮仅修正现有日线取数失败提示：区分连接中断、超时、域名解析、安全连接、HTTP 拒绝和限流、响应解析及无有效数据。保持多源顺序回退，不改交易逻辑、数据库或凭证。原始异常正文、Key、Cookie 和路径不进入提示。候选正在验收；下方 1.21 仍是当前正式下载版本。提示改善不等于公开接口故障已经修复。
-
 <!-- CURRENT-RELEASE-START -->
-## 当前正式版本：1.21
+## RT-ResearchFlow 1.22
 
-Windows 与两种 Mac 是同一产品，选择对应系统和芯片的安装包即可：
+已有日线取数失败现在会区分网络中断、超时、接口拒绝与限流、响应解析和缺少凭证，并保持多源顺序回退。提示只输出固定安全说明，不复制上游异常正文。
 
-- [Windows x64 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.21.0/RT-ResearchFlow-Setup-1.21.0-x64.exe)
-- [Mac Apple Silicon 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.21.0/RT-ResearchFlow-macOS-1.21.0-arm64.dmg)
-- [Mac Intel 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.21.0/RT-ResearchFlow-macOS-1.21.0-x64.dmg)
+三端安装包与 Windows 安装生命周期检查已通过，发布流程复用同一批产物。公开下载状态以[正式发布页](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.22.0)为准：
 
-**免费短线入口**：配置中心 → 数据源 → 选择已收盘交易日 → 同步免费涨停池；再到短线策略 → 策略实验室使用免费早封首板、二板观察或连板观察。无需 Tushare Key 或 Python。
+- [Windows x64 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/RT-ResearchFlow-Setup-1.22.0-x64.exe)
+- [Mac Apple Silicon 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/RT-ResearchFlow-macOS-1.22.0-arm64.dmg)
+- [Mac Intel 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/RT-ResearchFlow-macOS-1.22.0-x64.dmg)
 
-**凭证绑定入口**：配置中心 → 数据源 → Tushare Key 绑定与验证。大模型 API Key 在 AI 配置中单独绑定。保存凭证不等于拥有所有专业接口权限。
+**免费短线入口**：配置中心 → 数据源 → 选择已收盘交易日 → 同步免费涨停池；再到短线策略 → 策略实验室选择免费早封首板、二板观察或连板观察。
 
-正式 1.21 三端此前的 9 项真实联网测试通过：取得真实涨停事实、运行三个免费规则，并验证无 Tushare Key 时腾讯接替、行情缓存和图表摘要。查看[此前实际使用测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38266366006)。最新加入凭证入口检查后，Windows 与 Apple Silicon 各 4 项通过，Intel Mac 3 项通过、东方财富日线 1 项失败；整轮为 **11 项通过、1 项失败**。Tushare 绑定入口三端均可见，空 Key 不能绑定，草稿不自动保存。[最新测试与失败日志](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38267640795) · [脱敏回执](https://github.com/hzqedison/RT-ResearchFlow/blob/codex/release-1.21/docs/quality/released-tushare-entry-1.21.json)。
+**凭证入口**：配置中心 → 数据源 → Tushare Key 绑定与验证；大模型 Key 在 AI 配置中单独绑定。保存 Key 不代表全部专业接口获授权。
 
-Windows 本机此前仍出现东方财富日线连接重置，隔离 Windows 环境未复现；不能把隔离测试成功当作所有网络环境可用的保证。
+[1.22 更新内容与限制](docs/releases/v1.22.0.md) · [三端安装包检查](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38271118933) · [安装与保留数据检查](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38271480469)
 
-[正式版更新说明](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.21.0) · [验收记录](docs/quality/public-data-availability.json)
-
-专业竞价、龙虎榜、筹码和完整历史底座仍需独立数据与权限。本轮未验证真实用户 Tushare/模型 Key 或券商成交，不把规则扫描当作实盘委托。
+公开行情仍可能受连接中断或限流影响；保留腾讯或新浪作为备用来源。专业竞价、龙虎榜、筹码和完整历史底座需要独立数据与权限。本轮没有证明真实用户 Key、所有迁移路径、Apple 公证或券商实盘成交。
 <!-- CURRENT-RELEASE-END -->
 <p align="center"><strong>从市场线索到研究、验证、执行与复盘，一个工作台完成。</strong></p>
 <p align="center">多来源行情 · AI 研究 · 研报与选股 · 策略验证 · 本人确认交易 · 本地研究记录</p>
