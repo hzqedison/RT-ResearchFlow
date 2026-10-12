@@ -65,13 +65,11 @@
     "fileBlobSha": "eee3667df6fea86e76bef4b0874502d11bc4946d"
   },
   "notVerified": [
-    "Released 1.20.0 package source connectivity",
     "Mac source connectivity",
     "Whole-market initialization and completeness",
     "Auction, chip and minute data",
     "Live Tushare authentication and account entitlements",
-    "Real broker acceptance, execution or cancellation",
-    "Pending Playwright live harness integration: exit-variable collision still requires correction"
+    "Real broker acceptance, execution or cancellation"
   ],
   "interpretation": "Tencent and Sina each returned 480 written daily rows in the sampled stocks. Eastmoney report indexing returned 50 fresh metadata records; native public limit-pool retrieval returned 46 source-dated rows. Actual packaged IPC saved those rows and completed all three built-in public rules without synthetic market or calendar injection. The pool remains partial because same-day local daily-price cross-checking is incomplete. Eastmoney daily still failed before an HTTP response under both tested parameter sets. This is not proof of permanent source unavailability, all product modules being usable, Mac connectivity, or released 1.20 source connectivity. Normal visible UI controls also completed each of the three free rules exactly once per click, displayed the actual result counts, and opened evidence containing the selected stock code and input date. The initial UI observation failed on an incorrect test locator, not a demonstrated product defect.",
   "additionalProbes": {
@@ -211,5 +209,237 @@
       "productCodeChanged": false,
       "correctedUsingObservedVisibleText": true
     }
+  },
+  "liveHarnessValidation": {
+    "driver": "Playwright tests/e2e/free-limit-lab-live.spec.ts",
+    "packagedVersion": "1.21.0",
+    "releaseCandidate": true,
+    "passed": true,
+    "durationSeconds": 5.3,
+    "date": "20261012",
+    "inputRows": 46,
+    "source": "eastmoney_public",
+    "sourceDate": "20261012",
+    "calendarGate": "synthetic-fixture",
+    "publicNetworkUsed": true,
+    "actualPackagedIpc": true,
+    "reports": [
+      {
+        "strategy": "builtin-public-limit-continuous",
+        "matched": 1
+      },
+      {
+        "strategy": "builtin-public-limit-secondBoard",
+        "matched": 11
+      },
+      {
+        "strategy": "builtin-public-limit-earlyFirst",
+        "matched": 11
+      }
+    ],
+    "normalExit": true,
+    "productionUserDataTouched": false,
+    "brokerOrdersSubmitted": false
+  },
+  "guidanceUnitValidation": {
+    "file": "tests/unit/shortTermDataToolsGuidance.test.tsx",
+    "passed": 3,
+    "failed": 0,
+    "professionalSyncGatePreserved": true,
+    "realNetworkUsed": false,
+    "packagedUiChangeVerified": false
+  },
+  "releasedPackageValidation": {
+    "version": "1.20.0",
+    "releaseCandidate": false,
+    "installer": {
+      "name": "RT-ResearchFlow-Setup-1.20.0-x64.exe",
+      "bytes": 176029911,
+      "sha256": "56f7c6242beb249124ac042f95106c821cf029b9dea4a92bbf35dbc10f8d2b89",
+      "sizeAndHashMatchedPublishedAsset": true,
+      "installerExecuted": false
+    },
+    "isolatedOnDrive": "D:",
+    "productionUserDataTouched": false,
+    "brokerOrdersSubmitted": false,
+    "providerProbes": {
+      "results": [
+        {
+          "provider": "tencent",
+          "stockCode": "000001",
+          "ok": true,
+          "rows": 480,
+          "latestTradeDate": "20261012",
+          "message": "tencent · 截至 20261012 · 480 日",
+          "elapsedMs": 1088
+        },
+        {
+          "provider": "eastmoney",
+          "stockCode": "600519",
+          "ok": false,
+          "rows": 0,
+          "latestTradeDate": null,
+          "message": "所选日线来源均未完成取数：eastmoney: 连接、权限或接口不可用",
+          "elapsedMs": 4361
+        },
+        {
+          "provider": "sina",
+          "stockCode": "600000",
+          "ok": true,
+          "rows": 480,
+          "latestTradeDate": "20261012",
+          "message": "sina · 截至 20261012 · 480 日",
+          "elapsedMs": 1770
+        }
+      ],
+      "passed": 2,
+      "total": 3,
+      "allProvidersPassed": false,
+      "normalExit": true
+    },
+    "publicLimitProductWorkflow": {
+      "kind": "public-limit-product-workflow",
+      "packagedVersion": "1.20.0",
+      "releaseCandidate": false,
+      "date": "20261012",
+      "actualPackagedIpc": true,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false,
+      "userCredentialUsed": false,
+      "calendarFixtureInjected": false,
+      "marketRowsMocked": false,
+      "reports": [
+        {
+          "strategy": "builtin-public-limit-continuous",
+          "matched": 1,
+          "totalStocks": 46,
+          "evidenceDate": "20261012",
+          "unsupportedBacktestRejected": true
+        },
+        {
+          "strategy": "builtin-public-limit-secondBoard",
+          "matched": 11,
+          "totalStocks": 46,
+          "evidenceDate": "20261012",
+          "unsupportedBacktestRejected": true
+        },
+        {
+          "strategy": "builtin-public-limit-earlyFirst",
+          "matched": 11,
+          "totalStocks": 46,
+          "evidenceDate": "20261012",
+          "unsupportedBacktestRejected": true
+        }
+      ],
+      "calendarBefore": {
+        "cal_date": "20261012",
+        "is_open": 1
+      },
+      "calendarAfter": {
+        "cal_date": "20261012",
+        "is_open": 1
+      },
+      "saved": {
+        "ok": true,
+        "tradeDate": "20261012",
+        "rows": 46,
+        "quality": "partial",
+        "verifiedAt": 1791797705421,
+        "dateBasis": "source-reported",
+        "priceCheck": "not-complete",
+        "message": "已保存 46 条独立公开涨停资料；源站声明日期 20261012；本地同日日线未完整核对。不代表全市场涨跌停、竞价或筹码齐备；未提交交易。"
+      },
+      "cache": {
+        "source": "eastmoney_public",
+        "tradeDate": "20261012",
+        "dateBasis": "source-reported",
+        "priceCheck": "not-complete",
+        "rows": 46
+      },
+      "normalExit": true,
+      "pageErrors": [],
+      "failure": null,
+      "passed": true
+    },
+    "publicLimitUserInterface": {
+      "kind": "isolated-free-rule-ui-acceptance",
+      "version": "1.20.0",
+      "releaseCandidate": false,
+      "uiChecks": [
+        {
+          "strategy": "builtin-public-limit-earlyFirst",
+          "label": "免费 · 早封首板",
+          "runEnabledWithoutKey": true,
+          "newRunCount": 1,
+          "completed": true,
+          "displayedMatches": 11,
+          "evidenceOpened": true,
+          "visibleEvidenceCode": "301419",
+          "visibleEvidenceDate": "20261012"
+        },
+        {
+          "strategy": "builtin-public-limit-secondBoard",
+          "label": "免费 · 二板观察",
+          "runEnabledWithoutKey": true,
+          "newRunCount": 1,
+          "completed": true,
+          "displayedMatches": 11,
+          "evidenceOpened": true,
+          "visibleEvidenceCode": "601595",
+          "visibleEvidenceDate": "20261012"
+        },
+        {
+          "strategy": "builtin-public-limit-continuous",
+          "label": "免费 · 连板观察",
+          "runEnabledWithoutKey": true,
+          "newRunCount": 1,
+          "completed": true,
+          "displayedMatches": 1,
+          "evidenceOpened": true,
+          "visibleEvidenceCode": "600825",
+          "visibleEvidenceDate": "20261012"
+        }
+      ],
+      "normalExit": true,
+      "pageErrors": [],
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false
+    },
+    "livePlaywrightHarness": {
+      "kind": "packaged-free-limit-lab-live",
+      "version": "1.20.0",
+      "date": "20261012",
+      "reports": [
+        {
+          "strategy": "builtin-public-limit-continuous",
+          "matched": 1
+        },
+        {
+          "strategy": "builtin-public-limit-secondBoard",
+          "matched": 11
+        },
+        {
+          "strategy": "builtin-public-limit-earlyFirst",
+          "matched": 11
+        }
+      ],
+      "source": "eastmoney_public",
+      "sourceDate": "20261012",
+      "inputRows": 46,
+      "calendarGate": "synthetic-fixture",
+      "publicNetworkUsed": true,
+      "actualPackagedIpc": true,
+      "normalExit": true,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false,
+      "passed": true,
+      "durationSeconds": 4.3
+    },
+    "notProven": [
+      "Mac equivalence",
+      "Whole-market initialization",
+      "Professional Tushare data availability",
+      "Real broker execution"
+    ]
   }
 }

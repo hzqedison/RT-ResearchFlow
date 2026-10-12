@@ -242,9 +242,12 @@ export function ShortTermDataToolsDrawer({
         </section>
 
         <section aria-label="短线数据同步指引" className="rounded-md border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">第一次同步怎么做</h3>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">免费观察与专业同步怎么做</h3>
+          <p data-testid="short-term-free-sync-guidance" className="mt-2 text-xs leading-5 text-cyan-800 dark:text-cyan-200">
+            无 Key 可先体验：在「配置中心 → 数据源」选择已收盘交易日并同步免费涨停池，再到「短线策略 → 策略实验室」使用免费早封首板、二板观察或连板观察模板。无需 Tushare Key 或 Python；这条路径不补齐集合竞价、龙虎榜、筹码或完整题材数据。
+          </p>
           <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-xs leading-5 text-slate-600 dark:text-slate-300">
-            <li>在「配置中心 → 数据源」启用 Tushare、保存 Token，再点击下方「刷新配置状态」。配置已保存不代表已获得所有接口权限。</li>
+            <li>需要以下 Tushare 专业数据时，在「配置中心 → 数据源」的「Tushare Key 绑定与验证」入口启用 Tushare、保存 Token，再点击下方「刷新配置状态」。配置已保存不代表已获得所有接口权限。</li>
             <li>选择题材来源，点击对应题材同步按钮；开盘啦使用「同步全量股票题材」。切换来源不会自动补齐本地数据。</li>
             <li>需要涨停、龙虎榜等盘后数据时，另外点击「同步盘后基础数据」。等待结果回执，而不是仅看进度是否达到 100%。</li>
             <li>到「配置中心 → 诊断」查看缺失项。题材、日线与集合竞价是独立数据，题材同步不能代替竞价历史补齐。</li>
@@ -260,7 +263,7 @@ export function ShortTermDataToolsDrawer({
 
         <section className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
           <div className="flex items-center justify-between gap-3">
-            <p role="status">{checkingTushare ? '正在检查 Tushare 配置…' : tushareCheckError ?? (tushareReady === true ? 'Tushare 已启用且已配置；接口权限尚未验证。' : tushareReady === false ? 'Tushare 未启用或尚未配置，暂时无法提交同步。' : 'Tushare 配置状态尚未确认。')}</p>
+            <p role="status">{checkingTushare ? '正在检查 Tushare 配置…' : tushareCheckError ?? (tushareReady === true ? 'Tushare 已启用且已配置；接口权限尚未验证。' : tushareReady === false ? 'Tushare 未启用或尚未配置，本页专业同步暂不可用；免费涨停规则可单独使用。' : 'Tushare 配置状态尚未确认。')}</p>
             <button type="button" onClick={onRefreshTushareStatus} disabled={checkingTushare} className="shrink-0 rounded border border-amber-300 px-2 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700">
               {checkingTushare ? '检查中…' : '刷新配置状态'}
             </button>
