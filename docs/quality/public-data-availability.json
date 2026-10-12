@@ -467,5 +467,42 @@
       "realVendorKeyUsed": false,
       "realModelInvocationVerified": false
     }
+  },
+  "dailyTransportFollowup": {
+    "scope": "Windows Node 20.18.0, read-only public historical daily endpoint",
+    "endpoint": "https://push2his.eastmoney.com/api/qt/stock/kline/get",
+    "stockCode": "600519",
+    "dateRange": [
+      "20260901",
+      "20261012"
+    ],
+    "results": [
+      {
+        "mode": "ipv4-browser-headers",
+        "ok": false,
+        "code": "ECONNRESET",
+        "elapsedMs": 237
+      },
+      {
+        "mode": "ipv4-tls12-browser-headers",
+        "ok": false,
+        "code": "ECONNRESET",
+        "elapsedMs": 191
+      }
+    ],
+    "normalProcessExit": true,
+    "realCredentialUsed": false,
+    "brokerOrdersSubmitted": false,
+    "interpretation": "Both attempts reset before an HTTP response. This is not proof of a Tushare credential problem or global Eastmoney unavailability. Tencent and Sina have separately passed real packaged daily probes; Eastmoney remains unavailable in the observed Windows environment."
+  },
+  "macVerificationInvestigation": {
+    "existingWorkflow": ".github/workflows/data-source-native.yml",
+    "livePublicRequestsEnabled": false,
+    "workflowEnvironment": {
+      "RT_PUBLIC_LIMIT_LIVE": "0"
+    },
+    "fullBuildDispatched": false,
+    "scope": "Offline native dependency and contract tests are not evidence of released Mac public-provider connectivity.",
+    "releasedLiveTestsCompleted": false
   }
 }
