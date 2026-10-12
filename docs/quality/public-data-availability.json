@@ -440,6 +440,32 @@
       "Whole-market initialization",
       "Professional Tushare data availability",
       "Real broker execution"
-    ]
+    ],
+    "configurationUiAcceptance": {
+      "spec": "tests/e2e/packaged-startup.spec.ts",
+      "passed": 1,
+      "failed": 0,
+      "durationSeconds": 5.5,
+      "tushareKeyBindingEntryVisible": true,
+      "multiSourceEntryVisible": true,
+      "unboundKeySubmissionDisabled": true,
+      "aiConfigurationEntryVisible": true,
+      "normalExit": true,
+      "realTushareAuthenticationVerified": false
+    },
+    "aiCredentialUiAcceptance": {
+      "spec": "tests/e2e/packaged-ai-credentials.spec.ts",
+      "passed": 1,
+      "failed": 0,
+      "durationSeconds": 9.2,
+      "fixture": "synthetic-loopback",
+      "partialSaveRetainsOtherDrafts": true,
+      "localCredentialAvailableAfterRestart": true,
+      "plaintextKeyNotReturnedToRenderer": true,
+      "credentialRemovalSurvivesRestart": true,
+      "normalExit": true,
+      "realVendorKeyUsed": false,
+      "realModelInvocationVerified": false
+    }
   }
 }
