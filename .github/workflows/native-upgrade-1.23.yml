@@ -1,0 +1,172 @@
+name: Approved 1.22 to 1.23 native upgrade (no rebuild)
+on:
+  push:
+    branches: [codex/release-1.23]
+    paths: [.github/workflows/native-upgrade-1.23.yml, tests/e2e/native-version-upgrade-1.23.spec.ts]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: native-upgrade-1.23
+  cancel-in-progress: false
+env:
+  RT_UPGRADE_SOURCE_COMMIT: 40936bd9d41d92c5ffa3aaef370bf29ca505dd71
+  RT_UPGRADE_BUILD_RUN: '38295084489'
+jobs:
+  require_tested_packages:
+    if: github.repository == 'hzqedison/RT-ResearchFlow'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Wait for the specific native build and require exact successful source
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run watch "$RT_UPGRADE_BUILD_RUN" --repo "$GITHUB_REPOSITORY" --exit-status --interval 30
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RT_UPGRADE_BUILD_RUN" > native.json
+          jq -e --arg sha "$RT_UPGRADE_SOURCE_COMMIT" '.status == "completed" and .conclusion == "success" and .head_sha == $sha and .path == ".github/workflows/public-on-demand-macos.yml" and .repository.full_name == "hzqedison/RT-ResearchFlow"' native.json
+  upgrade:
+    needs: require_tested_packages
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+            arch: x64
+            oldBytes: 176041607
+            oldSha: 18230fc1183ea36f96a208c7307b2d2abda3544aacf17bc3edbba1ccd905c0f4
+            artifact: public-windows-x64
+          - os: macos-15
+            platform: darwin
+            arch: arm64
+            oldBytes: 201789027
+            oldSha: b7b5d0bb0dd8fc2c2f19e45c780822a234f7bb09d7eefafae996239571fd84d7
+            artifact: public-mac-arm64
+          - os: macos-15-intel
+            platform: darwin
+            arch: x64
+            oldBytes: 209900210
+            oldSha: 8b59b8076818997b3404e5af9c0df8eed37b6e484a8d1ae332b0483b0e8939c5
+            artifact: public-mac-x64
+    env:
+      RT_NATIVE_UPGRADE_ALLOWED: '1'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.18.0
+      - uses: actions/download-artifact@v4
+        with:
+          repository: hzqedison/RT-ResearchFlow
+          run-id: ${{ env.RT_UPGRADE_BUILD_RUN }}
+          github-token: ${{ github.token }}
+          name: ${{ matrix.artifact }}-${{ env.RT_UPGRADE_SOURCE_COMMIT }}
+          path: tested-upgrade-package
+      - name: Verify tested installer and operation receipt
+        shell: bash
+        env:
+          TARGET_PLATFORM: ${{ matrix.platform }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto')
+          const label=process.env.TARGET_PLATFORM+'-'+process.env.TARGET_ARCH,root='tested-upgrade-package'
+          const r=JSON.parse(fs.readFileSync(path.join(root,'acceptance-'+label+'.json'),'utf8'))
+          const ui=JSON.parse(fs.readFileSync(path.join(root,'data-source-ui-acceptance-'+label+'.json'),'utf8'))
+          const name=process.env.TARGET_PLATFORM==='win32'?'RT-ResearchFlow-Setup-1.23.0-x64.exe':'RT-ResearchFlow-macOS-1.23.0-'+process.env.TARGET_ARCH+'.dmg'
+          if(r.version!=='1.23.0'||r.sourceCommit!==process.env.RT_UPGRADE_SOURCE_COMMIT||String(r.runId)!==process.env.RT_UPGRADE_BUILD_RUN||r.file!==name||r.platform!==process.env.TARGET_PLATFORM||r.arch!==process.env.TARGET_ARCH||r.packagedStartupAndExit!==true)throw Error('UPGRADE_NATIVE_RECEIPT_MISMATCH')
+          if(ui.version!=='1.23.0'||ui.sourceCommit!==process.env.RT_UPGRADE_SOURCE_COMMIT||ui.platform!==process.env.TARGET_PLATFORM||ui.arch!==process.env.TARGET_ARCH||ui.normalExit!==true||ui.stableSaveButton!==true||ui.oldReportsCleared!==true||ui.oldWencaiResultsCleared!==true||ui.classifiedDailyFailureVisible!==true||ui.brokerOrdersSubmitted!==false)throw Error('UPGRADE_OPERATION_RECEIPT_MISMATCH')
+          const bytes=fs.readFileSync(path.join(root,name))
+          if(bytes.length!==r.size||crypto.createHash('sha256').update(bytes).digest('hex')!==r.sha256)throw Error('UPGRADE_INSTALLER_BYTES_MISMATCH')
+          NODE
+      - name: Install baseline Windows version then upgrade the same directory
+        if: matrix.platform == 'win32'
+        shell: pwsh
+        env:
+          OLD_BYTES: ${{ matrix.oldBytes }}
+          OLD_SHA: ${{ matrix.oldSha }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $root='D:\rt-version-upgrade-'+$env:GITHUB_RUN_ID
+          if(Test-Path -LiteralPath $root){throw 'UPGRADE_ROOT_ALREADY_EXISTS'}
+          New-Item -ItemType Directory -Path "$root\download","$root\proof" | Out-Null
+          $tools=Join-Path $root 'driver'
+          npm install --prefix $tools --ignore-scripts --no-audit --no-fund @playwright/test@1.58.2
+          if($LASTEXITCODE -ne 0){throw 'UPGRADE_DRIVER_INSTALL_FAILED'}
+          if(Test-Path -LiteralPath 'node_modules'){throw 'UNEXPECTED_UPGRADE_DEPENDENCIES'}
+          New-Item -ItemType Junction -Path 'node_modules' -Target (Join-Path $tools 'node_modules') | Out-Null
+          gh release download v1.22.0 --repo $env:GITHUB_REPOSITORY --pattern 'RT-ResearchFlow-Setup-1.22.0-x64.exe' --dir "$root\download"
+          if($LASTEXITCODE -ne 0){throw 'UPGRADE_BASELINE_DOWNLOAD_FAILED'}
+          $old=Join-Path $root 'download\RT-ResearchFlow-Setup-1.22.0-x64.exe'
+          if((Get-Item -LiteralPath $old).Length -ne [long]$env:OLD_BYTES -or (Get-FileHash -LiteralPath $old -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:OLD_SHA){throw 'UPGRADE_BASELINE_IDENTITY_MISMATCH'}
+          $install=Join-Path $root 'application'
+          $p=Start-Process -FilePath $old -ArgumentList @('/S',"/D=$install") -WindowStyle Hidden -Wait -PassThru
+          if($p.ExitCode -ne 0){throw 'UPGRADE_BASELINE_INSTALL_FAILED'}
+          $env:RT_UPGRADE_ROOT=$root
+          $env:RT_UPGRADE_PROFILE=Join-Path $root 'profile'
+          $env:RT_PACKAGED_EXE=Join-Path $install 'RT-ResearchFlow.exe'
+          $env:RT_UPGRADE_PHASE='seed'
+          node node_modules/@playwright/test/cli.js test tests/e2e/native-version-upgrade-1.23.spec.ts --workers=1 --retries=0 --reporter=line --output "$root\proof\seed-driver"
+          if($LASTEXITCODE -ne 0){throw 'UPGRADE_BASELINE_SEED_FAILED'}
+          $next=(Resolve-Path 'tested-upgrade-package/RT-ResearchFlow-Setup-1.23.0-x64.exe').Path
+          $p=Start-Process -FilePath $next -ArgumentList @('/S',"/D=$install") -WindowStyle Hidden -Wait -PassThru
+          if($p.ExitCode -ne 0){throw 'UPGRADE_NEW_INSTALL_FAILED'}
+          $env:RT_UPGRADE_PHASE='verify'
+          node node_modules/@playwright/test/cli.js test tests/e2e/native-version-upgrade-1.23.spec.ts --workers=1 --retries=0 --reporter=line --output "$root\proof\verify-driver"
+          if($LASTEXITCODE -ne 0){throw 'UPGRADE_RETENTION_NOT_ACCEPTED'}
+      - name: Replace Mac application while retaining its actual profile
+        if: matrix.platform == 'darwin'
+        shell: bash
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+          OLD_BYTES: ${{ matrix.oldBytes }}
+          OLD_SHA: ${{ matrix.oldSha }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/rt-version-upgrade-$GITHUB_RUN_ID"
+          test ! -e "$root"
+          mkdir -p "$root/download" "$root/proof" "$root/mount" "$root/application" "$root/previous"
+          npm install --prefix "$root/driver" --ignore-scripts --no-audit --no-fund @playwright/test@1.58.2
+          test ! -e node_modules
+          ln -s "$root/driver/node_modules" node_modules
+          old="RT-ResearchFlow-macOS-1.22.0-$TARGET_ARCH.dmg"
+          gh release download v1.22.0 --repo "$GITHUB_REPOSITORY" --pattern "$old" --dir "$root/download"
+          test "$(stat -f %z "$root/download/$old")" = "$OLD_BYTES"
+          test "$(shasum -a 256 "$root/download/$old" | cut -d ' ' -f 1)" = "$OLD_SHA"
+          hdiutil attach "$root/download/$old" -readonly -nobrowse -mountpoint "$root/mount"
+          trap 'hdiutil detach "$root/mount" || true' EXIT
+          ditto "$root/mount/RT-ResearchFlow.app" "$root/application/RT-ResearchFlow.app"
+          hdiutil detach "$root/mount"
+          trap - EXIT
+          export RT_UPGRADE_ROOT="$root" RT_UPGRADE_PROFILE="$root/profile"
+          export RT_PACKAGED_EXE="$root/application/RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow"
+          export RT_UPGRADE_PHASE=seed
+          node node_modules/@playwright/test/cli.js test tests/e2e/native-version-upgrade-1.23.spec.ts --workers=1 --retries=0 --reporter=line --output "$root/proof/seed-driver"
+          mv "$root/application/RT-ResearchFlow.app" "$root/previous/RT-ResearchFlow.app"
+          hdiutil attach "tested-upgrade-package/RT-ResearchFlow-macOS-1.23.0-$TARGET_ARCH.dmg" -readonly -nobrowse -mountpoint "$root/mount"
+          trap 'hdiutil detach "$root/mount" || true' EXIT
+          ditto "$root/mount/RT-ResearchFlow.app" "$root/application/RT-ResearchFlow.app"
+          hdiutil detach "$root/mount"
+          trap - EXIT
+          export RT_UPGRADE_PHASE=verify
+          node node_modules/@playwright/test/cli.js test tests/e2e/native-version-upgrade-1.23.spec.ts --workers=1 --retries=0 --reporter=line --output "$root/proof/verify-driver"
+      - name: Preserve bounded receipts and driver failure context
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-upgrade-1.22-to-1.23-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
+          path: |
+            D:/rt-version-upgrade-${{ github.run_id }}/proof/*.json
+            D:/rt-version-upgrade-${{ github.run_id }}/proof/**/error-context.md
+            ${{ runner.temp }}/rt-version-upgrade-${{ github.run_id }}/proof/*.json
+            ${{ runner.temp }}/rt-version-upgrade-${{ github.run_id }}/proof/**/error-context.md
+          if-no-files-found: error
+          retention-days: 14
