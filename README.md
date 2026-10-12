@@ -13,7 +13,7 @@ Windows 与两种 Mac 是同一产品，选择对应系统和芯片的安装包�
 
 **凭证绑定入口**：配置中心 → 数据源 → Tushare Key 绑定与验证。大模型 API Key 在 AI 配置中单独绑定。保存凭证不等于拥有所有专业接口权限。
 
-正式 1.21 三端最新复核共 9 项真实联网测试通过：每端取得 46 条涨停事实并完成三个规则扫描，腾讯、新浪、东方财富的抽样日线均可用。另验证选择 Tushare 但未绑定 Key 时，腾讯自动接替，取得 480 条日线、写入缓存并在股票图表显示历史摘要。未注入模拟行情或交易日历；查看[三端实际使用测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38266366006)及[机器可读回执](https://github.com/hzqedison/RT-ResearchFlow/blob/codex/release-1.21/docs/quality/released-stock-chart-consumer-1.21.json)。
+正式 1.21 三端此前的 9 项真实联网测试通过：取得真实涨停事实、运行三个免费规则，并验证无 Tushare Key 时腾讯接替、行情缓存和图表摘要。查看[此前实际使用测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38266366006)。最新加入凭证入口检查后，Windows 与 Apple Silicon 各 4 项通过，Intel Mac 3 项通过、东方财富日线 1 项失败；整轮为 **11 项通过、1 项失败**。Tushare 绑定入口三端均可见，空 Key 不能绑定，草稿不自动保存。[最新测试与失败日志](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38267640795) · [脱敏回执](https://github.com/hzqedison/RT-ResearchFlow/blob/codex/release-1.21/docs/quality/released-tushare-entry-1.21.json)。
 
 Windows 本机此前仍出现东方财富日线连接重置，隔离 Windows 环境未复现；不能把隔离测试成功当作所有网络环境可用的保证。
 

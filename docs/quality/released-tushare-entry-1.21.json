@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "checkedOn": "2026-10-12",
+  "version": "1.21.0",
+  "publishedSourceCommit": "249f90cade57026e3bc9a85b2e21427b634dfbed",
+  "testSourceCommit": "9d39683d6f27f6a87489708a5f5330bded824e07",
+  "run": "https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38267640795",
+  "aggregateConclusion": "failure",
+  "passedTests": 11,
+  "failedTests": 1,
+  "skippedTests": 0,
+  "productRebuilt": false,
+  "credentialEntryPassedPlatforms": 3,
+  "receipts": [
+    {
+      "kind": "released-tushare-binding-entry-acceptance",
+      "version": "1.21.0",
+      "platform": "darwin",
+      "arch": "x64",
+      "enabledProvider": "tencent",
+      "bindingEntryVisible": true,
+      "passwordInputEditable": true,
+      "emptyBindingDisabled": true,
+      "unsavedDraftPersisted": false,
+      "unboundVerificationState": "unbound",
+      "actualAuthenticationVerified": false,
+      "professionalApiPermissionsVerified": false,
+      "isolatedPreferenceRestored": true,
+      "normalExit": true,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false
+    },
+    {
+      "kind": "released-tushare-binding-entry-acceptance",
+      "version": "1.21.0",
+      "platform": "win32",
+      "arch": "x64",
+      "enabledProvider": "tencent",
+      "bindingEntryVisible": true,
+      "passwordInputEditable": true,
+      "emptyBindingDisabled": true,
+      "unsavedDraftPersisted": false,
+      "unboundVerificationState": "unbound",
+      "actualAuthenticationVerified": false,
+      "professionalApiPermissionsVerified": false,
+      "isolatedPreferenceRestored": true,
+      "normalExit": true,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false
+    },
+    {
+      "kind": "released-tushare-binding-entry-acceptance",
+      "version": "1.21.0",
+      "platform": "darwin",
+      "arch": "arm64",
+      "enabledProvider": "tencent",
+      "bindingEntryVisible": true,
+      "passwordInputEditable": true,
+      "emptyBindingDisabled": true,
+      "unsavedDraftPersisted": false,
+      "unboundVerificationState": "unbound",
+      "actualAuthenticationVerified": false,
+      "professionalApiPermissionsVerified": false,
+      "isolatedPreferenceRestored": true,
+      "normalExit": true,
+      "productionUserDataTouched": false,
+      "brokerOrdersSubmitted": false
+    }
+  ],
+  "failedProviderReceipt": {
+    "kind": "released-public-daily-acceptance",
+    "version": "1.21.0",
+    "platform": "darwin",
+    "arch": "x64",
+    "results": [
+      {
+        "provider": "tencent",
+        "stockCode": "000001",
+        "ok": true,
+        "rows": 480,
+        "latestTradeDate": "20261012",
+        "message": "tencent · 截至 20261012 · 480 日"
+      },
+      {
+        "provider": "eastmoney",
+        "stockCode": "600519",
+        "ok": false,
+        "message": "所选日线来源均未完成取数：eastmoney: 连接、权限或接口不可用"
+      },
+      {
+        "provider": "sina",
+        "stockCode": "600000",
+        "ok": true,
+        "rows": 480,
+        "latestTradeDate": "20261012",
+        "message": "sina · 截至 20261012 · 480 日"
+      }
+    ],
+    "allProvidersAvailable": false,
+    "normalExit": true,
+    "marketRowsMocked": false,
+    "productionUserDataTouched": false,
+    "brokerOrdersSubmitted": false
+  },
+  "interpretation": "All three actual released packages expose a password input and binding controls with free-only preferences; whitespace cannot bind and an unsaved draft is not stored. Empty-credential verification reports unbound. Intel Mac daily provider sampling failed for Eastmoney in this run; Tencent and Sina succeeded. The prior all-green run remains historical evidence, not a guarantee of current upstream availability.",
+  "notVerified": [
+    "Real Tushare authentication or professional interface permissions",
+    "Cause of the Intel Eastmoney failure",
+    "All user networks or all stocks",
+    "Actual broker authentication, orders, executions or reconciliation"
+  ]
+}
