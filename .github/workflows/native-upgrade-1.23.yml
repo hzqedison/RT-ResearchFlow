@@ -159,13 +159,21 @@ jobs:
           export RT_UPGRADE_PHASE=verify
           node node_modules/@playwright/test/cli.js test tests/e2e/native-version-upgrade-1.23.spec.ts --workers=1 --retries=0 --reporter=line --output "$root/proof/verify-driver"
       - name: Preserve bounded receipts and driver failure context
-        if: always()
+        if: always() && matrix.platform == 'win32'
         uses: actions/upload-artifact@v4
         with:
           name: native-upgrade-1.22-to-1.23-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
           path: |
             D:/rt-version-upgrade-${{ github.run_id }}/proof/*.json
             D:/rt-version-upgrade-${{ github.run_id }}/proof/**/error-context.md
+          if-no-files-found: error
+          retention-days: 14
+      - name: Preserve bounded Mac upgrade receipts and driver failure context
+        if: always() && matrix.platform == 'darwin'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-upgrade-1.22-to-1.23-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
+          path: |
             ${{ runner.temp }}/rt-version-upgrade-${{ github.run_id }}/proof/*.json
             ${{ runner.temp }}/rt-version-upgrade-${{ github.run_id }}/proof/**/error-context.md
           if-no-files-found: error
