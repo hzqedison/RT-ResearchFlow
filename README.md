@@ -65,6 +65,17 @@
 
 [三端真实数据测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38253847793) · [机器可读验收记录](https://github.com/hzqedison/RT-ResearchFlow/blob/cccca414f20b6aa5e4879b76860ae08076eb9c2a/docs/quality/public-data-availability.json)
 
+## 无 Tushare Key 的股票图表使用复核
+
+2026-10-12，直接使用已发布的 Windows、Apple Silicon Mac、Intel Mac 安装包复核，三端共 9 项测试通过，没有重新打包产品。
+
+- 选择 Tushare 和腾讯、但不绑定 Tushare Key 时，真实图表拉取接口自动使用腾讯，抽样股票 600036 返回 480 条日线，最近日期为 2026-10-12。
+- 行情写入隔离缓存，分页读取返回 20 条记录，实际股票图表显示「当前 30 日·已加载 149 日」。测试后恢复隔离配置并正常退出。
+- 免费涨停事实、三个规则及三家日线源也在本次三端测试中再次通过。
+- 未修改个人数据、使用真实用户 Key 或提交券商订单。仅证明上述抽样链路，不保证全市场数据、专业接口、全部图表视觉表现或全部用户网络环境。
+
+[本次三端测试与日志](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38266366006) · [机器可读回执](https://github.com/hzqedison/RT-ResearchFlow/blob/codex/release-1.21/docs/quality/released-stock-chart-consumer-1.21.json)
+
 </details>
 
 以下旧版本说明保留为历史记录；当前下载以上方正式版本为准。开发候选不作为正式发布。
