@@ -65,7 +65,7 @@
     "fileBlobSha": "eee3667df6fea86e76bef4b0874502d11bc4946d"
   },
   "notVerified": [
-    "Mac source connectivity",
+    "Mac report metadata and optional Python-provider connectivity",
     "Whole-market initialization and completeness",
     "Auction, chip and minute data",
     "Live Tushare authentication and account entitlements",
@@ -436,7 +436,7 @@
       "durationSeconds": 4.3
     },
     "notProven": [
-      "Mac equivalence",
+      "Mac equivalence outside tested public-daily and free-rule workflows",
       "Whole-market initialization",
       "Professional Tushare data availability",
       "Real broker execution"
@@ -536,9 +536,188 @@
     },
     "fullBuildDispatched": false,
     "scope": "Offline native dependency and contract tests are not evidence of released Mac public-provider connectivity.",
-    "releasedLiveTestsCompleted": false,
+    "releasedLiveTestsCompleted": true,
     "newLiveWorkflow": ".github/workflows/released-public-data-acceptance.yml",
     "newLiveHarnessLocallyValidated": true,
-    "matchedCountFieldCorrected": true
+    "matchedCountFieldCorrected": true,
+    "newLiveRunId": 38235739112
+  },
+  "macReleasedPackageValidation": {
+    "version": "1.20.0",
+    "runId": 38235739112,
+    "workflow": ".github/workflows/released-public-data-acceptance.yml",
+    "testSourceCommit": "e14f655cb49193010b2e913f1826c9dc99afd1f5",
+    "productSourceCommit": "4ae31226d494991481aa33f9bbfdfc46b65d85bc",
+    "nativeArchitectures": [
+      "arm64",
+      "x64"
+    ],
+    "passedTests": 4,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "receiptsValidatedAgainstPinnedReleasedAssets": true,
+    "productRebuilt": false,
+    "productionUserDataTouched": false,
+    "brokerOrdersSubmitted": false,
+    "artifacts": [
+      {
+        "artifact": "released-public-data-1.20.0-arm64-e14f655cb49193010b2e913f1826c9dc99afd1f5",
+        "records": {
+          "released-public-daily-receipt.json": {
+            "kind": "released-public-daily-acceptance",
+            "version": "1.20.0",
+            "platform": "darwin",
+            "arch": "arm64",
+            "results": [
+              {
+                "provider": "tencent",
+                "stockCode": "000001",
+                "ok": true,
+                "rows": 480,
+                "latestTradeDate": "20261012",
+                "message": "tencent · 截至 20261012 · 480 日"
+              },
+              {
+                "provider": "eastmoney",
+                "stockCode": "600519",
+                "ok": true,
+                "rows": 149,
+                "latestTradeDate": "20261012",
+                "message": "eastmoney · 截至 20261012 · 149 日"
+              },
+              {
+                "provider": "sina",
+                "stockCode": "600000",
+                "ok": true,
+                "rows": 480,
+                "latestTradeDate": "20261012",
+                "message": "sina · 截至 20261012 · 480 日"
+              }
+            ],
+            "allProvidersAvailable": true,
+            "normalExit": true,
+            "marketRowsMocked": false,
+            "productionUserDataTouched": false,
+            "brokerOrdersSubmitted": false
+          },
+          "published-asset.json": {
+            "version": "1.20.0",
+            "arch": "arm64",
+            "asset": "RT-ResearchFlow-macOS-1.20.0-arm64.dmg",
+            "bytes": 201809546,
+            "sha256": "484dd6d4a12679c1d0122bf7fac45463b11ed70b3ec0b0588e482e6eb1c8685b",
+            "publishedDigestMatched": true,
+            "productRebuilt": false,
+            "brokerOrdersSubmitted": false
+          },
+          "released-public-rule-receipt.json": {
+            "kind": "released-public-rule-acceptance",
+            "version": "1.20.0",
+            "platform": "darwin",
+            "arch": "arm64",
+            "date": "20261012",
+            "rows": 46,
+            "reports": [
+              {
+                "strategy": "builtin-public-limit-continuous",
+                "matched": 1
+              },
+              {
+                "strategy": "builtin-public-limit-secondBoard",
+                "matched": 11
+              },
+              {
+                "strategy": "builtin-public-limit-earlyFirst",
+                "matched": 11
+              }
+            ],
+            "calendarFixtureInjected": false,
+            "marketRowsMocked": false,
+            "normalExit": true,
+            "productionUserDataTouched": false,
+            "brokerOrdersSubmitted": false
+          }
+        }
+      },
+      {
+        "artifact": "released-public-data-1.20.0-x64-e14f655cb49193010b2e913f1826c9dc99afd1f5",
+        "records": {
+          "released-public-daily-receipt.json": {
+            "kind": "released-public-daily-acceptance",
+            "version": "1.20.0",
+            "platform": "darwin",
+            "arch": "x64",
+            "results": [
+              {
+                "provider": "tencent",
+                "stockCode": "000001",
+                "ok": true,
+                "rows": 480,
+                "latestTradeDate": "20261012",
+                "message": "tencent · 截至 20261012 · 480 日"
+              },
+              {
+                "provider": "eastmoney",
+                "stockCode": "600519",
+                "ok": true,
+                "rows": 149,
+                "latestTradeDate": "20261012",
+                "message": "eastmoney · 截至 20261012 · 149 日"
+              },
+              {
+                "provider": "sina",
+                "stockCode": "600000",
+                "ok": true,
+                "rows": 480,
+                "latestTradeDate": "20261012",
+                "message": "sina · 截至 20261012 · 480 日"
+              }
+            ],
+            "allProvidersAvailable": true,
+            "normalExit": true,
+            "marketRowsMocked": false,
+            "productionUserDataTouched": false,
+            "brokerOrdersSubmitted": false
+          },
+          "published-asset.json": {
+            "version": "1.20.0",
+            "arch": "x64",
+            "asset": "RT-ResearchFlow-macOS-1.20.0-x64.dmg",
+            "bytes": 209894737,
+            "sha256": "32d2e7dc059644df9d3e761ec86ff145eeb7f7d9a903f8a406332b0f8b901ec0",
+            "publishedDigestMatched": true,
+            "productRebuilt": false,
+            "brokerOrdersSubmitted": false
+          },
+          "released-public-rule-receipt.json": {
+            "kind": "released-public-rule-acceptance",
+            "version": "1.20.0",
+            "platform": "darwin",
+            "arch": "x64",
+            "date": "20261012",
+            "rows": 46,
+            "reports": [
+              {
+                "strategy": "builtin-public-limit-continuous",
+                "matched": 1
+              },
+              {
+                "strategy": "builtin-public-limit-secondBoard",
+                "matched": 11
+              },
+              {
+                "strategy": "builtin-public-limit-earlyFirst",
+                "matched": 11
+              }
+            ],
+            "calendarFixtureInjected": false,
+            "marketRowsMocked": false,
+            "normalExit": true,
+            "productionUserDataTouched": false,
+            "brokerOrdersSubmitted": false
+          }
+        }
+      }
+    ]
   }
 }
