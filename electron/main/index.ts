@@ -57,6 +57,7 @@ import { isArticleExpired } from './utils/articleAgeUtils'
 import { startScheduler, stopScheduler, waitForSchedulerIdle, runConceptMembersSyncJob } from './services/schedulerService'
 import { stopPublicMarketWork, waitForPublicMarketWorkIdle } from './services/publicMarketWorkOwner'
 import { stopTushareHistoricalWork, waitForTushareHistoricalWorkIdle } from './services/tushareHistoricalWorkOwner'
+import { stopChipMonitorWork, waitForChipMonitorWorkIdle } from './services/chipMonitorWorkOwner'
 import { syncTradeCalIfNeeded, stopTradeCalendarWork, waitForTradeCalendarWorkIdle } from './services/tradeCalSyncService'
 import { scheduleDailyCleanup, stopDailyCleanup } from './services/cleanerService'
 import { registerTrustedIpcHandler, isTrustedIpcSender } from './security/trustedIpc'
@@ -123,6 +124,7 @@ async function stopApplication(): Promise<void> {
   applicationStopping = true
   macThsOrderService?.beginStop()
   stopHeartbeat()
+  stopChipMonitorWork()
   stopTradeCalendarWork()
   stopTushareHistoricalWork()
   stopPublicMarketWork()
@@ -141,6 +143,7 @@ async function stopApplication(): Promise<void> {
       waitForSchedulerIdle(5000),
       waitForPublicMarketWorkIdle(5000),
       waitForTushareHistoricalWorkIdle(5000),
+      waitForChipMonitorWorkIdle(5000),
       waitForTradeCalendarWorkIdle(5000),
       waitForScanIdle(5000),
       stopResearchAccessTransport(),

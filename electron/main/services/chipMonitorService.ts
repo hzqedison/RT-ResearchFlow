@@ -21,6 +21,14 @@ import {
   upsertMonitorResults,
 } from '../database/chipMonitorRepository'
 import { upsertDailyClose } from '../database/dailyCloseCacheRepository'
+import { chipMonitorWorkOwner } from './chipMonitorWorkOwner'
+import { checkLocalWork, isLocalWorkCancelled, localWorkDelay } from './publicMarketWorkOwner'
+
+function emitChipMonitorEvent(win: BrowserWindow | undefined, channel: string, payload: Record<string, unknown>): void {
+  if (win && !win.isDestroyed?.() && !win.webContents.isDestroyed?.()) {
+    win.webContents.send(channel, payload)
+  }
+}
 
 // ── 模块级防重入守卫 ────────────────────────────────────────────────
 let _jobRunning = false
@@ -135,8 +143,10 @@ export async function runChipMonitorJob(
   token: string,
   win?: BrowserWindow,
   mode: ChipMonitorMode = 'relative',
-  source?: ChipMonitorSource
+  source?: ChipMonitorSource,
+  signal?: AbortSignal,
 ): Promise<{ success: number; failed: number }> {
+  chipMonitorWorkOwner.assertAccepting(signal)
   if (_jobRunning) {
     const err = new Error('JOB_RUNNING')
     err.name = 'JOB_RUNNING'
@@ -144,10 +154,9 @@ export async function runChipMonitorJob(
   }
   _jobRunning = true
 
-  let success = 0
-  let failed = 0
-
-  try {
+  return chipMonitorWorkOwner.run(async (signal) => {
+    let success = 0
+    let failed = 0
     const stocks = source == null
       ? getMonitorStocks(db)
       : getMonitorStocks(db).filter((stock) => stock.source === source)
@@ -173,10 +182,15 @@ export async function runChipMonitorJob(
       const dailyRows = await fetchDailyForCandidates(
         token,
         normalizedStocks.map((s) => s.tsCode),
-        startDateForDaily
+        startDateForDaily,
+        undefined,
+        signal,
       )
+      checkLocalWork(signal)
       if (dailyRows.length > 0) upsertDailyClose(db, dailyRows)
     } catch (e) {
+      checkLocalWork(signal)
+      if (isLocalWorkCancelled(e)) throw e
       console.warn('[ChipMonitor] 补全日线数据失败，将使用 DB 现有数据:', e)
     }
 
@@ -210,7 +224,7 @@ export async function runChipMonitorJob(
     let done = totalStocks - stocksWithMissing.length
 
     if (done > 0) {
-      win?.webContents.send('shortTerm:chipMonitor:progress', {
+      emitChipMonitorEvent(win, 'shortTerm:chipMonitor:progress', {
         done,
         total: totalStocks,
         currentStock: '本地缓存',
@@ -218,23 +232,31 @@ export async function runChipMonitorJob(
     }
 
     for (let i = 0; i < stocksWithMissing.length; i += CHIP_FETCH_BATCH_SIZE) {
+      checkLocalWork(signal)
       const batch = stocksWithMissing.slice(i, i + CHIP_FETCH_BATCH_SIZE)
-      await Promise.all(
+      const outcomes = await Promise.allSettled(
         batch.map(async (tsCode) => {
           const wantedDates = new Set(byStock.get(tsCode) ?? [])
           try {
-            const chips = await fetchCyqChipsSingleflight(token, tsCode)
+            const chips = await fetchCyqChipsSingleflight(token, tsCode, undefined, signal)
+            checkLocalWork(signal)
             const relevantRows = chips.filter((row) => wantedDates.has(row.tradeDate))
             if (relevantRows.length > 0) {
               upsertChips(db, relevantRows)
             }
           } catch (e) {
+            checkLocalWork(signal)
+            if (isLocalWorkCancelled(e)) throw e
             console.warn(`[ChipMonitor] fetchCyqChips 历史同步失败 ${tsCode}:`, e)
           }
         })
       )
+      checkLocalWork(signal)
+      for (const outcome of outcomes) {
+        if (outcome.status === 'rejected') throw outcome.reason
+      }
       done += batch.length
-      win?.webContents.send('shortTerm:chipMonitor:progress', {
+      emitChipMonitorEvent(win, 'shortTerm:chipMonitor:progress', {
         done: Math.min(done, totalStocks),
         total: totalStocks,
         currentStock:
@@ -243,7 +265,7 @@ export async function runChipMonitorJob(
       })
       // 批间延迟（最后一批不需要等待）
       if (i + CHIP_FETCH_BATCH_SIZE < stocksWithMissing.length) {
-        await new Promise((resolve) => setTimeout(resolve, CHIP_FETCH_BATCH_DELAY_MS))
+        await localWorkDelay(CHIP_FETCH_BATCH_DELAY_MS, signal)
       }
     }
 
@@ -338,12 +360,13 @@ export async function runChipMonitorJob(
       success++
     }
 
+    checkLocalWork(signal)
     upsertMonitorResults(db, results)
-    win?.webContents.send('shortTerm:chipMonitor:done', { success, failed })
+    emitChipMonitorEvent(win, 'shortTerm:chipMonitor:done', { success, failed })
     return { success, failed }
-  } finally {
+  }, signal).finally(() => {
     _jobRunning = false
-  }
+  })
 }
 
 /** 返回当前 job 是否正在执行 */

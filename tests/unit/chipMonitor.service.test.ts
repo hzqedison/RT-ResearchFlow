@@ -115,7 +115,7 @@ describe('chipMonitorService 批量筹码同步', () => {
     )
 
     expect(mocks.fetchCyqChips).toHaveBeenCalledTimes(1)
-    expect(mocks.fetchCyqChips).toHaveBeenCalledWith('token', '000533.SZ')
+    expect(mocks.fetchCyqChips).toHaveBeenCalledWith('token', '000533.SZ', undefined, expect.any(AbortSignal))
     const persistedRows = mocks.upsertChips.mock.calls.flatMap((call) => call[1])
     expect(new Set(persistedRows.map((row) => row.tradeDate))).toEqual(new Set(tradeDates))
     expect(persistedRows).toHaveLength(tradeDates.length * 3)

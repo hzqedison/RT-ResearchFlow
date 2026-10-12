@@ -1999,20 +1999,23 @@ export async function fetchDailyForCandidates(
   token: string,
   tsCodes: string[],
   startDate: string,
-  endDate?: string
+  endDate?: string,
+  signal?: AbortSignal,
 ): Promise<DailyRow[]> {
+  checkLocalWork(signal)
   if (tsCodes.length === 0) return []
   const fields = 'ts_code,trade_date,open,high,low,close,pct_chg,vol'
   const results: DailyRow[] = []
 
   const uniqueCodes = [...new Set(tsCodes)]
   for (const tsCode of uniqueCodes) {
+    checkLocalWork(signal)
     const params: Record<string, string> = {
       ts_code: tsCode,
       start_date: startDate,
     }
     if (endDate) params.end_date = endDate
-    const json = await callTushareApi(token, 'daily', params, fields)
+    const json = await callHistoricalTushareApi(token, 'daily', params, fields, signal)
     if (!json.data) continue
     const { fields: fs, items } = json.data
     const idx = (n: string) => fs.indexOf(n)
@@ -2317,12 +2320,13 @@ export interface CyqChipsRow {
 export async function fetchCyqChips(
   token: string,
   tsCode: string,
-  tradeDate?: string
+  tradeDate?: string,
+  signal?: AbortSignal,
 ): Promise<CyqChipsRow[]> {
   const params: Record<string, string> = { ts_code: tsCode }
   if (tradeDate) params['trade_date'] = tradeDate
   const fields = 'ts_code,trade_date,price,percent'
-  const json = await callTushareApi(token, 'cyq_chips', params, fields)
+  const json = await callHistoricalTushareApi(token, 'cyq_chips', params, fields, signal)
   if (!json.data) return []
   const { fields: fs, items } = json.data
   const idx = (n: string) => fs.indexOf(n)

@@ -71,6 +71,8 @@ import { hasDcDataForDate } from '../database/dcConceptMembersRepository'
 import { getConceptsByStockRouted } from '../services/conceptRouter'
 import { refreshRtKCache, isRtKStale, getRtKCache } from '../services/sharedRtKCache'
 import { runChipMonitorJob, isChipMonitorJobRunning, recomputeChipMonitorResults } from '../services/chipMonitorService'
+import { chipMonitorWorkOwner } from '../services/chipMonitorWorkOwner'
+import { isLocalWorkCancelled } from '../services/publicMarketWorkOwner'
 import {
   getMonitorStocks,
   replaceMonitorStocksBySource,
@@ -819,6 +821,10 @@ export function registerShortTermHandlers(): void {
     ) => {
       const db2 = getDb()
       const dsConfig = getDataSourceConfig(db2)
+      try { chipMonitorWorkOwner.assertAccepting() } catch (error) {
+        if (isLocalWorkCancelled(error)) return { ok: false as const, error: 'LOCAL_WORK_CANCELLED' }
+        throw error
+      }
       if (!dsConfig.tushareEnabled || !dsConfig.tushareTokenEncrypted) {
         return { ok: false as const, error: 'TUSHARE_DISABLED' }
       }
@@ -847,6 +853,7 @@ export function registerShortTermHandlers(): void {
       const win = BrowserWindow.getAllWindows()[0] ?? undefined
       // fire-and-forget
       void runChipMonitorJob(db2, token, win, payload?.mode ?? 'relative', runSource).catch((err) => {
+        if (isLocalWorkCancelled(err)) return
         console.warn('[chipMonitor:start] job error:', err)
       })
       return { ok: true as const }

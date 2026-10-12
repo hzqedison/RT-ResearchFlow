@@ -131,3 +131,7 @@ Mac 取消诊断首轮 Intel 成功、Apple 前置失败；修订测试观察与
 ### Partial 4.4: independently started calendar work
 
 Dedicated calendar ownership now stops admission, aborts requests and waits for actual settlement at application quit. Seven new ownership cases plus existing cancellation tests passed (119 total); actual Windows and both native Mac architectures passed standalone-calendar, public-history and synthetic-private-history quit cases. Run 38187750694 proofs match source a514f2e8ee39bf39857c5206fe4aa74b86f7f8a4 and preserve the complete calendar hash. Full 4.4 remains unchecked: this does not audit every service or prove whole-product shutdown. Known rolling recovery defect remains unresolved; no 1.18 publication. Evidence: docs/quality/calendar-shutdown-1.18-candidate.md.
+
+### Partial 4.4: manually started chip monitoring
+
+Chip monitoring now owns cancellable daily/chip requests, drains its concurrent batch and stops admission before stock-pool changes. Windows actual application-directory tests passed all five cancellation cases (15.8s). The targeted unit run is 166 passed / 1 failed: the introduced positive-fixture cache omission remains pending permission to correct, not skipped. The full native release gates now include this failed case and the new chip E2E cases. New chip changes are not yet native-Mac verified; legacy chip-structure/institution work is outside this owner. Full 4.4 stays unchecked and 1.18 stays unpublished. Evidence: docs/quality/chip-shutdown-1.18-candidate.md.
