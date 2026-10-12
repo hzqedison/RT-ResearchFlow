@@ -1,7 +1,9 @@
 import { expect, test, _electron as electron } from '@playwright/test'
 import { mkdtempSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import type { DiagnosticsHealthSnapshot } from '../../src/components/Onboarding/onboardingModel'
+import { isolatedPackagedExecutable } from './isolatedPackagedExecutable'
+import { observePackagedProcess, waitForPackagedRuntime } from './packagedRuntimeObservation'
 
 test('packaged initialization prioritizes free setup, scopes provider errors and displays active tasks', async () => {
   test.setTimeout(90_000)
@@ -12,15 +14,21 @@ test('packaged initialization prioritizes free setup, scopes provider errors and
   if (process.platform === 'darwin' && process.env.GITHUB_ACTIONS !== 'true') throw new Error('MAC_FIXTURES_REQUIRE_ISOLATED_CI')
   const profile = mkdtempSync(join(root, 'initialization-ui-'))
   const { ELECTRON_RUN_AS_NODE: _runAsNode, NODE_OPTIONS: _nodeOptions, ...environment } = process.env
-  const app = await electron.launch({ executablePath: executable, args: [`--user-data-dir=${profile}`], env: { ...environment, NODE_ENV: 'test' } })
+  const isolatedExecutable = isolatedPackagedExecutable(executable, profile)
+  const app = await electron.launch({ executablePath: isolatedExecutable, args: [`--user-data-dir=${profile}`], env: { ...environment, NODE_ENV: 'test' } })
+  const reportProcess = observePackagedProcess(app), errors: string[] = []
   const child = app.process()
   try {
     const window = await app.firstWindow()
+    window.on('pageerror', error => errors.push(error.message))
     await expect(window.getByTestId('nav-tab-feed')).toBeVisible({ timeout: 30000 })
+    const runtime = await waitForPackagedRuntime(app, process.env.RT_PACKAGED_VERSION!)
+    const actual = resolve(runtime.dataPath), expected = process.platform === 'win32' ? resolve(dirname(isolatedExecutable), 'data') : resolve(profile)
+    expect(process.platform === 'win32' ? actual.toLowerCase() : actual).toBe(process.platform === 'win32' ? expected.toLowerCase() : expected)
     await app.evaluate(({ ipcMain }) => {
       type Item = { key: string; title: string; status: 'ok' | 'warning' | 'error'; message: string; recordCount: number; checkedAt: number }
       type Health = { status: string; checkedAt: number; summary: { ok: number; warning: number; error: number }; groups: { key: string; title: string; items: Item[] }[] }
-      const fixture = globalThis as typeof globalThis & { __initializationHealth?: Health; __initializationActions?: string[]; __finishStockSync?: () => void }
+      const fixture = globalThis as typeof globalThis & { __initializationHealth?: Health; __initializationActions?: string[]; __finishStockSync?: () => void; __summaryRequests?: number; __summaryResolvers?: Array<() => void> }
       const now = Date.now()
       const fact = (key: string, rows: number, status: Item['status'] = 'ok'): Item => ({ key, title: key, status, message: status === 'error' ? '该模块需要核验' : '合成隔离检查事实', recordCount: rows, checkedAt: now })
       fixture.__initializationHealth = { status: 'error', checkedAt: now, summary: { ok: 2, warning: 1, error: 1 }, groups: [
@@ -28,6 +36,13 @@ test('packaged initialization prioritizes free setup, scopes provider errors and
         { key: 'freshness', title: '数据', items: [fact('freshness.stockBasic', 5572), fact('freshness.decisionSignals', 1), fact('freshness.auction', 0, 'error')] }
       ] }
       fixture.__initializationActions = []
+      fixture.__summaryRequests = 0
+      fixture.__summaryResolvers = []
+      ipcMain.removeHandler('decision:getSignalSummary')
+      ipcMain.handle('decision:getSignalSummary', () => new Promise(resolveSummary => {
+        fixture.__summaryRequests!++
+        fixture.__summaryResolvers!.push(() => resolveSummary({ ok: false, error: 'ISOLATED_SUMMARY_UNAVAILABLE' }))
+      }))
       ipcMain.removeHandler('diagnostics:getHealth')
       ipcMain.handle('diagnostics:getHealth', () => ({ ok: true, data: fixture.__initializationHealth }))
       ipcMain.removeHandler('diagnostics:runCheck')
@@ -74,6 +89,13 @@ test('packaged initialization prioritizes free setup, scopes provider errors and
       fixture.__finishStockSync()
     })
     await expect(guide.getByTestId('start-initialization-flow-btn')).toHaveText('开始初始化')
+    await expect(guide.getByTestId('initialization-task-sync-stock-basic')).toContainText('成功')
+    expect(await app.evaluate(() => (globalThis as typeof globalThis & { __summaryRequests?: number }).__summaryRequests ?? 0)).toBeGreaterThan(0)
+    await app.evaluate(() => {
+      const fixture = globalThis as typeof globalThis & { __summaryResolvers?: Array<() => void> }
+      for (const finish of fixture.__summaryResolvers ?? []) finish()
+      fixture.__summaryResolvers = []
+    })
     await app.evaluate(() => {
       const fixture = globalThis as typeof globalThis & { __initializationHealth?: DiagnosticsHealthSnapshot }
       fixture.__initializationHealth?.groups.push({ key: 'database', title: '数据库', items: [{ key: 'database.migrations', title: '迁移', status: 'error', message: '合成数据库阻断', checkedAt: Date.now() }] })
@@ -84,6 +106,10 @@ test('packaged initialization prioritizes free setup, scopes provider errors and
     const exited = new Promise<number | null>(resolveExit => child.once('exit', resolveExit))
     await app.evaluate(({ app: application }) => { setTimeout(() => application.quit(), 25) })
     expect(await exited).toBe(0)
+    expect(errors).toEqual([])
+  } catch (error) {
+    reportProcess()
+    throw error
   } finally {
     if (child.exitCode === null) await app.close()
   }

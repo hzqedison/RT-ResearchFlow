@@ -565,7 +565,6 @@ export default function App() {
     }
 
     await loadOnboardingHealth()
-    await loadDecisionSignalSummary()
     const finalMessage = pendingTaskKeys.size > 0
       ? onlyTaskKey
         ? `${queue[0]?.title ?? '该任务'}仍待处理，可稍后重试；基础入口不受阻塞。`
@@ -574,6 +573,8 @@ export default function App() {
         ? `${queue[0]?.title ?? '该任务'}已完成。`
         : '初始化任务已完成。'
     setInitializationFlow(prev => ({ ...prev, running: false, endedAt: Date.now(), currentTaskKey: undefined, message: finalMessage, error: undefined }))
+    // Summary refresh is optional; it must not hold completed setup tasks open.
+    void loadDecisionSignalSummary()
   }
 
   function startInitializationFlow() {
