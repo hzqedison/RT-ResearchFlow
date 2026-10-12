@@ -1,102 +1,51 @@
 <h1 align="center">RT-ResearchFlow</h1>
 
 <!-- CURRENT-RELEASE-START -->
-## 当前正式版本：1.22
+## 当前正式版本：1.23
 
 同一产品，按系统和芯片选择安装包；无需再解压源码压缩包。
 
-- [Windows x64 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/RT-ResearchFlow-Setup-1.22.0-x64.exe)
-- [Mac Apple Silicon 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/RT-ResearchFlow-macOS-1.22.0-arm64.dmg)
-- [Mac Intel 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/RT-ResearchFlow-macOS-1.22.0-x64.dmg)
+- [Windows x64 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.23.0/RT-ResearchFlow-Setup-1.23.0-x64.exe)
+- [Mac Apple Silicon 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.23.0/RT-ResearchFlow-macOS-1.23.0-arm64.dmg)
+- [Mac Intel 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.23.0/RT-ResearchFlow-macOS-1.23.0-x64.dmg)
 
-[发布说明与验收范围](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.22.0) · [对应版本源码](https://github.com/hzqedison/RT-ResearchFlow/tree/v1.22.0)
+[发布说明与验收范围](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.23.0) · [对应版本源码](https://github.com/hzqedison/RT-ResearchFlow/tree/v1.23.0)
 
 <details>
 <summary>本版本更新与使用限制</summary>
 
-# RT-ResearchFlow 1.22
+# RT-ResearchFlow 1.23
 
-本轮改善已有日线数据功能的失败解释，让用户分清网络问题、接口拒绝和缺少凭证，继续使用其他可用来源。研究、策略和本人确认交易仍属于同一个产品；本轮不新增交易方式或改变策略规则。
+本轮优化已有数据源操作体验，让等待、完成与失败状态更清楚，不新增交易方式、改变策略规则或替换数据授权。
 
 ## 更新内容
 
-- 东方财富日线失败不再只显示泛化提示：区分连接中断、超时、域名解析、安全连接验证、HTTP 拒绝或限流，以及响应解析失败。
-- 多数据源调用保留安全的分类说明，不再把所有失败混成“连接、权限或接口不可用”。
-- 未配置 Tushare 与公开行情网络失败分开说明；无有效日线时提示核查交易日或切换来源。
-- 保留所选日线来源的顺序回退。一个来源失败，不会阻止后面的已选来源取数；所有来源失败时分别列出说明。
-- 对外提示仅使用固定文案和受限的 HTTP 状态码，不复制上游异常正文、Token、Cookie 或本地路径。此边界不等于全部内部日志已完成脱敏审计。
-- 应用版本递进为 1.22.0，不替换或改名重发 1.21 的安装包。
+- 日线刷新失败显示所选来源的安全分类说明，区分限流、连接中断、超时和缺少配置；不再由 IPC 和界面两次覆盖为泛化提示。
+- 返回说明只接受固定提供方、固定本地文案和受限 HTTP 状态码；未知异常不复制原始正文、密钥或路径。本项不是全部日志脱敏审计。
+- 数据源操作进行中显示明确等待提示，保存按钮保持独立名称，不再临时变成“查询研报”等其他操作。
+- 查询前的自动配置保存不冒充查询成功；只有显式保存完成时才显示配置保存成功。
+- 更换股票代码或重新查询时清除旧研报；更改问财条件或重新查询时清除旧选股结果，失败后不留下看似属于新查询的旧结果。
+- 研报索引显示对应股票代码，保留日期、机构、来源与原文入口，不冒充 PDF 全文。
 
-## 出现取数失败时
+## 使用方式
 
-1. 到「配置中心 → 数据源」保留腾讯或新浪等备用日线来源，按需要选择优先顺序。
-2. 连接中断、超时或 HTTP 限流时，稍后再试或切换来源，不必反复重装软件。
-3. Tushare 未配置时，到同页顶部「Tushare Key 绑定与验证」绑定金融数据 Token；大模型 Key 在 AI 配置中单独设置。
-4. 仅完成 Token 保存或交易日历验证，不代表已经取得竞价、龙虎榜、筹码等全部专业接口权限。
+1. 在「配置中心 → 数据源」选择来源和优先级，填写六位股票代码。
+2. 点击读取日线或查询研报，等待本次操作完成；出现限流或网络提示时可稍后重试或选择备用来源，无需重复安装应用。
+3. 基础腾讯、东财等公开来源不需要 Tushare Token。专业数据权限与大模型密钥仍分别配置，互不替代。
 
-## 安装与使用
+## 交付与验收边界
 
-- Windows、Apple Silicon Mac、Intel Mac 均提供直接安装包，无需先解压源码压缩包。
-- 升级前退出正在运行的旧程序，沿用原安装目录，不按版本新建多套产品目录。
-- 默认卸载保留本地数据；可选数据扩展仍按需安装，不自动删除其他软件共用的系统 Python。
-- 本轮不改个人数据、数据库结构、策略算法或交易逻辑；真实订单仍需本人确认，并受客户端实际能力限制。
+内部版本为 1.23.0。本轮已完成 Node/Web 类型检查、5 个定向测试文件共 49 项测试，以及 Windows、Apple Silicon 和 Intel Mac 实际安装包操作检查。
 
-## 验收范围
+- [三端原生构建与安装包验收](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38295084489)：三端均通过。新增操作检查验证等待状态、保存按钮名称、自动保存不提前报成功、旧结果清除、安全失败提示及正常退出。
+- [Windows 安装生命周期](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38296573769)：同目录升级保留测试数据，默认非系统盘路径和静默卸载保留数据通过，共享 Python 未改动。
+- [1.22 → 1.23 三端真实安装包升级检查](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38297277030)：使用已经发布的 1.22 与本轮已验收的 1.23 安装包，在相同应用路径、相同数据路径核对实际保存的非金融合成偏好、来源顺序和 4 个哨兵文件，三端均正常退出，无渲染错误。不是对全部个人旧数据库或真实凭证迁移的证明。
 
-- 本地 Node 与 Web 类型检查通过，四个定向测试文件共 36 项通过，涵盖错误分类、敏感正文屏蔽、失败不写行情和所选来源顺序回退。这些服务测试使用隔离数据和受控响应，不是真实用户凭证测试。
-- Windows、两种原生 Mac 的新安装包检查全部通过，包含实际安装、启动退出、原生依赖及首次按需扩展安装；[查看三端检查](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38271118933)。
-- Windows 的默认非系统盘安装、同目录同版本重装保留合成数据、默认卸载保留数据以及共享 Python 不变检查通过；[查看安装生命周期检查](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38271480469)。
-- 三端安装包与安装生命周期使用同一应用源码提交：`ca75705093bfc31ff8ad05465f80099f546dfc3a`。发布复用这批已经过检查的字节，不再次编译。
+升级检查首轮 Windows 测试本身通过，但回执上传路径配置失败；[失败记录](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38296188144)保留。仅修正归档脚本后复用同一批安装包重新验收，没有换包或增加版本。
 
-## 已知边界
+新增界面失败与等待检查使用明确隔离的合成响应，不代表真实 i问财 Cookie、Tushare 权限、全部数据源在线服务或券商交易已经验证。既有真实公共数据验收的版本和覆盖范围单独保留，不移用为本轮全部功能通过。
 
-提示改善不等于东方财富公共接口故障已经修复，也不能保证所有网络、全部股票或所有用户旧数据库都已验证。1.21 的一次 Intel 日线检查失败及后续诊断记录保留，不通过反复重跑抹去失败事实。
-
-本轮未核验每个用户的跨版本迁移，未用真实用户 Key 验证 Tushare 或大模型服务，未验证 Apple 公证，也未操作券商账户或证明实盘成交。
-
-## 1.22 发布后的免费短线与研报复核
-
-2026-10-13，直接使用公开的三个 1.22 安装包完成补充检查，没有重新编译产品。
-
-- 免费短线页面：三端各读取 2026-10-12 的 46 条真实涨停事实，通过按钮运行早封首板、二板观察和连板观察。每个模板只产生一条新记录，显示命中分别为 11、11、1 条，证据中的股票和日期对应同次扫描；三端共 9 次按钮扫描。
-- 东财研报接口与缓存：三端对样本股票 000333 均取得 50 条真实研报索引及 PDF 引用，最新索引日期为 2026-09-10；首次状态 ready，复读状态 cached，内容一致，不需要真实用户 Key。
-- 研报结果明确为 metadataOnly。最初的研报接口与缓存测试未覆盖页面，随后已补做下方的三端页面查询验收；两项均不证明 PDF 下载或全文解析，i问财及 AKShare 的真实查询亦未据此宣称通过。
-- 未注入行情、报告或交易日历，正常退出，未操作个人数据或券商订单。不代表投资收益、专业竞价或实盘成交已经验证。
-- 免费短线与研报接口的永久回执已上传：[短线页面回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/public-rule-ui-acceptance-1.22.json)、[研报接口及缓存回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/research-source-acceptance-1.22.json)。回执仅包含公开样本、检查结果和验证边界，不含个人账户或密钥。
-
-[三端免费短线页面测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38275603901) · [三端真实研报接口与缓存测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38278241127)
-
-## 原生 PDF 管线补充检查
-
-- 本地 Windows 在原生 Electron 环境中使用与 1.22 同源的现有网络安全客户端和 PDF 解析器，真实下载公开研报并通过文本提取检查：文件 755,540 字节，提取文本 8,476 字符。没有调用大模型或操作券商账户。
-- 解析沿用前 24 页的原有限制，不承诺整份长报告全文；本项是源代码管线验收，不是正式安装包的研报阅读页面或完整研究流程验收。[下载本地 Windows 管线回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/native-public-pdf-local-windows-1.22.json)。
-- 后续已补取固定的已发布源码提交，保留源码一致性检查；三端原生 PDF 管线验收现已通过，详情见下节。此前变量位置和历史源码缺失导致的两次测试前失败仍保留，不将它们解释为 PDF 解析失败，也不删除失败记录。[历史流程记录](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38286028469)。
-- 上述增补只涉及检查脚本、上传方式和说明，没有重新编译、替换安装包或修改交易逻辑。
-
-
-## 正式安装包研报查询页面验收
-
-2026-10-13，直接复用公开的 1.22 安装包，通过 Windows、Apple Silicon Mac 与 Intel Mac 三端检查，不重编译、不替换安装包。
-
-- 每端先用股票 000333 核验真实东财索引及重复读取缓存，再在「配置中心 → 数据源」填写股票 601318 并点击「查询研报」。
-- 每端页面查询取得 50 条真实索引，核对了前三条报告标题确实显示在页面中；随后 API 复读状态为 cached。等待的是原查询按钮，不因界面临时出现同名按钮而定位到别处。
-- 三端均正常退出，页面错误数为 0，无真实用户 Key、行情或报告注入、个人数据修改和券商订单操作。
-- 本项证明的是研报索引查询页面及缓存，不是 PDF 阅读界面、整份报告全文、AI 分析结论或实盘成交。另行完成的三端原生 PDF 管线检查见下节，两项验证范围不混用。
-
-[三端正式安装包页面测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38286878349) · [下载页面验收回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/research-ui-acceptance-1.22.json)
-
-
-## 三端真实公开研报 PDF 管线验收
-
-2026-10-13，Windows x64、Apple Silicon Mac、Intel Mac 均使用与正式 1.22 相同的产品源码和锁定依赖，在各自原生 Electron 环境中通过真实公开研报检查。没有重编译或替换公开安装包。
-
-- 沿用现有网络安全客户端及解析器，无网络响应或 PDF 正文模拟，不绕过网络限制或源码一致性检查。
-- 三端均下载 755,540 字节的同一公开 PDF，提取 8,476 字符；文件哈希和文本哈希分别一致。每端一项测试通过，未跳过。
-- 只保存长度、哈希、平台和验证状态，不上传 PDF 或提取正文，不调用大模型、不操作个人数据或券商订单。
-- 这是原生源代码管线验收，不是正式安装包 PDF 阅读界面或完整研究智能体流程验收。解析仍限前 24 页，不把它称为整份长报告全文。
-- 两次先前的流程配置失败均发生于 PDF 测试之前；失败历史随永久回执保留。
-
-[三端原生 PDF 管线测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38287571344) · [下载永久验收回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/native-public-pdf-acceptance-1.22.json)
+安装包构建一次，验收与发布复用同一字节；1.22 及此前公开安装包不覆盖。本轮不修改个人数据、数据库结构或交易逻辑。
 
 </details>
 
@@ -267,7 +216,7 @@ flowchart LR
 
 这些只是同一产品的系统与架构安装包，不是按功能拆分的产品。交易执行的平台限制见上方交易功能说明。
 
-**当前正式版本为 1.22，直接下载链接见本文顶部。Python 数据扩展按需安装；发布说明与实际附件是交付依据，不能用源码标签代替安装验收。**
+**当前正式版本为 1.23，直接下载链接见本文顶部。Python 数据扩展按需安装；发布说明与实际附件是交付依据，不能用源码标签代替安装验收。**
 
 升级时沿用原安装目录并保留数据；Windows 可以安装到 K、D 等非系统盘，Mac 替换应用而不是保留多份副本。当前仍通过完整安装包升级，GitHub 增量更新尚未接入。测试包未配置商业代码签名或 Apple 公证，不应为了安装而全局关闭系统安全保护。
 
@@ -325,10 +274,10 @@ Windows 与 Mac 仍是同一款投研产品；本机交易执行代码路径仅�
 <details>
 <summary>开发与自行编译</summary>
 
-正式版本源码见 [v1.22.0 标签](https://github.com/hzqedison/RT-ResearchFlow/tree/v1.22.0)。[当前开发分支](https://github.com/hzqedison/RT-ResearchFlow/tree/codex/public-product-runtime-1.10)可能包含尚未批准或尚未发布的候选；自行编译正式版本时使用对应发布标签。默认首页用于产品介绍，不代表默认分支代码就是最新安装包源码。
+正式版本源码见 [v1.23.0 标签](https://github.com/hzqedison/RT-ResearchFlow/tree/v1.23.0)。[当前开发分支](https://github.com/hzqedison/RT-ResearchFlow/tree/codex/public-product-runtime-1.10)可能包含尚未批准或尚未发布的候选；自行编译正式版本时使用对应发布标签。默认首页用于产品介绍，不代表默认分支代码就是最新安装包源码。
 
 ```sh
-git clone --branch v1.22.0 https://github.com/hzqedison/RT-ResearchFlow.git
+git clone --branch v1.23.0 https://github.com/hzqedison/RT-ResearchFlow.git
 cd RT-ResearchFlow
 corepack enable
 corepack prepare pnpm@10.14.0 --activate
