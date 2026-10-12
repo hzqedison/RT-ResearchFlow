@@ -719,5 +719,232 @@
         }
       }
     ]
+  },
+  "currentRelease": {
+    "version": "1.21.0",
+    "sourceCommit": "249f90cade57026e3bc9a85b2e21427b634dfbed",
+    "nativeBuildRun": 38250741558,
+    "installerLifecycleRun": 38251791799,
+    "publisherRun": 38252785339,
+    "liveDataRun": 38253847793,
+    "liveTestSourceCommit": "32466f62b9064c03df666938e9ee230a282e6cf8",
+    "productRebuiltForLiveTests": false,
+    "passedLiveTests": 6,
+    "failedLiveTests": 0,
+    "skippedLiveTests": 0,
+    "receipts": [
+      {
+        "jobId": "114826699005",
+        "receipts": [
+          {
+            "kind": "released-public-rule-acceptance",
+            "version": "1.21.0",
+            "platform": "darwin",
+            "arch": "arm64",
+            "date": "20261012",
+            "rows": 46,
+            "reports": [
+              {
+                "strategy": "builtin-public-limit-continuous",
+                "matched": 1
+              },
+              {
+                "strategy": "builtin-public-limit-secondBoard",
+                "matched": 11
+              },
+              {
+                "strategy": "builtin-public-limit-earlyFirst",
+                "matched": 11
+              }
+            ],
+            "calendarFixtureInjected": false,
+            "marketRowsMocked": false,
+            "normalExit": true,
+            "productionUserDataTouched": false,
+            "brokerOrdersSubmitted": false
+          },
+          {
+            "kind": "released-public-daily-acceptance",
+            "version": "1.21.0",
+            "platform": "darwin",
+            "arch": "arm64",
+            "results": [
+              {
+                "provider": "tencent",
+                "stockCode": "000001",
+                "ok": true,
+                "rows": 480,
+                "latestTradeDate": "20261012",
+                "message": "tencent · 截至 20261012 · 480 日"
+              },
+              {
+                "provider": "eastmoney",
+                "stockCode": "600519",
+                "ok": true,
+                "rows": 149,
+                "latestTradeDate": "20261012",
+                "message": "eastmoney · 截至 20261012 · 149 日"
+              },
+              {
+                "provider": "sina",
+                "stockCode": "600000",
+                "ok": true,
+                "rows": 480,
+                "latestTradeDate": "20261012",
+                "message": "sina · 截至 20261012 · 480 日"
+              }
+            ],
+            "allProvidersAvailable": true,
+            "normalExit": true,
+            "marketRowsMocked": false,
+            "productionUserDataTouched": false,
+            "brokerOrdersSubmitted": false
+          }
+        ]
+      },
+      {
+        "jobId": "114826699220",
+        "receipts": [
+          {
+            "kind": "released-public-rule-acceptance",
+            "version": "1.21.0",
+            "platform": "win32",
+            "arch": "x64",
+            "date": "20261012",
+            "rows": 46,
+            "reports": [
+              {
+                "strategy": "builtin-public-limit-continuous",
+                "matched": 1
+              },
+              {
+                "strategy": "builtin-public-limit-secondBoard",
+                "matched": 11
+              },
+              {
+                "strategy": "builtin-public-limit-earlyFirst",
+                "matched": 11
+              }
+            ],
+            "calendarFixtureInjected": false,
+            "marketRowsMocked": false,
+            "normalExit": true,
+            "productionUserDataTouched": false,
+            "brokerOrdersSubmitted": false
+          },
+          {
+            "kind": "released-public-daily-acceptance",
+            "version": "1.21.0",
+            "platform": "win32",
+            "arch": "x64",
+            "results": [
+              {
+                "provider": "tencent",
+                "stockCode": "000001",
+                "ok": true,
+                "rows": 480,
+                "latestTradeDate": "20261012",
+                "message": "tencent · 截至 20261012 · 480 日"
+              },
+              {
+                "provider": "eastmoney",
+                "stockCode": "600519",
+                "ok": true,
+                "rows": 149,
+                "latestTradeDate": "20261012",
+                "message": "eastmoney · 截至 20261012 · 149 日"
+              },
+              {
+                "provider": "sina",
+                "stockCode": "600000",
+                "ok": true,
+                "rows": 480,
+                "latestTradeDate": "20261012",
+                "message": "sina · 截至 20261012 · 480 日"
+              }
+            ],
+            "allProvidersAvailable": true,
+            "normalExit": true,
+            "marketRowsMocked": false,
+            "productionUserDataTouched": false,
+            "brokerOrdersSubmitted": false
+          }
+        ]
+      },
+      {
+        "jobId": "114826699318",
+        "receipts": [
+          {
+            "kind": "released-public-rule-acceptance",
+            "version": "1.21.0",
+            "platform": "darwin",
+            "arch": "x64",
+            "date": "20261012",
+            "rows": 46,
+            "reports": [
+              {
+                "strategy": "builtin-public-limit-continuous",
+                "matched": 1
+              },
+              {
+                "strategy": "builtin-public-limit-secondBoard",
+                "matched": 11
+              },
+              {
+                "strategy": "builtin-public-limit-earlyFirst",
+                "matched": 11
+              }
+            ],
+            "calendarFixtureInjected": false,
+            "marketRowsMocked": false,
+            "normalExit": true,
+            "productionUserDataTouched": false,
+            "brokerOrdersSubmitted": false
+          },
+          {
+            "kind": "released-public-daily-acceptance",
+            "version": "1.21.0",
+            "platform": "darwin",
+            "arch": "x64",
+            "results": [
+              {
+                "provider": "tencent",
+                "stockCode": "000001",
+                "ok": true,
+                "rows": 480,
+                "latestTradeDate": "20261012",
+                "message": "tencent · 截至 20261012 · 480 日"
+              },
+              {
+                "provider": "eastmoney",
+                "stockCode": "600519",
+                "ok": true,
+                "rows": 149,
+                "latestTradeDate": "20261012",
+                "message": "eastmoney · 截至 20261012 · 149 日"
+              },
+              {
+                "provider": "sina",
+                "stockCode": "600000",
+                "ok": true,
+                "rows": 480,
+                "latestTradeDate": "20261012",
+                "message": "sina · 截至 20261012 · 480 日"
+              }
+            ],
+            "allProvidersAvailable": true,
+            "normalExit": true,
+            "marketRowsMocked": false,
+            "productionUserDataTouched": false,
+            "brokerOrdersSubmitted": false
+          }
+        ]
+      }
+    ],
+    "knownBoundaries": [
+      "Only the three sampled public daily-provider stocks and public limit-up rules were verified live; this is not a whole-market completeness proof.",
+      "The earlier local Windows Eastmoney connection reset remains an environment-specific unresolved observation; successful isolated Windows requests do not prove its exact cause.",
+      "No real Tushare or model credential, full auction/chip/minute history, or broker transaction was validated."
+    ]
   }
 }

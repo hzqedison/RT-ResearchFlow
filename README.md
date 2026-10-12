@@ -1,25 +1,25 @@
 <h1 align="center">RT-ResearchFlow</h1>
 
 <!-- CURRENT-RELEASE-START -->
-## 当前正式版本：1.20
+## 当前正式版本：1.21
 
-1.21 正在打包验收中。源码候选版本为 1.21.0；正式发布前，以下下载链接仍指向已验收的 1.20。
+Windows 与两种 Mac 是同一产品，选择对应系统和芯片的安装包即可：
 
-同一产品，选择对应系统即可直接安装，不需要再解压安装包：
+- [Windows x64 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.21.0/RT-ResearchFlow-Setup-1.21.0-x64.exe)
+- [Mac Apple Silicon 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.21.0/RT-ResearchFlow-macOS-1.21.0-arm64.dmg)
+- [Mac Intel 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.21.0/RT-ResearchFlow-macOS-1.21.0-x64.dmg)
 
-- [Windows x64 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.20.0/RT-ResearchFlow-Setup-1.20.0-x64.exe)
-- [Mac Apple Silicon 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.20.0/RT-ResearchFlow-macOS-1.20.0-arm64.dmg)
-- [Mac Intel 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.20.0/RT-ResearchFlow-macOS-1.20.0-x64.dmg)
+**免费短线入口**：配置中心 → 数据源 → 选择已收盘交易日 → 同步免费涨停池；再到短线策略 → 策略实验室使用免费早封首板、二板观察或连板观察。无需 Tushare Key 或 Python。
 
-**免费短线如何使用**：配置中心 → 数据源 → 选择已收盘交易日 → 同步免费涨停池；随后到短线策略 → 策略实验室使用免费早封首板、二板观察或连板观察。无需 Tushare Key 或 Python。专业竞价、龙虎榜、筹码和完整题材仍需独立数据与权限，不能把免费涨停规则当作这些数据已齐备。
+**凭证绑定入口**：配置中心 → 数据源 → Tushare Key 绑定与验证。大模型 API Key 在 AI 配置中单独绑定。保存凭证不等于拥有所有专业接口权限。
 
-**明确的凭证入口**：配置中心 → 数据源 → 顶部“Tushare Key 绑定与验证”。Token 与 AI 配置中的大模型 API Key 分开管理，验证状态只代表实际检查的接口。
+正式 1.21 三端共 6 项真实联网测试通过：每端取得 46 条涨停事实并完成三个规则扫描，腾讯、新浪、东方财富的抽样日线均可用。未注入模拟行情或交易日历；具体范围见[真实数据测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38253847793)。
 
-正式 1.20 已完成 Windows 和两种 Mac 的真实免费策略复核。Mac 两种架构的腾讯、新浪、东方财富日线均可用；Windows 本机的东方财富日线曾连接重置，公开源不保证所有网络环境一致。[查看双架构测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38235739112)。
+Windows 本机此前仍出现东方财富日线连接重置，隔离 Windows 环境未复现；不能把隔离测试成功当作所有网络环境可用的保证。
 
-[当前正式版更新说明](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.20.0) · [1.21 候选说明](docs/releases/v1.21.0.md) · [真实数据验收记录](docs/quality/public-data-availability.json)
+[正式版更新说明](https://github.com/hzqedison/RT-ResearchFlow/releases/tag/v1.21.0) · [验收记录](docs/quality/public-data-availability.json)
 
-本轮只发布已确认的可用性修复与使用说明，不纳入未确认的大改动。未验证真实用户 Tushare/模型 Key 或券商成交。
+专业竞价、龙虎榜、筹码和完整历史底座仍需独立数据与权限。本轮未验证真实用户 Tushare/模型 Key 或券商成交，不把规则扫描当作实盘委托。
 <!-- CURRENT-RELEASE-END -->
 <p align="center"><strong>从市场线索到研究、验证、执行与复盘，一个工作台完成。</strong></p>
 <p align="center">多来源行情 · AI 研究 · 研报与选股 · 策略验证 · 本人确认交易 · 本地研究记录</p>
@@ -247,7 +247,7 @@ Windows 与 Mac 仍是同一款投研产品；本机交易执行代码路径仅�
 完整产品源码位于[当前开发分支](https://github.com/hzqedison/RT-ResearchFlow/tree/codex/public-product-runtime-1.10)。开发分支可能包含尚未发布的候选；编译正式版本时使用对应发布标签，不把历史分支当成最新源码。
 
 ```sh
-git clone --branch v1.20.0 https://github.com/hzqedison/RT-ResearchFlow.git
+git clone --branch v1.21.0 https://github.com/hzqedison/RT-ResearchFlow.git
 cd RT-ResearchFlow
 corepack enable
 corepack prepare pnpm@10.14.0 --activate
