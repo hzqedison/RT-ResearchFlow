@@ -34,6 +34,8 @@
 随后接入 Tushare 历史同步、日历准备及 daily_basic 补充的取消，84 项定向回归与 Windows 独立合成凭证退出通过。对应规格 `specs/cancellable-tushare-history/spec.md`，证据 `docs/quality/tushare-shutdown-1.18-candidate.md`；不冒充真实 Key 权限，其他后台任务与 Mac 原生证明仍未完成，4.4 保持未勾选。
 
 新增仅诊断的两种 Mac 原生应用目录验证，记录在 `docs/quality/mac-cancellation-1.18.md`。不上传安装包，不替代正式 DMG/升级/恢复验收，不取消已知发布阻断，4.4 不因诊断绿灯整体勾选。
+
+Mac 取消诊断首轮 Intel 成功、Apple 前置失败；修订测试观察与真实日历准备后，运行 38186396480 的两种架构均通过，六份退出/摘要证明已核对。同类 Windows 用例亦通过。当前剩余为全应用后台资源、安装/升级和恢复范围，4.4 仍未勾选，不把应用目录级证据冒充正式安装验收。
 - [ ] 4.5 将既有日历和更新模块的未验证改动逐项检查后纳入下一版本
 
 ## 5. 交易与研究后续迁移
