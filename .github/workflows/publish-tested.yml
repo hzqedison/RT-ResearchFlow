@@ -99,6 +99,7 @@ jobs:
             if((Number(version.split('.')[0])>1||(Number(version.split('.')[0])===1&&Number(version.split('.')[1])>=18))&&receipt.localPublicWorkShutdownVerified!==true)throw Error('NATIVE_PUBLIC_WORK_SHUTDOWN_NOT_ACCEPTED')
             if((Number(version.split('.')[0])>1||(Number(version.split('.')[0])===1&&Number(version.split('.')[1])>=18))&&receipt.localSyntheticTushareWorkShutdownVerified!==true)throw Error('NATIVE_SYNTHETIC_TUSHARE_SHUTDOWN_NOT_ACCEPTED')
             if((Number(version.split('.')[0])>1||(Number(version.split('.')[0])===1&&Number(version.split('.')[1])>=19))&&receipt.localChipStructureWorkShutdownVerified!==true)throw Error('NATIVE_CHIP_STRUCTURE_SHUTDOWN_NOT_ACCEPTED')
+            if((Number(version.split('.')[0])>1||(Number(version.split('.')[0])===1&&Number(version.split('.')[1])>=21))&&receipt.localFrozenResearchSnapshotVerified!==true)throw Error('NATIVE_FROZEN_RESEARCH_SNAPSHOT_NOT_ACCEPTED')
             if(platform==='win32'&&receipt.sha256!==lifecycle.installerSha256)throw Error('LIFECYCLE_USED_DIFFERENT_INSTALLER')
             if(fs.readFileSync(path.join(root,sumName),'utf8').trim()!==`${receipt.sha256}  ${name}`)throw Error('CHECKSUM_IDENTITY_MISMATCH')
             for(const filename of [name,sumName,receiptName]) {

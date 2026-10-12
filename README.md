@@ -5,6 +5,8 @@
 
 1.20 已正式发布，内部版本为 1.20.0。三端原生安装包及 Windows 安装升级检查通过，以下链接直接下载已测安装包。
 
+当前开发构建进入 1.21.0，正在验收共同冻结的滚动研究数据；候选尚未发布，不替换以下正式安装包。
+
 同一产品，选择对应系统即可直接安装，不需要再解压安装包：
 
 - [Windows x64 安装包](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.20.0/RT-ResearchFlow-Setup-1.20.0-x64.exe)

@@ -1,4 +1,4 @@
-import { decodeCapitalRequest, type CapitalRequest } from './capitalSimulation'
+import { decodeCapitalRequest, isResearchSnapshotReference, type CapitalRequest, type ResearchSnapshotReference } from './capitalSimulation'
 export interface ValidationRequest {
   capital: CapitalRequest; trainDays: number; testDays: number; embargoDays: number; foldCount: number
   holdDays: number[]; minEntries: number; maxTrainingDrawdownPct: number; confirmation: true
@@ -13,20 +13,29 @@ export interface ValidationFold {
   testId: string; selected: number | null; selectedAt: number | null; test: ValidationScore | null
 }
 export interface ValidationStudy {
-  schema: 1; id: string; createdAt: number; request: ValidationRequest; calendarFingerprint: string
+  schema: 1 | 2; id: string; createdAt: number; request: ValidationRequest; calendarFingerprint: string
+  marketSnapshot?: ResearchSnapshotReference
   status: 'running' | 'completed' | 'blocked'; blockedReason: string | null; folds: ValidationFold[]
   unusedMarketDays: number; reportsCompleted: number; reportsPlanned: number
 }
-export type ValidationCode = 'INVALID_INPUT' | 'UNAUTHORIZED' | 'CALENDAR_INCOMPLETE' | 'CALENDAR_CHANGED' | 'INSUFFICIENT_DAYS' | 'CAPACITY_LIMIT' | 'REQUEST_CONFLICT' | 'NOT_FOUND' | 'REPORT_CONFLICT' | 'INPUT_NOT_READY' | 'STORAGE_UNAVAILABLE'
+export type ValidationCode = 'INVALID_INPUT' | 'UNAUTHORIZED' | 'CALENDAR_INCOMPLETE' | 'CALENDAR_CHANGED' | 'INSUFFICIENT_DAYS' | 'CAPACITY_LIMIT' | 'REQUEST_CONFLICT' | 'NOT_FOUND' | 'REPORT_CONFLICT' | 'INPUT_NOT_READY' | 'STORAGE_UNAVAILABLE' | 'SNAPSHOT_REQUIRED' | 'SNAPSHOT_UNAVAILABLE'
 export type ValidationResult<T> = { ok: true; data: T } | { ok: false; code: ValidationCode; message: string }
+export function hasFrozenValidationData(study: ValidationStudy | null): boolean {
+  if (!study || study.schema !== 2 || !isResearchSnapshotReference(study.marketSnapshot)) return false
+  const ref = study.marketSnapshot, capital = study.request?.capital
+  return !!capital && capital.id === study.id && ref.id === study.id && ref.createdAt === study.createdAt
+    && ref.dateStart === capital.dateStart && ref.dateEnd === capital.dateEnd
+}
 export const VALIDATION_MESSAGES: Record<ValidationCode, string> = {
   INVALID_INPUT: '请核对窗口、持有期、研究预算及确认项。隔离间隔不能短于最大候选持有期。',
   UNAUTHORIZED: '只允许当前工作台执行本地验证。', CALENDAR_INCOMPLETE: '区间内交易日历不完整，请先补齐。',
   CALENDAR_CHANGED: '保存协议后交易日历发生变化，已停止；请使用新协议，不覆盖旧研究。',
   INSUFFICIENT_DAYS: '开市日不足以覆盖全部训练、隔离和测试窗口，请扩大区间或减少窗口。',
-  CAPACITY_LIMIT: '研究记录或报告容量已达限制，请先检查已保存记录。', REQUEST_CONFLICT: '此研究编号已有不同参数，请另建研究。',
+  CAPACITY_LIMIT: '研究记录、冻结数据或报告容量已达限制，请先检查已保存记录。', REQUEST_CONFLICT: '此研究编号已有不同参数，请另建研究。',
   NOT_FOUND: '未找到保存的验证协议。', REPORT_CONFLICT: '底层报告与固定协议不一致，或样本外报告早于训练选择，已停止。',
   INPUT_NOT_READY: '底层资金回测尚不能执行，请检查行情、信号和日期；已完成的步骤会保留。', STORAGE_UNAVAILABLE: '暂时无法安全读写研究，请保留编号后恢复。',
+  SNAPSHOT_REQUIRED: '旧协议没有共同数据快照，只能读取原结果；请核对参数后保存新协议，不覆盖旧研究。',
+  SNAPSHOT_UNAVAILABLE: '冻结研究数据缺失或校验不通过，已停止推进；原报告保留，不自动改用当前缓存。',
 }
 const integer = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= lo && v <= hi
 export function decodeValidationRequest(v: unknown): ValidationRequest | null {

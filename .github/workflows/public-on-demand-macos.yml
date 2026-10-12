@@ -4,7 +4,7 @@ on:
     inputs:
       version:
         type: string
-        default: '1.20.0'
+        default: '1.21.0'
       target:
         type: choice
         options: [all, windows, macos, installer, probe, trace]
@@ -111,7 +111,10 @@ jobs:
           export RT_PACKAGED_STRUCTURE_WORK_VERIFIED=1
           RT_LEDGER_FIXTURE_ALLOWED=1 pnpm exec playwright test tests/e2e/packaged-account-ledger.spec.ts --workers=1 --retries=0 --reporter=line
           export RT_PACKAGED_LEDGER_VERIFIED=1
+          ELECTRON_RUN_AS_NODE=1 pnpm exec electron node_modules/vitest/vitest.mjs run tests/unit/researchFactSnapshots.test.ts --maxWorkers=1 --minWorkers=1 --silent
           RT_CAPITAL_FIXTURE_ALLOWED=1 pnpm exec playwright test tests/e2e/packaged-capital-simulation.spec.ts tests/e2e/packaged-rolling-recovery.spec.ts --workers=1 --retries=0 --reporter=line
+          RT_RESEARCH_SNAPSHOT_FIXTURE_ALLOWED=1 pnpm exec playwright test tests/e2e/packaged-research-snapshot.spec.ts --workers=1 --retries=0 --reporter=line
+          export RT_PACKAGED_RESEARCH_SNAPSHOT_VERIFIED=1
           export RT_PACKAGED_CAPITAL_VERIFIED=1
           export RT_PACKAGED_VALIDATION_VERIFIED=1
           shasum -a 256 release/*.dmg > release/SHA256SUMS-${{ matrix.arch }}.txt
@@ -234,10 +237,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Packaged ledger persistence acceptance failed' }
           'RT_PACKAGED_LEDGER_VERIFIED=1' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $env:RT_CAPITAL_FIXTURE_ALLOWED = '1'
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          pnpm exec electron node_modules/vitest/vitest.mjs run tests/unit/researchFactSnapshots.test.ts --maxWorkers=1 --minWorkers=1 --silent
+          if ($LASTEXITCODE -ne 0) { throw 'Research snapshot unit acceptance failed' }
+          Remove-Item Env:ELECTRON_RUN_AS_NODE
           pnpm exec playwright test tests/e2e/packaged-capital-simulation.spec.ts tests/e2e/packaged-rolling-recovery.spec.ts --workers=1 --retries=0 --reporter=line
           if ($LASTEXITCODE -ne 0) { throw 'Packaged shared-capital simulation acceptance failed' }
           'RT_PACKAGED_CAPITAL_VERIFIED=1' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           'RT_PACKAGED_VALIDATION_VERIFIED=1' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $env:RT_RESEARCH_SNAPSHOT_FIXTURE_ALLOWED = '1'
+          pnpm exec playwright test tests/e2e/packaged-research-snapshot.spec.ts --workers=1 --retries=0 --reporter=line
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged frozen research acceptance failed' }
+          'RT_PACKAGED_RESEARCH_SNAPSHOT_VERIFIED=1' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Install the exact NSIS package and verify installed startup
         shell: pwsh
         run: |

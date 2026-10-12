@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { decodeValidationRequest, type ValidationStudy } from '../../../electron/shared/rollingValidation'
+import { decodeValidationRequest, hasFrozenValidationData, type ValidationStudy } from '../../../electron/shared/rollingValidation'
 import { validationSummary } from '../../../electron/main/services/backtest/rollingValidationEngine'
 import type { CapitalPlan } from '../../../electron/shared/capitalSimulation'
 const defaultPlan: CapitalPlan = { holdDays: 1, maxPositions: 5, maxPositionPct: 20, cashReservePct: 10, lotSize: 100, feeBps: 13, minimumFee: '0.00', slippageBps: 0, stopLossPct: null, stopProfitPct: null }
@@ -53,7 +53,7 @@ export function RollingValidationPanel() {
     catch { if (mounted.current) setError('读取结果未知，请保留研究编号。') } finally { if (mounted.current) setBusy(false) }
   }
   async function run() {
-    if (!study || study.status !== 'running') return
+    if (!study || study.status !== 'running' || !hasFrozenValidationData(study)) return
     setBusy(true); setError(''); stop.current = false
     let current = study
     try {
@@ -73,7 +73,7 @@ export function RollingValidationPanel() {
   return <div data-testid="rolling-validation-panel" className="h-full overflow-auto p-5 text-slate-800 dark:text-slate-200">
     <h2 className="text-lg font-semibold">样本外与滚动验证</h2>
     <p className="mt-2 text-sm text-slate-500">先保存协议，再只用训练收益选择持有期；隔离后逐窗运行测试。各窗口独立重置研究预算，不拼接成连续实盘净值，也不提交订单。</p>
-    <p className="my-3 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">价格口径、历史信号当时可得性和撮合尚有研究限制。行情按每份报告分别取快照摘要，不是整个研究的一次性行情快照。亏损测试窗口不按收益或回撤过滤；数据不足不计零收益。</p>
+    <p className="my-3 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">保存新协议时冻结整份研究的信号、行情与复权事实，训练和测试复用共同快照，不跟随缓存刷新。价格口径、历史信号当时可得性和撮合仍有研究限制。亏损测试窗口不按收益或回撤过滤；数据不足不计零收益。</p>
     {error && <p role="alert" className="my-3 text-sm text-red-700">{error}</p>}
     {uncertain && <div className="my-3 rounded border p-3 text-sm">结果待核对 · {uncertain}<button type="button" disabled={busy} onClick={() => load(uncertain)} className="ml-3 rounded border px-3 py-2">按编号恢复</button></div>}
     <fieldset disabled={busy || uncertain !== null} className="grid grid-cols-2 gap-3 rounded border p-4 md:grid-cols-4">
@@ -91,11 +91,16 @@ export function RollingValidationPanel() {
     </fieldset>
     <div className="my-4 flex flex-wrap items-center gap-3"><label className="text-sm">已保存验证<select aria-label="已保存验证" value={study?.id ?? ''} disabled={busy} onChange={e => load(e.target.value)} className="ml-2 rounded border p-2"><option value="">选择协议</option>{runs.map(r => <option key={r.id} value={r.id}>{new Date(r.createdAt).toLocaleString()} · {r.status} · {r.id.slice(0, 8)}</option>)}</select></label>
       <button type="button" disabled={busy} onClick={() => refresh().catch(() => setError('无法刷新研究。'))} className="rounded border px-3 py-2 text-sm">刷新记录</button>
-      {study?.status === 'running' && <button type="button" disabled={busy || uncertain !== null} onClick={run} className="rounded bg-cyan-700 px-3 py-2 text-sm text-white">运行或继续验证</button>}
+      {study?.status === 'running' && <button type="button" disabled={busy || uncertain !== null || !hasFrozenValidationData(study)} onClick={run} className="rounded bg-cyan-700 px-3 py-2 text-sm text-white">运行或继续验证</button>}
       {busy && study && <button type="button" onClick={() => { stop.current = true }} className="rounded border px-3 py-2 text-sm">当前步骤完成后暂停</button>}
     </div>
     {study && summary && <section data-testid="rolling-validation-report" className="rounded border p-4">
       <p className="text-sm">研究 {study.id} · {study.status === 'completed' ? '窗口执行完成' : study.status === 'blocked' ? '研究有阻断' : busy ? '正在执行本地步骤' : '已保存，可继续'} · 报告 {study.reportsCompleted} / {study.reportsPlanned}</p>
+      {hasFrozenValidationData(study) && study.marketSnapshot ? <div data-testid="rolling-frozen-facts" className="my-3 rounded border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-900">
+        <p>共同冻结数据 · {study.marketSnapshot.dateStart} 至 {study.marketSnapshot.dateEnd} · 信号 {study.marketSnapshot.signalCount} 条 · 日线 {study.marketSnapshot.barCount} 条</p>
+        <p className="break-all">数据摘要 {study.marketSnapshot.digest}</p>
+        <p>冻结于 {new Date(study.marketSnapshot.createdAt).toLocaleString()}；复现研究输入，不证明这些信号在历史当时已经可得。</p>
+      </div> : <p data-testid="rolling-legacy-facts" className="my-3 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">旧协议未冻结共同数据：原结果保留可读，但不能继续追加报告。请核对上方参数后另存新协议；不会改写旧研究。</p>}
       <progress aria-label="滚动验证报告进度" className="my-3 w-full" max={study.reportsPlanned} value={study.reportsCompleted} />
       {study.blockedReason && <p className="text-sm text-red-700">{study.blockedReason}</p>}
       <p className="text-xs text-slate-500">固定规则：训练净收益降序、回撤升序、预设候选顺序。同一来源、每窗预算 {study.request.capital.funding.kind === 'manual' ? study.request.capital.funding.cash : '未知'}；未使用区间尾部 {study.unusedMarketDays} 个开市日。日历摘要 {study.calendarFingerprint}。</p>

@@ -11,5 +11,5 @@ it('shows explicit protocol fields and requires consent before saving', () => {
 })
 it('states independent budgets, imperfect historical facts and no orders', () => {
   const html = renderToStaticMarkup(<RollingValidationPanel />)
-  for (const text of ['各窗口独立重置研究预算', '不提交订单', '历史信号当时可得性', '不是整个研究的一次性行情快照', '亏损测试窗口不按收益或回撤过滤', '数据不足不计零收益']) expect(html).toContain(text)
+  for (const text of ['各窗口独立重置研究预算', '不提交订单', '历史信号当时可得性', '训练和测试复用共同快照', '不跟随缓存刷新', '亏损测试窗口不按收益或回撤过滤', '数据不足不计零收益']) expect(html).toContain(text)
 })

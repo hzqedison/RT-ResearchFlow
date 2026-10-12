@@ -9,6 +9,9 @@ export interface CapitalRequest {
   id: string; source: { kind: 'short-term'; key: string } | { kind: 'lab'; runId: number }
   dateStart: string; dateEnd: string; funding: CapitalFunding; plan: CapitalPlan; assumptionsConfirmed: true
 }
+export interface ResearchSnapshotReference {
+  id: string; digest: string; createdAt: number; dateStart: string; dateEnd: string; signalCount: number; barCount: number
+}
 export interface CapitalSignal { id: string; date: string; symbol: string; strength: number; direction: string | null }
 export interface CapitalBar { date: string; symbol: string; open: number | null; high: number | null; low: number | null; close: number; volume: number | null; factor: number | null; source: string }
 export interface CapitalOpening { cash: string; positions: Array<{ symbol: string; quantity: number }>; evidence: { kind: 'manual' | 'ledger-opening'; accountId?: string; revision?: number; asOf?: number } }
@@ -18,11 +21,12 @@ export interface CapitalDecision { signalId: string; date: string; symbol: strin
 export interface CapitalReport {
   schema: 1; engine: 'capital-calendar-cents-1'; id: string; createdAt: number; request: CapitalRequest
   fundingEvidence: CapitalOpening['evidence']; factsFingerprint: string; status: 'partial' | 'blocked'; issues: string[]
+  marketSnapshot?: ResearchSnapshotReference
   initialEquity: string | null; finalEquity: string | null; finalCash: string; totalPnl: string | null; totalReturnPct: number | null
   maxDrawdownPct: number | null; annualizedSharpe: number | null; annualizationDays: 252; feesTotal: string
   curve: CapitalPoint[]; fills: CapitalFill[]; decisions: CapitalDecision[]; openPositions: Array<{ symbol: string; quantity: number }>
 }
-export type CapitalCode = 'INVALID_INPUT' | 'UNAUTHORIZED' | 'CALENDAR_INCOMPLETE' | 'FACT_LIMIT' | 'ACCOUNT_CONFLICT' | 'OPENING_DATE_MISMATCH' | 'OPENING_INCOMPLETE' | 'REQUEST_CONFLICT' | 'NOT_FOUND' | 'STORAGE_UNAVAILABLE'
+export type CapitalCode = 'INVALID_INPUT' | 'UNAUTHORIZED' | 'CALENDAR_INCOMPLETE' | 'FACT_LIMIT' | 'ACCOUNT_CONFLICT' | 'OPENING_DATE_MISMATCH' | 'OPENING_INCOMPLETE' | 'REQUEST_CONFLICT' | 'NOT_FOUND' | 'STORAGE_UNAVAILABLE' | 'SNAPSHOT_UNAVAILABLE' | 'SNAPSHOT_CONFLICT'
 export type CapitalResult<T> = { ok: true; data: T } | { ok: false; code: CapitalCode; message: string }
 export interface CapitalCatalog { sources: Array<{ value: string; label: string; count: number }>; accounts: LedgerAccount[]; runs: Array<{ id: string; createdAt: number; sourceLabel: string; status: string }>; limited: boolean }
 export const CAPITAL_ISSUE_LABELS: Record<string, string> = {
@@ -55,6 +59,13 @@ export function capitalDate(value: unknown): value is string {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value && value >= '2000-01-01'
 }
 const integer = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= min && v <= max
+export function isResearchSnapshotReference(value: unknown): value is ResearchSnapshotReference {
+  if (!exact(value, ['id', 'digest', 'createdAt', 'dateStart', 'dateEnd', 'signalCount', 'barCount'])) return false
+  const r = value
+  return isLedgerId(r.id) && typeof r.digest === 'string' && /^[a-f0-9]{64}$/.test(r.digest)
+    && integer(r.createdAt, 0, Number.MAX_SAFE_INTEGER) && capitalDate(r.dateStart) && capitalDate(r.dateEnd) && r.dateStart <= r.dateEnd
+    && integer(r.signalCount, 0, 5000) && integer(r.barCount, 0, 300000)
+}
 export function decodeCapitalRequest(value: unknown): CapitalRequest | null {
   try {
     if (!exact(value, ['id', 'source', 'dateStart', 'dateEnd', 'funding', 'plan', 'assumptionsConfirmed']) || !isLedgerId(value.id)

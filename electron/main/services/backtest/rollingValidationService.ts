@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
-import { decodeCapitalRequest, type CapitalRequest, type CapitalReport } from '../../../shared/capitalSimulation'
-import { decodeValidationRequest, type ValidationCode, type ValidationRequest, type ValidationStudy } from '../../../shared/rollingValidation'
+import { decodeCapitalRequest, type CapitalRequest, type CapitalReport, type ResearchSnapshotReference } from '../../../shared/capitalSimulation'
+import { decodeValidationRequest, hasFrozenValidationData, type ValidationCode, type ValidationRequest, type ValidationStudy } from '../../../shared/rollingValidation'
 import { CapitalError, getCapitalReport, runCapitalSimulation } from './capitalSimulationService'
 import { chooseTraining, rollingWindows, scoreValidationReport } from './rollingValidationEngine'
+import { captureResearchSnapshot, getResearchSnapshot, sameResearchSnapshot } from './researchFactSnapshotStore'
 export class ValidationError extends Error { constructor(readonly code: ValidationCode) { super(code) } }
 function fail(code: ValidationCode): never { throw new ValidationError(code) }
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
@@ -26,7 +27,8 @@ export function getValidationStudy(db: Database.Database, id: string): Validatio
   const row = db.prepare('SELECT body_json,digest FROM rf_validation_studies WHERE id=?').get(id) as { body_json: string; digest: string } | undefined
   if (!row) fail('NOT_FOUND')
   const study = JSON.parse(row.body_json) as ValidationStudy
-  if (hash(study) !== row.digest || study.id !== id || study.schema !== 1 || !decodeValidationRequest(study.request)) fail('STORAGE_UNAVAILABLE')
+  if (hash(study) !== row.digest || study.id !== id || ![1, 2].includes(study.schema) || !decodeValidationRequest(study.request)
+    || study.schema === 2 && !hasFrozenValidationData(study)) fail('STORAGE_UNAVAILABLE')
   return study
 }
 export function listValidationStudies(db: Database.Database) {
@@ -50,21 +52,26 @@ export function prepareValidationStudy(db: Database.Database, value: ValidationR
     const count = existing ? (db.prepare('SELECT COUNT(*) AS n FROM rf_capital_runs').get() as { n: number }).n : 0
     if (count + request.foldCount * (request.holdDays.length + 1) > 500) fail('CAPACITY_LIMIT')
     const cal = calendar(db, request), windows = rollingWindows(cal.days, request); if (!windows) fail('INSUFFICIENT_DAYS')
-    const study: ValidationStudy = { schema: 1, id: request.capital.id, createdAt: now, request, calendarFingerprint: cal.fingerprint,
+    let marketSnapshot: ResearchSnapshotReference
+    try { marketSnapshot = captureResearchSnapshot(db, request.capital, now) } catch (error) {
+      if (error instanceof CapitalError) fail(error.code === 'FACT_LIMIT' ? 'CAPACITY_LIMIT' : error.code === 'CALENDAR_INCOMPLETE' ? 'CALENDAR_INCOMPLETE' : error.code === 'SNAPSHOT_CONFLICT' ? 'SNAPSHOT_UNAVAILABLE' : 'INPUT_NOT_READY')
+      throw error
+    }
+    const study: ValidationStudy = { schema: 2, id: request.capital.id, createdAt: now, request, calendarFingerprint: cal.fingerprint, marketSnapshot,
       status: 'running', blockedReason: null, unusedMarketDays: cal.days.length - request.trainDays - request.embargoDays - request.testDays * request.foldCount,
       reportsCompleted: 0, reportsPlanned: request.foldCount * (request.holdDays.length + 1),
       folds: windows.map(w => ({ ...w, candidates: request.holdDays.map(holdDays => ({ holdDays, id: randomUUID(), result: null })), testId: randomUUID(), selected: null, selectedAt: null, test: null })) }
     save(db, study); return study
   })()
 }
-function execute(db: Database.Database, expected: CapitalRequest, now: number, selectedAt: number | null) {
+function execute(db: Database.Database, expected: CapitalRequest, now: number, selectedAt: number | null, snapshot: ResearchSnapshotReference) {
   let report: CapitalReport
-  try { report = runCapitalSimulation(db, expected, now) } catch (e) {
-    if (e instanceof CapitalError) fail(e.code === 'REQUEST_CONFLICT' ? 'REPORT_CONFLICT' : 'INPUT_NOT_READY')
+  try { report = runCapitalSimulation(db, expected, now, snapshot) } catch (e) {
+    if (e instanceof CapitalError) fail(e.code === 'REQUEST_CONFLICT' || e.code === 'SNAPSHOT_CONFLICT' ? 'REPORT_CONFLICT' : e.code === 'SNAPSHOT_UNAVAILABLE' ? 'SNAPSHOT_UNAVAILABLE' : 'INPUT_NOT_READY')
     throw e
   }
   const request = decodeCapitalRequest(report.request)
-  if (!request || hash(request) !== hash(decodeCapitalRequest(expected)) || selectedAt !== null && report.createdAt < selectedAt) fail('REPORT_CONFLICT')
+  if (!request || hash(request) !== hash(decodeCapitalRequest(expected)) || !sameResearchSnapshot(report.marketSnapshot, snapshot) || selectedAt !== null && report.createdAt < selectedAt) fail('REPORT_CONFLICT')
   const proof = getCapitalReport(db, expected.id)
   return scoreValidationReport(proof, hash(proof))
 }
@@ -73,11 +80,16 @@ export function advanceValidationStudy(db: Database.Database, id: string, now = 
   return db.transaction(() => {
     const study = getValidationStudy(db, id)
     if (study.status !== 'running') return study
+    if (study.schema !== 2 || !study.marketSnapshot) fail('SNAPSHOT_REQUIRED')
+    try {
+      const snapshot = getResearchSnapshot(db, study.marketSnapshot)
+      if (hash(snapshot.facts.calendar) !== study.calendarFingerprint || hash(snapshot.source) !== hash(study.request.capital.source)) fail('SNAPSHOT_UNAVAILABLE')
+    } catch { fail('SNAPSHOT_UNAVAILABLE') }
     if (calendar(db, study.request).fingerprint !== study.calendarFingerprint) fail('CALENDAR_CHANGED')
     const fold = study.folds.find(f => f.test === null); if (!fold) fail('STORAGE_UNAVAILABLE')
     const base = study.request.capital, candidate = fold.candidates.find(c => c.result === null)
     if (candidate) {
-      candidate.result = execute(db, { ...base, id: candidate.id, dateStart: fold.trainStart, dateEnd: fold.trainEnd, plan: { ...base.plan, holdDays: candidate.holdDays } }, now, null)
+      candidate.result = execute(db, { ...base, id: candidate.id, dateStart: fold.trainStart, dateEnd: fold.trainEnd, plan: { ...base.plan, holdDays: candidate.holdDays } }, now, null, study.marketSnapshot)
       study.reportsCompleted++
     } else if (fold.selected === null) {
       const selected = chooseTraining(fold.candidates.map(c => c.result!), study.request)
@@ -86,7 +98,7 @@ export function advanceValidationStudy(db: Database.Database, id: string, now = 
       // Commit the training choice in this call. Never evaluate test outcomes while choosing.
     } else {
       if (fold.selectedAt === null || now < fold.selectedAt) fail('REPORT_CONFLICT')
-      fold.test = execute(db, { ...base, id: fold.testId, dateStart: fold.testStart, dateEnd: fold.testEnd, plan: { ...base.plan, holdDays: fold.candidates[fold.selected].holdDays } }, now, fold.selectedAt)
+      fold.test = execute(db, { ...base, id: fold.testId, dateStart: fold.testStart, dateEnd: fold.testEnd, plan: { ...base.plan, holdDays: fold.candidates[fold.selected].holdDays } }, now, fold.selectedAt, study.marketSnapshot)
       study.reportsCompleted++
       if (study.folds.every(f => f.test !== null)) study.status = 'completed'
     }
