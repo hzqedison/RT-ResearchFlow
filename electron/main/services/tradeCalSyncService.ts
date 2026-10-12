@@ -7,7 +7,7 @@ import Database from 'better-sqlite3'
 import { upsertTradeCal, hasTradeCalCoverage, insertTradeCalIfMissing } from '../database/tradeCalRepository'
 import { fetchTradeCal } from './tushareService'
 import { getBeijingYmd, offsetYmd } from './marketSettlementPolicy'
-import { checkLocalWork, isLocalWorkCancelled, waitForLocalWork } from './publicMarketWorkOwner'
+import { checkLocalWork, isLocalWorkCancelled, waitForLocalWork, PublicMarketWorkOwner } from './publicMarketWorkOwner'
 import {
   buildOfficialSseTradingCalendar,
   OFFICIAL_SSE_CALENDAR_START,
@@ -16,6 +16,15 @@ import {
 
 let _syncRunning = false
 let _syncPromise: Promise<TradeCalSyncResult> | null = null
+const tradeCalendarWorkOwner = new PublicMarketWorkOwner()
+
+export function stopTradeCalendarWork(): void {
+  tradeCalendarWorkOwner.stop()
+}
+
+export function waitForTradeCalendarWorkIdle(timeoutMs: number): Promise<boolean> {
+  return tradeCalendarWorkOwner.waitForIdle(timeoutMs)
+}
 
 export interface TradeCalSyncResult {
   status: 'completed' | 'empty' | 'failed'
@@ -46,7 +55,7 @@ export function seedOfficialTradeCalendar(db: Database.Database): TradeCalSyncRe
 }
 
 export async function syncTradeCalIfNeeded(db: Database.Database, token?: string | null, signal?: AbortSignal): Promise<void> {
-  checkLocalWork(signal)
+  tradeCalendarWorkOwner.assertAccepting(signal)
   if (_syncPromise) {
     await waitForLocalWork(_syncPromise, signal)
     checkLocalWork(signal)
@@ -59,11 +68,11 @@ export async function syncTradeCalIfNeeded(db: Database.Database, token?: string
 }
 
 export function syncTradeCalFull(db: Database.Database, token?: string | null, signal?: AbortSignal): Promise<TradeCalSyncResult> {
-  try { checkLocalWork(signal) } catch (error) { return Promise.reject(error) }
+  try { tradeCalendarWorkOwner.assertAccepting(signal) } catch (error) { return Promise.reject(error) }
   if (_syncPromise) return waitForLocalWork(_syncPromise, signal)
   _syncRunning = true
   let promise: Promise<TradeCalSyncResult>
-  promise = Promise.resolve().then(async (): Promise<TradeCalSyncResult> => {
+  promise = tradeCalendarWorkOwner.run(async (signal): Promise<TradeCalSyncResult> => {
     try {
       checkLocalWork(signal)
       const today = getBeijingYmd()
@@ -102,7 +111,7 @@ export function syncTradeCalFull(db: Database.Database, token?: string | null, s
       console.warn('[TradeCal] Calendar persistence failed; existing data was not cleared')
       return { status: 'failed', rowCount: 0 }
     }
-  }).finally(() => {
+  }, signal).finally(() => {
     if (_syncPromise === promise) {
       _syncPromise = null
       _syncRunning = false
