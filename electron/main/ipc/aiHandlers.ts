@@ -19,6 +19,7 @@ import {
 import { getDataSourceConfig, updateDataSourceConfig, getMultiSourcePreference, updateMultiSourcePreference, getWencaiCookieEncrypted } from '../database/dataSourceRepository'
 import { registerMultiSourceHandlers } from './multiSourceHandlers'
 import { fetchSelectedStockDaily } from '../services/multiSourceMarketService'
+import { describeSelectedDataFailure } from '../utils/publicDataFailure'
 import type { DailyDataProvider, SaveDataSourcePreference } from '../../shared/dataSourceTypes'
 import { encryptRequiredApiKey, decryptApiKey, inspectApiKeyStatus, type ApiKeyStatus } from '../utils/apiKeyEncryption'
 import { saveAIConfiguration } from '../services/aiConfigurationService'
@@ -1677,14 +1678,14 @@ export function registerAIHandlers(getWindow: TrustedWindowGetter): void {
       }
 
       const stockCode = rawCode.replace(/\.(SH|SZ|BJ)$/i, '')
-      if (!/^\d{6}$/.test(stockCode)) return { ok: false as const, reason: 'invalid_code' as const }
+      if (!/^\d{6}$/.test(stockCode)) return { ok: false as const, reason: 'invalid_code' as const, message: '请输入有效的六位股票代码。' }
       const result = await fetchSelectedStockDaily(db, stockCode)
       // FR-072: clear forecast cache for the refreshed stock
       forecastCacheMap.delete(stockCode)
       getWindow()?.webContents.send('datasource:stocksUpdated', {})
       return { ok: true as const, ...result }
-    } catch {
-      return { ok: false as const, reason: 'fetch_error' as const }
+    } catch (error) {
+      return { ok: false as const, reason: 'fetch_error' as const, message: describeSelectedDataFailure(error) }
     }
   })
 

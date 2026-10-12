@@ -72,3 +72,27 @@ export function describePublicDataFailure(error: unknown, httpStatus?: number): 
   }
   return safeMessage ?? messages.unknown
 }
+/** Preserve only validated, already-classified provider explanations at the refresh IPC boundary. */
+export function describeSelectedDataFailure(error: unknown): string {
+  const message = typeof error === 'object' && error !== null ? field(error, 'message') : undefined
+  if (message === '请至少选择一个日线数据源') return message
+  if (message === 'INVALID_STOCK_CODE') return '请输入有效的六位股票代码。'
+  const prefix = '所选日线来源均未完成取数：'
+  if (typeof message === 'string' && message.length <= 1600 && message.startsWith(prefix)) {
+    const labels = { tushare: 'Tushare Pro', tencent: '腾讯财经', eastmoney: '东方财富', sina: '新浪财经', tdx: '通达信', akshare: 'AKShare' }
+    const parts = message.slice(prefix.length).split(/；(?=(?:tushare|tencent|eastmoney|sina|tdx|akshare): )/)
+    const seen = new Set<string>()
+    const safe: string[] = []
+    if (parts.length > 0 && parts.length <= 6) {
+      for (const part of parts) {
+        const match = /^(tushare|tencent|eastmoney|sina|tdx|akshare): (.+)$/.exec(part)
+        if (!match || seen.has(match[1]) || describePublicDataFailure({ message: match[2] }) !== match[2]) return describePublicDataFailure(error)
+        seen.add(match[1])
+        safe.push(labels[match[1] as keyof typeof labels] + ': ' + match[2])
+      }
+      return prefix + safe.join('；')
+    }
+  }
+  return describePublicDataFailure(error)
+}
+

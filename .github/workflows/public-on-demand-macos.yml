@@ -4,7 +4,7 @@ on:
     inputs:
       version:
         type: string
-        default: '1.21.0'
+        default: '1.23.0'
       target:
         type: choice
         options: [all, windows, macos, installer, probe, trace]
@@ -72,7 +72,7 @@ jobs:
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/tushareHistoricalCancellation.test.ts tests/unit/tushareCancellationTransport.test.ts tests/unit/tradeCalCancellation.test.ts tests/unit/diagnosticsCancellationHandlers.test.ts tests/unit/historicalDailySync.service.test.ts tests/unit/tradeCalSync.service.test.ts tests/unit/tushareAccessError.test.ts tests/unit/tushare.diagnosticBounds.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/tradeCalOwnership.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/chipMonitorCancellation.test.ts tests/unit/cyqChipsCancellationScopes.test.ts tests/unit/chipCancellationTransport.test.ts tests/unit/chipMonitorAdmission.contract.test.ts tests/unit/chipMonitor.service.test.ts tests/unit/chipStructureSync.service.test.ts tests/unit/chipStructureCancellation.test.ts tests/unit/chipInstitutionCancellation.test.ts tests/unit/chipStructureTransport.test.ts tests/unit/chipInstitutionEvidence.service.test.ts --maxWorkers=1 --minWorkers=1
-          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/aiConfigStorage.test.ts tests/unit/publicDataFailure.test.ts tests/unit/multiSourceMarketFailure.test.ts tests/unit/multiDataSources.test.ts tests/unit/zeroKeySingleStockDaily.service.test.ts --maxWorkers=1 --minWorkers=1
+          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/aiConfigStorage.test.ts tests/unit/publicDataFailure.test.ts tests/unit/multiSourceMarketFailure.test.ts tests/unit/dataSourceOperationFailure.test.ts tests/unit/multiDataSources.test.ts tests/unit/zeroKeySingleStockDaily.service.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/strategyLab.publicLimitUp.test.tsx tests/unit/strategyLab.service.test.ts tests/unit/strategyLab.conditionSnapshotRun.test.ts tests/unit/tushareCredentialVerification.test.tsx tests/unit/publicLimitUpRules.test.tsx tests/unit/nativePublicLimitPool.test.ts tests/unit/verifiedPublicLimitPoolCache.test.ts tests/unit/currentPublicConceptLookup.service.test.ts tests/unit/currentPublicConceptLookup.wiring.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
       - name: Build same-product native installer
@@ -101,6 +101,8 @@ jobs:
           node scripts/mac-packaged-acceptance.cjs "$RT_PACKAGED_EXE"
           pnpm exec playwright test tests/e2e/on-demand-extensions.spec.ts --workers=1 --retries=0 --reporter=line
           node scripts/verify-packaged-ai-credentials.cjs "$RT_PACKAGED_EXE"
+          RT_DATASOURCE_UI_FIXTURE_ALLOWED=1 pnpm exec playwright test tests/e2e/packaged-datasource-operations.spec.ts --workers=1 --retries=0 --reporter=line
+          cp "$RT_PACKAGED_TEST_ROOT/data-source-ui-acceptance-darwin-${{ matrix.arch }}.json" release/
           RT_INITIALIZATION_FIXTURE_ALLOWED=1 pnpm exec playwright test tests/e2e/packaged-initialization-capabilities.spec.ts --workers=1 --retries=0 --reporter=line
           RT_PUBLIC_WORK_FIXTURE_ALLOWED=1 pnpm exec playwright test tests/e2e/packaged-public-work-shutdown.spec.ts --workers=1 --retries=0 --reporter=line
           export RT_PACKAGED_PUBLIC_WORK_VERIFIED=1
@@ -125,6 +127,7 @@ jobs:
             release/SHA256SUMS-${{ matrix.arch }}.txt
             release/SHA256SUMS-darwin-${{ matrix.arch }}.txt
             release/acceptance-darwin-${{ matrix.arch }}.json
+            release/data-source-ui-acceptance-darwin-${{ matrix.arch }}.json
           if-no-files-found: error
       - name: Upload test evidence
         if: always()
@@ -183,7 +186,7 @@ jobs:
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/tushareHistoricalCancellation.test.ts tests/unit/tushareCancellationTransport.test.ts tests/unit/tradeCalCancellation.test.ts tests/unit/diagnosticsCancellationHandlers.test.ts tests/unit/historicalDailySync.service.test.ts tests/unit/tradeCalSync.service.test.ts tests/unit/tushareAccessError.test.ts tests/unit/tushare.diagnosticBounds.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/tradeCalOwnership.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/chipMonitorCancellation.test.ts tests/unit/cyqChipsCancellationScopes.test.ts tests/unit/chipCancellationTransport.test.ts tests/unit/chipMonitorAdmission.contract.test.ts tests/unit/chipMonitor.service.test.ts tests/unit/chipStructureSync.service.test.ts tests/unit/chipStructureCancellation.test.ts tests/unit/chipInstitutionCancellation.test.ts tests/unit/chipStructureTransport.test.ts tests/unit/chipInstitutionEvidence.service.test.ts --maxWorkers=1 --minWorkers=1
-          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/aiConfigStorage.test.ts tests/unit/publicDataFailure.test.ts tests/unit/multiSourceMarketFailure.test.ts tests/unit/multiDataSources.test.ts tests/unit/zeroKeySingleStockDaily.service.test.ts --maxWorkers=1 --minWorkers=1
+          pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/aiConfigStorage.test.ts tests/unit/publicDataFailure.test.ts tests/unit/multiSourceMarketFailure.test.ts tests/unit/dataSourceOperationFailure.test.ts tests/unit/multiDataSources.test.ts tests/unit/zeroKeySingleStockDaily.service.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/strategyLab.publicLimitUp.test.tsx tests/unit/strategyLab.service.test.ts tests/unit/strategyLab.conditionSnapshotRun.test.ts tests/unit/tushareCredentialVerification.test.tsx tests/unit/publicLimitUpRules.test.tsx tests/unit/nativePublicLimitPool.test.ts tests/unit/verifiedPublicLimitPoolCache.test.ts tests/unit/currentPublicConceptLookup.service.test.ts tests/unit/currentPublicConceptLookup.wiring.test.ts --maxWorkers=1 --minWorkers=1
           pnpm exec vitest run tests/unit/onDemandDataExtensions.test.ts tests/unit/pythonSourceRequirements.test.ts tests/unit/dataExtensionDelivery.test.ts tests/unit/productPythonRuntime.test.ts tests/unit/productPythonDownloads.test.ts tests/unit/macProductPythonRuntime.test.ts tests/unit/decisionDateCaption.test.ts
           pnpm run build
@@ -210,6 +213,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Packaged GUI or private extension acceptance failed' }
           node scripts/verify-packaged-ai-credentials.cjs $env:RT_PACKAGED_EXE
           if ($LASTEXITCODE -ne 0) { throw 'Packaged credential persistence acceptance failed' }
+          $env:RT_DATASOURCE_UI_FIXTURE_ALLOWED = '1'
+          pnpm exec playwright test tests/e2e/packaged-datasource-operations.spec.ts --workers=1 --retries=0 --reporter=line
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged datasource operation acceptance failed' }
+          Copy-Item -LiteralPath (Join-Path $env:RT_PACKAGED_TEST_ROOT 'data-source-ui-acceptance-win32-x64.json') -Destination 'release/data-source-ui-acceptance-win32-x64.json'
           $env:RT_INITIALIZATION_FIXTURE_ALLOWED = '1'
           pnpm exec playwright test tests/e2e/packaged-initialization-capabilities.spec.ts --workers=1 --retries=0 --reporter=line
           if ($LASTEXITCODE -ne 0) { throw 'Packaged initialization capability UI acceptance failed' }
@@ -276,6 +283,7 @@ jobs:
             release/RT-ResearchFlow-Setup-${{ inputs.version }}-x64.exe
             release/SHA256SUMS-win32-x64.txt
             release/acceptance-win32-x64.json
+            release/data-source-ui-acceptance-win32-x64.json
           if-no-files-found: error
       - name: Preserve failed installer for diagnosis only
         if: failure()

@@ -1996,7 +1996,7 @@ const api = {
             benchmark: TrendBenchmarkHealth
             message: string
           }
-        | { ok: false; reason: 'invalid_code' | 'no_token' | 'not_found' | 'fetch_error' }
+        | { ok: false; reason: 'invalid_code' | 'no_token' | 'not_found' | 'fetch_error'; message?: string }
       >,
     fetchStock: (stockCode: string) =>
       ipcRenderer.invoke('datasource:fetchStock', { stockCode }) as Promise<

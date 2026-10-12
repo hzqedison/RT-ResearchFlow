@@ -85,7 +85,7 @@ export function DataSource() {
     finally { setBusy('') }
   }
 
-  async function save() {
+  async function save(announce = true) {
     await window.api.datasource.saveConfig({
       dailyProviders: daily, reportProviders: reports, wencaiEnabled: wencai, pythonPath,
       tushareEnabled: daily.includes('tushare'),
@@ -96,7 +96,7 @@ export function DataSource() {
     setConfig(saved)
     setToken('')
     setCookie('')
-    setMessage('配置已保存；留空密钥输入框不会删除已保存的密钥。')
+    if (announce) setMessage('配置已保存；留空密钥输入框不会删除已保存的密钥。')
   }
 
   function toggleDaily(id: DailyDataProvider) {
@@ -115,7 +115,7 @@ export function DataSource() {
 
   async function probe(provider: DataProbeProvider, tradeDate?: string) {
     await run('检测连接', async () => {
-      if (provider !== 'akshare-limit-pool') await save()
+      if (provider !== 'akshare-limit-pool') await save(false)
       const result = await window.api.datasource.probe(provider, stockCode, tradeDate)
       setProbeMessages(current => ({ ...current, [provider]: (result.ok ? '已取得样本：' : '未完成：') + result.message }))
     })
@@ -244,13 +244,13 @@ export function DataSource() {
             if (path) setPythonPath(path)
           })}>选择解释器</button>
           <button className={buttonClass} disabled={disabled} onClick={() => void run('检查扩展', async () => {
-            await save()
+            await save(false)
             const result = await window.api.datasource.bridgeStatus()
             if (!result.ok) throw new Error(result.message)
             setMessage('本地扩展：' + JSON.stringify(result.data))
           })}>检查依赖</button>
           <button className={buttonClass} disabled={disabled} onClick={() => void run('安装扩展', async () => {
-            await save()
+            await save(false)
             const result = await window.api.datasource.installExtensions()
             if (!result.ok) throw new Error(result.message)
             setPythonPath(result.pythonPath)
@@ -266,39 +266,41 @@ export function DataSource() {
         <p className="text-xs text-gray-500">连接检测会拉取并缓存公开样本，不能证明所有股票、所有字段或实时接口都可用。</p>
         <div className="flex flex-wrap gap-2">
           <input aria-label="测试股票代码" className={inputClass + ' max-w-40'} value={stockCode} maxLength={6}
-            disabled={disabled} onChange={event => setStockCode(event.target.value.replace(/\D/g, ''))} />
+            disabled={disabled} onChange={event => { setStockCode(event.target.value.replace(/\D/g, '')); setReportResult(null) }} />
           <button className={buttonClass} disabled={disabled || daily.length === 0} onClick={() => void run('读取日线', async () => {
-            await save()
+            await save(false)
             const result = await window.api.datasource.refreshStock(stockCode)
-            if (!result.ok) throw new Error('行情未完成取数，请检测所选来源的连接。')
+            if (!result.ok) throw new Error(result.message || '行情未完成取数，请检测所选来源的连接。')
             setMessage(result.message)
           })}>按优先级读取日线</button>
           <button className={buttonClass} disabled={disabled || reports.length === 0} onClick={() => void run('查询研报', async () => {
-            await save()
+            setReportResult(null)
+            await save(false)
             const result = await window.api.datasource.reports(stockCode)
             if (!result.ok) throw new Error(result.message)
             setReportResult(result)
           })}>查询研报</button>
         </div>
-        {reportResult && <div className="space-y-2 text-xs">
+        {reportResult && <div data-testid="data-source-report-results" className="space-y-2 text-xs">
           {reportResult.statuses.map(status => <p key={status.provider}>{status.provider}：{status.message}</p>)}
           {reportResult.reports.length === 0 && <p>没有取得研报索引。</p>}
           {reportResult.reports.map(report => <div key={report.id} className="border-t border-gray-100 dark:border-gray-800 pt-2">
             <p className="font-medium">{report.title}</p>
-            <p className="text-gray-500 mt-1">{report.publishedAt} · {report.institution || '机构未提供'} · {report.providers.join(' / ')}</p>
+            <p className="text-gray-500 mt-1">{report.stockCode} · {report.publishedAt} · {report.institution || '机构未提供'} · {report.providers.join(' / ')}</p>
             {report.pdfUrl && <button className="text-blue-600 mt-1" onClick={() => void window.api.datasource.openSourceLink(report.pdfUrl!)}>打开原文 PDF</button>}
           </div>)}
         </div>}
         {wencai && <div className="space-y-2">
           <textarea className={inputClass} value={query} maxLength={300} disabled={disabled} rows={2}
-            onChange={event => setQuery(event.target.value)} placeholder="输入问财选股条件，例如：沪深A股，市值大于100亿" />
+            onChange={event => { setQuery(event.target.value); setWencaiResult(null) }} placeholder="输入问财选股条件，例如：沪深A股，市值大于100亿" />
           <button className={buttonClass} disabled={disabled || !query.trim()} onClick={() => void run('查询问财', async () => {
-            await save()
+            setWencaiResult(null)
+            await save(false)
             const result = await window.api.datasource.wencai(query)
             if (!result.ok) throw new Error(result.message)
             setWencaiResult(result)
           })}>查询条件（不下单）</button>
-          {wencaiResult && <div className="overflow-x-auto text-xs">
+          {wencaiResult && <div data-testid="data-source-wencai-results" className="overflow-x-auto text-xs">
             <p className="text-gray-500 mb-2">查询时点：{new Date(wencaiResult.fetchedAt).toLocaleString()}，最多50条、12列；不是全量选股结果或交易指令。</p>
             <table className="w-full text-left"><thead><tr>{wencaiResult.columns.map(column => <th key={column} className="p-2 whitespace-nowrap">{column}</th>)}</tr></thead>
               <tbody>{wencaiResult.rows.map((row, index) => <tr key={index}>{wencaiResult.columns.map(column => <td key={column} className="p-2 border-t border-gray-100 dark:border-gray-800 whitespace-nowrap">{row[column] ?? '--'}</td>)}</tr>)}</tbody>
@@ -308,9 +310,10 @@ export function DataSource() {
       </section>
 
       <footer className="sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 py-4 space-y-2">
+        {busy && <p role="status" aria-live="polite" data-testid="data-source-operation-status" className="text-xs text-blue-700 dark:text-blue-300">{busy}进行中，请稍候…</p>}
         <button className="text-sm px-5 py-2 bg-blue-600 text-white rounded disabled:opacity-40" disabled={disabled}
-          onClick={() => void run('保存配置', save)}>{busy || '保存全部数据源配置'}</button>
-        {message && <p role="status" className="text-xs text-green-700 dark:text-green-400 break-all">{message}</p>}
+          onClick={() => void run('保存配置', save)}>{busy === '保存配置' ? '保存中…' : '保存全部数据源配置'}</button>
+        {message && <p role="status" data-testid="data-source-success-message" className="text-xs text-green-700 dark:text-green-400 break-all">{message}</p>}
         {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400 break-all">{error}</p>}
         <p className="text-xs text-gray-500">开源接口库不授予数据使用权，遵守来源平台的登录、频率、版权及使用条款。行情来源与券商交易权限、AI模型密钥互不替代。</p>
       </footer>
