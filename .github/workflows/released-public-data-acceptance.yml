@@ -1,0 +1,88 @@
+name: Released public data acceptance (Mac, no rebuild)
+
+on:
+  push:
+    branches: [codex/public-product-runtime-1.10]
+    paths: [.github/workflows/released-public-data-acceptance.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: released-public-data-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: released public data (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+            bytes: 201809546
+            sha256: 484dd6d4a12679c1d0122bf7fac45463b11ed70b3ec0b0588e482e6eb1c8685b
+          - os: macos-15-intel
+            arch: x64
+            bytes: 209894737
+            sha256: 32d2e7dc059644df9d3e761ec86ff145eeb7f7d9a903f8a406332b0f8b901ec0
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RT_PACKAGED_VERSION: 1.20.0
+      RT_PUBLIC_LIMIT_POOL_DATE: '20261012'
+      RT_RELEASED_PUBLIC_DATA_LIVE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.18.0
+      - name: Install only the acceptance driver, no product dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/public-acceptance-tools"
+          npm install --prefix "$tools" --ignore-scripts --no-audit --no-fund @playwright/test@1.58.2
+          test ! -e node_modules
+          ln -s "$tools/node_modules" node_modules
+      - name: Verify and extract the already released DMG
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+          EXPECTED_BYTES: ${{ matrix.bytes }}
+          EXPECTED_SHA256: ${{ matrix.sha256 }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/released-public-data-$ARCH"
+          mkdir -p "$root/download" "$root/mount" "$root/application" "$root/evidence"
+          asset="RT-ResearchFlow-macOS-1.20.0-$ARCH.dmg"
+          gh release download v1.20.0 --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$root/download"
+          dmg="$root/download/$asset"
+          test "$(stat -f %z "$dmg")" = "$EXPECTED_BYTES"
+          test "$(shasum -a 256 "$dmg" | cut -d ' ' -f 1)" = "$EXPECTED_SHA256"
+          hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$root/mount"
+          trap 'hdiutil detach "$root/mount"' EXIT
+          test -d "$root/mount/RT-ResearchFlow.app"
+          ditto "$root/mount/RT-ResearchFlow.app" "$root/application/RT-ResearchFlow.app"
+          printf 'RT_PACKAGED_EXE=%s\n' "$root/application/RT-ResearchFlow.app/Contents/MacOS/RT-ResearchFlow" >> "$GITHUB_ENV"
+          printf 'RT_PACKAGED_TEST_ROOT=%s\n' "$root/evidence" >> "$GITHUB_ENV"
+          printf '{"version":"1.20.0","arch":"%s","asset":"%s","bytes":%s,"sha256":"%s","publishedDigestMatched":true,"productRebuilt":false,"brokerOrdersSubmitted":false}\n' "$ARCH" "$asset" "$EXPECTED_BYTES" "$EXPECTED_SHA256" > "$root/evidence/published-asset.json"
+      - name: Run live public source and real strategy persistence checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset ELECTRON_RUN_AS_NODE ELECTRON_RENDERER_URL NODE_OPTIONS NODE_PATH
+          node node_modules/@playwright/test/cli.js test tests/e2e/released-public-sources.spec.ts --workers=1 --retries=0 --reporter=line --output "$RT_PACKAGED_TEST_ROOT/playwright"
+      - name: Upload receipts and failures, never personal data or application files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: released-public-data-1.20.0-${{ matrix.arch }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/released-public-data-${{ matrix.arch }}/evidence/*.json
+            ${{ runner.temp }}/released-public-data-${{ matrix.arch }}/evidence/playwright/**/error-context.md
+          if-no-files-found: error
+          retention-days: 14

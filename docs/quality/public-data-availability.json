@@ -466,6 +466,39 @@
       "normalExit": true,
       "realVendorKeyUsed": false,
       "realModelInvocationVerified": false
+    },
+    "crossPlatformPublicRuleHarness": {
+      "spec": "tests/e2e/released-public-sources.spec.ts",
+      "passed": 1,
+      "failed": 0,
+      "durationSeconds": 5.9,
+      "receipt": {
+        "kind": "released-public-rule-acceptance",
+        "version": "1.20.0",
+        "platform": "win32",
+        "arch": "x64",
+        "date": "20261012",
+        "rows": 46,
+        "reports": [
+          {
+            "strategy": "builtin-public-limit-earlyFirst",
+            "matched": 11
+          },
+          {
+            "strategy": "builtin-public-limit-secondBoard",
+            "matched": 11
+          },
+          {
+            "strategy": "builtin-public-limit-continuous",
+            "matched": 1
+          }
+        ],
+        "calendarFixtureInjected": false,
+        "marketRowsMocked": false,
+        "normalExit": true,
+        "productionUserDataTouched": false,
+        "brokerOrdersSubmitted": false
+      }
     }
   },
   "dailyTransportFollowup": {
@@ -503,6 +536,9 @@
     },
     "fullBuildDispatched": false,
     "scope": "Offline native dependency and contract tests are not evidence of released Mac public-provider connectivity.",
-    "releasedLiveTestsCompleted": false
+    "releasedLiveTestsCompleted": false,
+    "newLiveWorkflow": ".github/workflows/released-public-data-acceptance.yml",
+    "newLiveHarnessLocallyValidated": true,
+    "matchedCountFieldCorrected": true
   }
 }
