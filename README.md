@@ -62,9 +62,16 @@
 - 东财研报接口与缓存：三端对样本股票 000333 均取得 50 条真实研报索引及 PDF 引用，最新索引日期为 2026-09-10；首次状态 ready，复读状态 cached，内容一致，不需要真实用户 Key。
 - 研报结果明确为 metadataOnly。本次研报检查不是页面查询、PDF 下载或全文解析验收，不把索引列表当成已读全文；i问财及 AKShare 的真实查询亦未据此宣称通过。
 - 未注入行情、报告或交易日历，正常退出，未操作个人数据或券商订单。不代表投资收益、专业竞价或实盘成交已经验证。
-- 免费短线的永久回执上传仍未完成；目前以以下测试日志和原生安装回执明确区分已测范围。
+- 免费短线与研报接口的永久回执已上传：[短线页面回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/public-rule-ui-acceptance-1.22.json)、[研报接口及缓存回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/research-source-acceptance-1.22.json)。回执仅包含公开样本、检查结果和验证边界，不含个人账户或密钥。
 
 [三端免费短线页面测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38275603901) · [三端真实研报接口与缓存测试](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38278241127)
+
+## 原生 PDF 管线补充检查
+
+- 本地 Windows 在原生 Electron 环境中使用与 1.22 同源的现有网络安全客户端和 PDF 解析器，真实下载公开研报并通过文本提取检查：文件 755,540 字节，提取文本 8,476 字符。没有调用大模型或操作券商账户。
+- 解析沿用前 24 页的原有限制，不承诺整份长报告全文；本项是源代码管线验收，不是正式安装包的研报阅读页面或完整研究流程验收。[下载本地 Windows 管线回执](https://github.com/hzqedison/RT-ResearchFlow/releases/download/v1.22.0/native-public-pdf-local-windows-1.22.json)。
+- 新增 Mac PDF 管线验收尚未完成。云端第一次因脚本变量位置错误未启动，修正后又因检出环境未包含历史源码提交而在源码一致性检查阶段退出，尚未执行 PDF 测试；不将此记录宣称为 Mac PDF 通过。[保留本次云端记录](https://github.com/hzqedison/RT-ResearchFlow/actions/runs/38286028469)。
+- 上述增补只涉及检查脚本、上传方式和说明，没有重新编译、替换安装包或修改交易逻辑。
 
 </details>
 
