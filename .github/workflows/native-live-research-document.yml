@@ -1,0 +1,55 @@
+name: Existing native public PDF pipeline (no model calls)
+on:
+  push:
+    branches: [codex/release-1.22]
+    paths: [.github/workflows/native-live-research-document.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-live-research-document-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+            arch: x64
+          - os: macos-15
+            platform: darwin
+            arch: arm64
+          - os: macos-15-intel
+            platform: darwin
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      RT_REAL_PUBLIC_PDF_LIVE: '1'
+      RT_REAL_PUBLIC_PDF_SOURCE: ca75705093bfc31ff8ad05465f80099f546dfc3a
+      RT_REAL_PUBLIC_PDF_PROOF_ROOT: ${{ runner.temp }}/native-public-pdf-proof
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+      - name: Require unchanged production sources from the released application
+        run: git diff --exit-code ca75705093bfc31ff8ad05465f80099f546dfc3a HEAD -- electron package.json pnpm-lock.yaml
+      - name: Install the existing locked native dependencies
+        run: pnpm install --frozen-lockfile --config.side-effects-cache=false
+      - name: Use the existing parser and safe outlet on a real public document
+        run: pnpm exec cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run tests/unit/researchPdfLive.integration.test.ts --maxWorkers=1 --minWorkers=1
+      - name: Preserve hashes and counts only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-public-pdf-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
+          path: ${{ runner.temp }}/native-public-pdf-proof/*.json
+          if-no-files-found: error
+          retention-days: 14
