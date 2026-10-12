@@ -1,8 +1,10 @@
 import { test, expect, _electron as electron } from '@playwright/test'
 import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { isolatedPackagedExecutable } from './isolatedPackagedExecutable'
 import { observePackagedProcess, waitForPackagedRuntime } from './packagedRuntimeObservation'
+import { installFixtureWithAcknowledgement } from './packagedFixtureAcknowledgement'
 
 for (const stage of ['daily', 'cyq_perf', 'cyq_chips', 'top_inst'] as const) {
   test(`packaged quit aborts owned structure ${stage} work without changing committed facts`, async () => {
@@ -24,7 +26,8 @@ for (const stage of ['daily', 'cyq_perf', 'cyq_chips', 'top_inst'] as const) {
       const runtime = await waitForPackagedRuntime(app, process.env.RT_PACKAGED_VERSION!)
       const actualRoot = resolve(runtime.dataPath), expectedRoot = process.platform === 'win32' ? resolve(dirname(isolatedExecutable), 'data') : resolve(profile)
       expect(process.platform === 'win32' ? actualRoot.toLowerCase() : actualRoot).toBe(process.platform === 'win32' ? expectedRoot.toLowerCase() : expectedRoot)
-      await app.evaluate(({ app, BrowserWindow, safeStorage }, fixture) => {
+      const fixtureNonce = randomUUID()
+      await installFixtureWithAcknowledgement(() => app.evaluate(({ app, BrowserWindow, safeStorage }, fixture) => {
         const load = process.mainModule!.require.bind(process.mainModule!), path = load('node:path'), fs = load('node:fs'), crypto = load('node:crypto')
         const Database = load(path.join(app.getAppPath(), 'node_modules/better-sqlite3'))
         if (!safeStorage.isEncryptionAvailable()) throw Error('ISOLATED_STORAGE_REQUIRED')
@@ -80,7 +83,37 @@ for (const stage of ['daily', 'cyq_perf', 'cyq_chips', 'top_inst'] as const) {
           fs.writeFileSync(fixture.proofFile, JSON.stringify({ stage: fixture.stage, ...state, after: facts(), version: app.getVersion(), willQuitSeen: true, syntheticCredentialOnly: true }))
         })
         try { db.prepare('UPDATE data_source_config SET tushareEnabled=1,tushareTokenEncrypted=? WHERE id=1').run(safeStorage.encryptString('isolated-structure-not-a-real-key')) } finally { db.close() }
-      }, { stage, proofFile })
+        // Publish only after every hook and configuration write has completed and DB is closed.
+        ;(globalThis as unknown as { __rtStructureFixtureInstallation: unknown }).__rtStructureFixtureInstallation = {
+          complete: true, nonce: fixture.nonce, stage: fixture.stage, proofFile: fixture.proofFile,
+          dataPath: app.getPath('userData'), version: app.getVersion(), fetch: globalThis.fetch,
+          window, send: window.webContents.send,
+        }
+      }, { stage, proofFile, nonce: fixtureNonce }), async () => {
+        await expect.poll(async () => {
+          try {
+            return await app.evaluate(() => {
+              const receipt = (globalThis as unknown as { __rtStructureFixtureInstallation?: {
+                complete: boolean; nonce: string; stage: string; proofFile: string; dataPath: string; version: string;
+                fetch: typeof globalThis.fetch; window: import('electron').BrowserWindow; send: import('electron').WebContents['send'];
+              } }).__rtStructureFixtureInstallation
+              if (!receipt) return null
+              return {
+                complete: receipt.complete, nonce: receipt.nonce, stage: receipt.stage, proofFile: receipt.proofFile,
+                dataPath: receipt.dataPath, version: receipt.version, fetchOwned: receipt.fetch === globalThis.fetch,
+                sendOwned: !receipt.window.isDestroyed() && receipt.send === receipt.window.webContents.send,
+              }
+            })
+          } catch (error) {
+            if (app.process().exitCode !== null || !String(error).includes('Execution context was destroyed, most likely because of a navigation.')) throw error
+            // Retry observations only. Never repeat setup, writes, or hook installation.
+            return null
+          }
+        }, { timeout: 5000 }).toEqual({
+          complete: true, nonce: fixtureNonce, stage, proofFile, dataPath: runtime.dataPath,
+          version: process.env.RT_PACKAGED_VERSION, fetchOwned: true, sendOwned: true,
+        })
+      })
       const started = await page.evaluate(stage => window.api.chipStructure.refresh({
         tsCodes: ['600000.SH', '000001.SZ'], tradeDate: '20260710', scope: stage === 'top_inst' ? 'institution' : 'all', force: true,
       }), stage)
