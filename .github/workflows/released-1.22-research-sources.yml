@@ -1,9 +1,9 @@
-name: Released 1.22 real research metadata (no rebuild)
+name: Released 1.22 report interface and metadata (no rebuild)
 
 on:
   push:
     branches: [codex/release-1.22]
-    paths: [.github/workflows/released-1.22-research-sources.yml]
+    paths: [.github/workflows/released-1.22-research-sources.yml, tests/e2e/released-research-sources.spec.ts]
   workflow_dispatch:
 
 permissions:

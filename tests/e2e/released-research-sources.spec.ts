@@ -2,7 +2,7 @@ import { expect, test, _electron as electron } from '@playwright/test'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 
-test('released app reads real selected Eastmoney report metadata and reuses its cache without a Key', async () => {
+test('released app queries real Eastmoney reports through its page and reuses metadata without a Key', async () => {
   test.setTimeout(120_000)
   const executableInput = process.env.RT_PACKAGED_EXE, rootInput = process.env.RT_PACKAGED_TEST_ROOT
   const version = process.env.RT_PACKAGED_VERSION
@@ -24,6 +24,8 @@ test('released app reads real selected Eastmoney report metadata and reuses its 
   let normalExit = false
   try {
     const page = await application.firstWindow()
+    const pageErrors: string[] = []
+    page.on('pageerror', error => pageErrors.push(error.message))
     await expect(page.getByTestId('nav-tab-feed')).toBeVisible({ timeout: 30_000 })
     await expect(async () => {
       const runtime = await application.evaluate(({ app }) => ({ packaged: app.isPackaged, version: app.getVersion(), dataPath: app.getPath('userData') }))
@@ -54,6 +56,27 @@ test('released app reads real selected Eastmoney report metadata and reuses its 
     expect(cached.statuses).toHaveLength(1)
     expect(cached.statuses[0]).toMatchObject({ provider: 'eastmoney', state: 'cached' })
     expect(cached.reports).toEqual(first.reports)
+    const guide = page.getByTestId('cold-start-guide')
+    if (await guide.isVisible()) await guide.getByLabel('关闭引导').click()
+    await page.getByTestId('open-config-drawer-btn').click()
+    await page.getByTestId('config-tab-datasource').click()
+    const panel = page.getByTestId('config-panel-datasource')
+    await panel.getByLabel('测试股票代码').fill('601318')
+    const queryButton = panel.getByRole('button', { name: '查询研报', exact: true })
+    await expect(queryButton).toHaveCount(1)
+    await expect(queryButton).toBeEnabled()
+    const originalButton = await queryButton.elementHandle()
+    if (!originalButton) throw new Error('ORIGINAL_REPORT_QUERY_BUTTON_MISSING')
+    await originalButton.click()
+    await expect.poll(() => originalButton.evaluate(button => !(button as HTMLButtonElement).disabled), { timeout: 30_000 }).toBe(true)
+    const uiResult = await page.evaluate(() => window.api.datasource.reports('601318'))
+    expect(uiResult.metadataOnly).toBe(true)
+    expect(uiResult.statuses).toEqual([expect.objectContaining({ provider: 'eastmoney', state: 'cached' })])
+    expect(uiResult.reports.length).toBeGreaterThanOrEqual(3)
+    expect(uiResult.reports.length).toBeLessThanOrEqual(50)
+    expect(uiResult.reports.every(report => report.stockCode === '601318')).toBe(true)
+    for (const report of uiResult.reports.slice(0, 3)) await expect(panel).toContainText(report.title)
+    expect(pageErrors).toEqual([])
     const child = application.process(), closed = application.waitForEvent('close', { timeout: 15_000 })
     await application.evaluate(({ app }) => { setTimeout(() => app.quit(), 0) })
     await closed
@@ -63,6 +86,8 @@ test('released app reads real selected Eastmoney report metadata and reuses its 
       stockCode: '000333', provider: 'eastmoney', reportCount: first.reports.length, publicPdfReferences: pdfs.length,
       latestReportDate: dates[0], firstState: first.statuses[0].state, secondState: cached.statuses[0].state,
       identicalCacheRead: true, metadataOnly: true, pdfDownloadVerified: false, fullTextVerified: false,
+      packagedReportQueryUiVerified: true, uiStockCode: '601318', queryButtonClicked: true, originalButtonWaitCompleted: true,
+      uiReportCount: uiResult.reports.length, visibleSampleTitles: 3, uiCacheState: uiResult.statuses[0].state, rendererErrors: 0,
       userCredentialUsed: false, marketRowsMocked: false, reportRowsMocked: false, normalExit,
       productionUserDataTouched: false, brokerOrdersSubmitted: false }
     writeFileSync(join(root, 'released-research-source-receipt.json'), JSON.stringify(receipt, null, 2))
